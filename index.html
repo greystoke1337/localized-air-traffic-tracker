@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <title>SYD Arrivals</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     /* ─── DOTMATRIX THEME ─── */
     body.dotmatrix {
@@ -42,6 +44,16 @@
 
     .blink { animation: blink 1s step-end infinite; }
     @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
+
+    /* Map */
+    #dm-map { width:100%; height:220px; margin-top:14px; border:1px solid #7a3300; }
+    #dm-map * { text-shadow: none; }
+    .dm-callout { background:#1a0a00; border:1px solid #ff6600; color:#ff6600;
+      font-family:'Share Tech Mono',monospace; font-size:11px; padding:2px 5px;
+      border-radius:0; white-space:nowrap; }
+    .dm-callout::before { display:none; }
+    .leaflet-control-attribution { font-size:9px; opacity:0.35; background:transparent !important; color:#aaa !important; }
+    .leaflet-control-attribution a { color:#aaa !important; }
   </style>
 </head>
 <body class="dotmatrix">
@@ -55,6 +67,7 @@
     <p id="info">LOADING...</p>
     <p id="main"></p>
     <canvas id="dm-canvas" width="460" height="120"></canvas>
+    <div id="dm-map"></div>
     <img id="dm-photo" style="display:none" alt="Aircraft photo">
     <p id="dm-photo-credit"></p>
     <hr>
@@ -241,6 +254,38 @@
       return AIRLINE_DB[prefix] || prefix || '---';
     }
 
+    // ── Map
+    let map, acMarker, acLine;
+    function initMap() {
+      map = L.map('dm-map', { zoomControl: false })
+        .setView([SYD_LAT, SYD_LON], 9);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap © Carto', maxZoom: 14
+      }).addTo(map);
+      L.circleMarker([SYD_LAT, SYD_LON], {
+        radius: 6, color: '#ff6600', fillColor: '#ff4400', fillOpacity: 1, weight: 2
+      }).addTo(map)
+        .bindTooltip('SYD', { permanent: true, direction: 'right', className: 'dm-callout' });
+    }
+    function updateMap(lat, lon, callsign) {
+      if (!map) initMap();
+      const pos = [lat, lon];
+      if (acMarker) {
+        acMarker.setLatLng(pos);
+        acMarker.getTooltip().setContent(callsign);
+      } else {
+        acMarker = L.circleMarker(pos, {
+          radius: 7, color: '#e8e820', fillColor: '#e8e820', fillOpacity: 1, weight: 2
+        }).addTo(map)
+          .bindTooltip(callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
+      }
+      if (acLine) acLine.setLatLngs([pos, [SYD_LAT, SYD_LON]]);
+      else acLine = L.polyline([pos, [SYD_LAT, SYD_LON]], {
+        color: '#ff6600', weight: 1, opacity: 0.4, dashArray: '4 6'
+      }).addTo(map);
+      map.fitBounds(L.latLngBounds(pos, [SYD_LAT, SYD_LON]).pad(0.3));
+    }
+
     function render(f) {
       const ctr = '[' + (i+1) + '/' + flights.length + ']';
       const dist = haversineKm(SYD_LAT, SYD_LON, f.lat, f.lon);
@@ -276,6 +321,9 @@
 
       // Dot matrix canvas
       drawProfile('dm-canvas', dist, altFt, '#ff6600', '#1a0a00', '#7a3300');
+
+      // Map
+      updateMap(f.lat, f.lon, call);
 
     }
 
