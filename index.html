@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>SYD Arrivals</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    /* ─── DOTMATRIX THEME ─── */
+    body.dotmatrix {
+      background: #1a0a00;
+      color: #ff6600;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 1rem;
+      padding: 30px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    body.dotmatrix * { text-shadow: 0 0 2px #ff6600, 0 0 8px #ff4400; }
+    body.dotmatrix::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.18) 3px, rgba(0,0,0,0.18) 4px);
+      pointer-events: none; z-index: 99;
+    }
+    body.dotmatrix hr { border-color: #ff6600; opacity: 0.3; margin: 12px 0; }
+    body.dotmatrix #info { font-size: 1.3rem; margin: 16px 0 8px; }
+    body.dotmatrix #main { line-height: 2; margin-bottom: 16px; }
+    body.dotmatrix #counter { margin: 0 12px; }
+    body.dotmatrix #error { color: #ff2200; word-break: break-all; font-size: 0.85rem; }
+    body.dotmatrix button {
+      background: none; border: 1px solid #ff6600; color: #ff6600;
+      font-family: 'Share Tech Mono', monospace; font-size: 0.9rem;
+      padding: 4px 14px; cursor: pointer; text-shadow: 0 0 6px #ff4400;
+    }
+    body.dotmatrix button:hover { background: #ff660022; }
+    body.dotmatrix .theme-btn { border-color: #ff4400; color: #ff4400; float: right; }
+    #dm-canvas { display: block; margin-top: 16px; image-rendering: pixelated; }
+
+    /* ─── MFD THEME ─── */
+    body.mfd {
+      background: #000;
+      color: #20c520;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.85rem;
+      margin: 0; padding: 0;
+      width: 100vw; height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    body.mfd * { box-sizing: border-box; text-shadow: none; }
+    body.mfd::after { display: none; }
+
+    .mfd-bezel {
+      display: none;
+      position: relative;
+      width: min(520px, 94vw);
+      height: min(520px, 94vw);
+      background: #111;
+      border: 10px solid #222;
+      box-shadow: inset 0 0 8px #000, 0 0 0 3px #333;
+    }
+    body.mfd .mfd-bezel { display: block; }
+    body.mfd .classic-layout { display: none !important; }
+
+    .mfd-screen {
+      position: absolute; inset: 12px;
+      background: #000;
+      border: 2px solid #20c520;
+      overflow: hidden;
+    }
+    .mfd-screen::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.15) 3px, rgba(0,0,0,0.15) 4px);
+      pointer-events: none; z-index: 11;
+    }
+
+    .osb {
+      position: absolute;
+      background: #1a1a1a; border: 2px solid #333;
+      color: #20c520; font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center; width: 46px; height: 28px;
+    }
+    .osb:hover { background: #002200; border-color: #20c520; }
+    .osb:active { background: #004400; }
+    .osb-t1 { top: -34px; left: calc(12px + 8px); }
+    .osb-t2 { top: -34px; left: calc(12px + 8px + 56px); }
+    .osb-t3 { top: -34px; left: calc(12px + 8px + 112px); }
+    .osb-t4 { top: -34px; left: calc(12px + 8px + 168px); }
+    .osb-t5 { top: -34px; left: calc(12px + 8px + 224px); }
+    .osb-b1 { bottom: -34px; left: calc(12px + 8px); }
+    .osb-b2 { bottom: -34px; left: calc(12px + 8px + 56px); }
+    .osb-b3 { bottom: -34px; left: calc(12px + 8px + 112px); }
+    .osb-b4 { bottom: -34px; left: calc(12px + 8px + 168px); }
+    .osb-b5 { bottom: -34px; left: calc(12px + 8px + 224px); }
+    .osb-l1 { left: -52px; top: calc(12px + 6px); width: 44px; }
+    .osb-l2 { left: -52px; top: calc(12px + 6px + 56px); width: 44px; }
+    .osb-l3 { left: -52px; top: calc(12px + 6px + 112px); width: 44px; }
+    .osb-l4 { left: -52px; top: calc(12px + 6px + 168px); width: 44px; }
+    .osb-l5 { left: -52px; top: calc(12px + 6px + 224px); width: 44px; }
+    .osb-r1 { right: -52px; top: calc(12px + 6px); width: 44px; }
+    .osb-r2 { right: -52px; top: calc(12px + 6px + 56px); width: 44px; }
+    .osb-r3 { right: -52px; top: calc(12px + 6px + 112px); width: 44px; }
+    .osb-r4 { right: -52px; top: calc(12px + 6px + 168px); width: 44px; }
+    .osb-r5 { right: -52px; top: calc(12px + 6px + 224px); width: 44px; }
+
+    .mfd-content {
+      position: relative; z-index: 5;
+      width: 100%; height: 100%;
+      padding: 8px 12px;
+      display: flex; flex-direction: column;
+      color: #20c520;
+    }
+    .mfd-topbar {
+      display: flex; justify-content: space-between;
+      font-size: 0.68rem;
+      border-bottom: 1px solid #20c520;
+      padding-bottom: 3px; margin-bottom: 6px;
+    }
+    .mfd-callsign { font-size: 1.8rem; line-height: 1; letter-spacing: 0.06em; margin-bottom: 2px; }
+    .mfd-reg { font-size: 0.72rem; margin-bottom: 8px; opacity: 0.7; }
+    .mfd-row {
+      display: flex; justify-content: space-between;
+      font-size: 0.75rem; margin-bottom: 4px;
+    }
+    .mfd-row .lbl { opacity: 0.5; width: 80px; }
+    .mfd-row .val { text-align: right; }
+    .mfd-row .val.warn { color: #e8e820; }
+    .mfd-divider { border: none; border-top: 1px solid #20c520; opacity: 0.3; margin: 6px 0; }
+    #mfd-canvas { display: block; width: 100%; image-rendering: pixelated; }
+    .mfd-bottombar {
+      margin-top: auto;
+      display: flex; justify-content: space-between;
+      font-size: 0.6rem;
+      border-top: 1px solid #20c520;
+      padding-top: 3px; opacity: 0.6;
+    }
+
+    .blink { animation: blink 1s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
+  </style>
+</head>
+<body class="dotmatrix">
+
+  <!-- ══ DOTMATRIX LAYOUT ══ -->
+  <div class="classic-layout">
+    <p>SYD // SYDNEY KINGSFORD SMITH<br>ARRIVALS BOARD <span class="blink">█</span>
+      <button class="theme-btn" onclick="toggleTheme()">⊞ MFD</button>
+    </p>
+    <hr>
+    <p id="error"></p>
+    <p id="info">LOADING...</p>
+    <p id="main"></p>
+    <canvas id="dm-canvas" width="460" height="120"></canvas>
+    <hr>
+    <button onclick="prev()">&#9664; PREV</button>
+    <span id="counter"></span>
+    <button onclick="next()">NEXT &#9654;</button>
+    <button onclick="go(0)">NOW</button>
+    <br><br>
+    <span id="refresh-timer"></span>
+  </div>
+
+  <!-- ══ MFD LAYOUT ══ -->
+  <div class="mfd-bezel" style="display:none">
+    <div class="osb osb-t1" onclick="prev()">◀ PREV</div>
+    <div class="osb osb-t2" onclick="go(0)">NOW</div>
+    <div class="osb osb-t3"></div>
+    <div class="osb osb-t4"></div>
+    <div class="osb osb-t5" onclick="next()">NEXT ▶</div>
+    <div class="osb osb-b1" onclick="toggleTheme()">MODE</div>
+    <div class="osb osb-b2"></div>
+    <div class="osb osb-b3"></div>
+    <div class="osb osb-b4"></div>
+    <div class="osb osb-b5"></div>
+    <div class="osb osb-l1"></div><div class="osb osb-l2"></div>
+    <div class="osb osb-l3"></div><div class="osb osb-l4"></div><div class="osb osb-l5"></div>
+    <div class="osb osb-r1"></div><div class="osb osb-r2"></div>
+    <div class="osb osb-r3"></div><div class="osb osb-r4"></div><div class="osb osb-r5"></div>
+
+    <div class="mfd-screen">
+      <div class="mfd-content">
+        <div class="mfd-topbar">
+          <span>ARR/SYD</span>
+          <span id="mfd-utc">UTC --:--:--</span>
+          <span>YSSY</span>
+        </div>
+        <div class="mfd-callsign" id="mfd-flt">------</div>
+        <div class="mfd-reg" id="mfd-sub">--- / ---</div>
+        <div class="mfd-row"><span class="lbl">ALT</span><span class="val" id="mfd-alt">---</span></div>
+        <div class="mfd-row"><span class="lbl">GND SPD</span><span class="val" id="mfd-spd">---</span></div>
+        <div class="mfd-row"><span class="lbl">VERT SPD</span><span class="val" id="mfd-vs">---</span></div>
+        <div class="mfd-row"><span class="lbl">DIST SYD</span><span class="val" id="mfd-dist">---</span></div>
+        <div class="mfd-divider"></div>
+        <canvas id="mfd-canvas" height="110"></canvas>
+        <div class="mfd-bottombar">
+          <span id="mfd-counter">--/--</span>
+          <span>DESCENT PROFILE</span>
+          <span id="mfd-refresh">RFRSH --S</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SYD_LAT = -33.9461, SYD_LON = 151.1772;
+    let flights = [], i = 0, theme = 'dotmatrix';
+
+    function haversineKm(lat1, lon1, lat2, lon2) {
+      const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function fmtUTC() {
+      return new Date().toLocaleTimeString('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + 'Z';
+    }
+
+    // ── Draw descent profile on a canvas
+    // color: stroke color, bgcolor: background
+    function drawProfile(canvasId, distKm, altFt, color, bgcolor, dimColor) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const W = canvas.width, H = canvas.height;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, W, H);
+
+      // Background
+      ctx.fillStyle = bgcolor;
+      ctx.fillRect(0, 0, W, H);
+
+      const PAD_L = 44, PAD_R = 10, PAD_T = 8, PAD_B = 22;
+      const gW = W - PAD_L - PAD_R;
+      const gH = H - PAD_T - PAD_B;
+
+      // Scale: X = 0..150 km, Y = 0..40000 ft
+      const MAX_DIST = 150, MAX_ALT = 40000;
+
+      function xp(km) { return PAD_L + (1 - km / MAX_DIST) * gW; } // reversed: airport on right
+      function yp(ft) { return PAD_T + (1 - ft / MAX_ALT) * gH; }
+
+      // Grid lines
+      ctx.strokeStyle = dimColor;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 4]);
+      // Altitude gridlines
+      [10000, 20000, 30000].forEach(alt => {
+        ctx.beginPath(); ctx.moveTo(PAD_L, yp(alt)); ctx.lineTo(W - PAD_R, yp(alt)); ctx.stroke();
+      });
+      // Distance gridlines
+      [50, 100].forEach(d => {
+        ctx.beginPath(); ctx.moveTo(xp(d), PAD_T); ctx.lineTo(xp(d), H - PAD_B); ctx.stroke();
+      });
+      ctx.setLineDash([]);
+
+      // Axes
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(PAD_L, PAD_T); ctx.lineTo(PAD_L, H - PAD_B); // Y axis
+      ctx.moveTo(PAD_L, H - PAD_B); ctx.lineTo(W - PAD_R, H - PAD_B); // X axis
+      ctx.stroke();
+
+      // Axis labels
+      ctx.fillStyle = color;
+      ctx.font = '9px Share Tech Mono, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('40K', PAD_L - 2, yp(40000) + 3);
+      ctx.fillText('20K', PAD_L - 2, yp(20000) + 3);
+      ctx.fillText('10K', PAD_L - 2, yp(10000) + 3);
+      ctx.fillText('0', PAD_L - 2, yp(0) + 3);
+      ctx.textAlign = 'center';
+      ctx.fillText('100nm', xp(100 * 1.852), H - PAD_B + 12);
+      ctx.fillText('50nm', xp(50 * 1.852), H - PAD_B + 12);
+      ctx.fillText('SYD', xp(0) + 10, H - PAD_B + 12);
+
+      // Ideal 3° glideslope line
+      // At 3°: alt(ft) = dist(km) * tan(3°) * 3281
+      const GLIDE_DEG = 3;
+      const tanG = Math.tan(GLIDE_DEG * Math.PI / 180);
+      ctx.strokeStyle = dimColor;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(xp(0), yp(0));
+      ctx.lineTo(xp(MAX_DIST), yp(MAX_DIST * tanG * 3281));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Glideslope label
+      ctx.fillStyle = dimColor;
+      ctx.textAlign = 'left';
+      ctx.font = '9px Share Tech Mono, monospace';
+      ctx.fillText('3° GS', PAD_L + 4, yp(MAX_DIST * tanG * 3281) - 3);
+
+      // Aircraft position dot
+      const ac_x = xp(distKm);
+      const ac_y = yp(altFt);
+
+      // Vertical line from dot to glideslope (deviation indicator)
+      const gsAltAtDist = distKm * tanG * 3281;
+      const gs_y = yp(gsAltAtDist);
+      const above = altFt > gsAltAtDist;
+      ctx.strokeStyle = above ? '#e8e820' : color;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(ac_x, Math.min(ac_y, gs_y));
+      ctx.lineTo(ac_x, Math.max(ac_y, gs_y));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Dot
+      ctx.fillStyle = above ? '#e8e820' : color;
+      ctx.beginPath();
+      ctx.arc(ac_x, ac_y, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Crosshair lines through dot
+      ctx.strokeStyle = above ? '#e8e820' : color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ac_x - 8, ac_y); ctx.lineTo(ac_x + 8, ac_y);
+      ctx.moveTo(ac_x, ac_y - 8); ctx.lineTo(ac_x, ac_y + 8);
+      ctx.stroke();
+
+      // Deviation label
+      const devFt = Math.round(altFt - gsAltAtDist);
+      ctx.fillStyle = above ? '#e8e820' : color;
+      ctx.textAlign = above ? 'left' : 'left';
+      ctx.font = 'bold 9px Share Tech Mono, monospace';
+      ctx.fillText((devFt > 0 ? '+' : '') + Math.round(devFt / 100) * 100 + 'FT', ac_x + 7, ac_y - 3);
+    }
+
+    function render(f) {
+      const ctr = '[' + (i+1) + '/' + flights.length + ']';
+      const dist = haversineKm(SYD_LAT, SYD_LON, f.lat, f.lon);
+      const altFt = typeof f.alt_baro === 'number' ? f.alt_baro : 0;
+      const altStr = typeof f.alt_baro === 'number' ? f.alt_baro.toLocaleString() + ' FT' : '---';
+      const spd = f.gs ? Math.round(f.gs) + ' KT' : '---';
+      const vs = f.baro_rate ? (f.baro_rate > 0 ? '+' : '') + f.baro_rate + ' FPM' : '---';
+      const hdg = f.track ? Math.round(f.track) + '°' : '---';
+      const call = (f.flight || '---').trim().toUpperCase();
+      const type = (f.t || f.category || '---').toUpperCase();
+      const reg = (f.r || '---').toUpperCase();
+      const sqk = f.squawk || '---';
+
+      // Dot matrix text
+      document.getElementById('info').innerHTML = call + ' &nbsp; [' + type + ']<br>' + reg;
+      document.getElementById('main').innerHTML =
+        'ALT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + altStr + '<br>' +
+        'SPEED&nbsp;&nbsp;&nbsp; ' + spd + '<br>' +
+        'V/SPEED&nbsp; ' + vs + '<br>' +
+        'HEADING&nbsp; ' + hdg + '<br>' +
+        'DIST SYD&nbsp; ' + dist.toFixed(1) + ' KM<br>' +
+        'SQUAWK&nbsp;&nbsp; ' + sqk;
+      document.getElementById('counter').textContent = ctr;
+
+      // Dot matrix canvas
+      drawProfile('dm-canvas', dist, altFt, '#ff6600', '#1a0a00', '#7a3300');
+
+      // MFD text
+      document.getElementById('mfd-flt').textContent = call;
+      document.getElementById('mfd-sub').textContent = reg + ' / ' + type;
+      document.getElementById('mfd-alt').textContent = altStr;
+      document.getElementById('mfd-spd').textContent = spd;
+      const vsEl = document.getElementById('mfd-vs');
+      vsEl.textContent = vs;
+      vsEl.className = 'val' + (f.baro_rate && f.baro_rate < -1500 ? ' warn' : '');
+      document.getElementById('mfd-dist').textContent = dist.toFixed(1) + ' KM';
+      document.getElementById('mfd-counter').textContent = ctr;
+
+      // MFD canvas — size it to available width
+      const mfdCanvas = document.getElementById('mfd-canvas');
+      if (mfdCanvas) {
+        mfdCanvas.width = mfdCanvas.offsetWidth || 370;
+        drawProfile('mfd-canvas', dist, altFt, '#20c520', '#000', '#0a3a0a');
+      }
+    }
+
+    function go(n) { if (flights.length) { i = (n + flights.length) % flights.length; render(flights[i]); } }
+    function next() { go(i + 1); }
+    function prev() { go(i - 1); }
+
+    function toggleTheme() {
+      theme = theme === 'dotmatrix' ? 'mfd' : 'dotmatrix';
+      document.body.className = theme;
+      document.querySelector('.classic-layout').style.display = theme === 'dotmatrix' ? '' : 'none';
+      document.querySelector('.mfd-bezel').style.display = theme === 'mfd' ? 'block' : 'none';
+      if (flights.length) render(flights[i]);
+    }
+
+    setInterval(() => {
+      const el = document.getElementById('mfd-utc');
+      if (el) el.textContent = 'UTC ' + fmtUTC();
+    }, 1000);
+
+    let secs = 30;
+    setInterval(() => {
+      secs--;
+      document.getElementById('refresh-timer').textContent = 'REFRESH IN ' + secs + 'S';
+      document.getElementById('mfd-refresh').textContent = 'RFRSH ' + secs + 'S';
+      if (secs <= 0) { secs = 30; fetchFlights(); }
+    }, 1000);
+
+    async function fetchFlights() {
+      document.getElementById('info').textContent = 'FETCHING DATA...';
+      document.getElementById('mfd-flt').textContent = 'LOADING';
+      document.getElementById('error').textContent = '';
+      try {
+        const url = 'https://api.airplanes.live/v2/point/' + SYD_LAT + '/' + SYD_LON + '/50';
+        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        let ac = data.ac || [];
+        ac = ac.filter(f => typeof f.alt_baro === 'number' && f.lat && f.lon && f.baro_rate < 0);
+        ac.sort((a, b) => haversineKm(SYD_LAT, SYD_LON, a.lat, a.lon) - haversineKm(SYD_LAT, SYD_LON, b.lat, b.lon));
+        if (ac.length === 0) {
+          ac = (data.ac || []).filter(f => typeof f.alt_baro === 'number' && f.lat && f.lon);
+          ac.sort((a, b) => haversineKm(SYD_LAT, SYD_LON, a.lat, a.lon) - haversineKm(SYD_LAT, SYD_LON, b.lat, b.lon));
+          if (!ac.length) { document.getElementById('info').textContent = 'NO TRAFFIC DETECTED.'; return; }
+        }
+        flights = ac;
+        i = 0;
+        render(flights[0]);
+      } catch(e) {
+        console.error(e);
+        document.getElementById('error').textContent = 'ERR: ' + e.message;
+        document.getElementById('info').textContent = '^ SEE ABOVE';
+        document.getElementById('mfd-flt').textContent = 'ERR';
+      }
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight') next();
+      if (e.key === 'ArrowLeft') prev();
+    });
+
+    fetchFlights();
+  </script>
+</body>
+</html>
