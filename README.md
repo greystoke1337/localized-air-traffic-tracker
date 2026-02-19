@@ -9,9 +9,6 @@ A real-time flight arrival tracker for **Sydney Kingsford Smith Airport (YSSY)**
 ## Features
 
 - **Live ADS-B data** via [airplanes.live](https://airplanes.live) — free, no API key required
-- **Two display themes** — toggle between them with a button:
-  - 🟠 **Dot matrix** — amber phosphor airport departure board aesthetic
-  - 🟢 **F-16 MFD** — 90s military multifunction display with OSB buttons and scanlines
 - **Descent profile graph** — canvas-drawn glideslope chart showing the aircraft's position relative to the ideal 3° ILS approach, normalized to always keep the aircraft in view
 - **Live YSSY weather** — real METAR data from [aviationweather.gov](https://aviationweather.gov), including wind, visibility, temperature and flight category (VFR/MVFR/IFR/LIFR)
 - **Aircraft photo** — fetched automatically from [Planespotters.net](https://planespotters.net) by registration
@@ -27,7 +24,7 @@ A real-time flight arrival tracker for **Sydney Kingsford Smith Airport (YSSY)**
 1. Queries airplanes.live for all aircraft within 50nm of Sydney Airport
 2. Filters for descending aircraft (`baro_rate < 0`) not near Bankstown
 3. Sorts by distance to YSSY — closest first
-4. Renders flight data, descent profile, weather and photo in the selected theme
+4. Renders flight data, descent profile, weather and photo
 
 ---
 
