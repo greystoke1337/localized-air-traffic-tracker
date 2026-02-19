@@ -39,7 +39,6 @@
     /* Photo */
     #dm-photo { display:block; width:100%; max-height:120px; object-fit:cover; object-position:center; margin-top:10px; opacity:0.85; }
     #dm-photo-credit { font-size:0.6rem; opacity:0.5; margin-top:2px; }
-    #dm-weather { margin-top:10px; line-height:1.8; font-size:0.85rem; }
 
     .blink { animation: blink 1s step-end infinite; }
     @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
@@ -56,7 +55,6 @@
     <p id="info">LOADING...</p>
     <p id="main"></p>
     <canvas id="dm-canvas" width="460" height="120"></canvas>
-    <div id="dm-weather"></div>
     <img id="dm-photo" style="display:none" alt="Aircraft photo">
     <p id="dm-photo-credit"></p>
     <hr>
@@ -222,6 +220,27 @@
       ctx.fillText((devFt > 0 ? '+' : '') + Math.round(devFt / 100) * 100 + 'FT', ac_x + 7, ac_y - 3);
     }
 
+    // ── ICAO airline designator → name (for airlines serving SYD)
+    const AIRLINE_DB = {
+      QFA:'QANTAS',         VOZ:'VIRGIN AUSTRALIA', JST:'JETSTAR',
+      TGW:'TIGERAIR',       RXA:'REX',              NWL:'NETWORK AVIATION',
+      UAE:'EMIRATES',       ETD:'ETIHAD',            QTR:'QATAR AIRWAYS',
+      SIA:'SINGAPORE AIR',  MAS:'MALAYSIA AIRLINES', CPA:'CATHAY PACIFIC',
+      ANZ:'AIR NEW ZEALAND',FJI:'FIJI AIRWAYS',      THA:'THAI AIRWAYS',
+      GIA:'GARUDA',         PAL:'PHILIPPINE AIR',    AIQ:'THAI AIRASIA X',
+      XAX:'AIRASIA X',      VNA:'VIETNAM AIRLINES',  EVA:'EVA AIR',
+      CCA:'AIR CHINA',      CSN:'CHINA SOUTHERN',    CES:'CHINA EASTERN',
+      KAL:'KOREAN AIR',     AAR:'ASIANA',            ANA:'ANA',
+      JAL:'JAPAN AIRLINES', AAL:'AMERICAN AIRLINES', UAL:'UNITED AIRLINES',
+      DAL:'DELTA AIR LINES',ACA:'AIR CANADA',        BAW:'BRITISH AIRWAYS',
+      AFR:'AIR FRANCE',     DLH:'LUFTHANSA',         HAL:'HAWAIIAN AIRLINES',
+    };
+    function airlineFromCallsign(callsign) {
+      if (!callsign || callsign === '---') return '---';
+      const prefix = callsign.match(/^[A-Z]+/)?.[0] || '';
+      return AIRLINE_DB[prefix] || prefix || '---';
+    }
+
     function render(f) {
       const ctr = '[' + (i+1) + '/' + flights.length + ']';
       const dist = haversineKm(SYD_LAT, SYD_LON, f.lat, f.lon);
@@ -235,7 +254,7 @@
       const reg = (f.r || '---').toUpperCase();
       const sqk = f.squawk || '---';
 
-      const airline = (f.airline || f.op || '---').toUpperCase();
+      const airline = airlineFromCallsign(call);
 
       // Dot matrix text
       document.getElementById('info').innerHTML =
@@ -252,9 +271,8 @@
         'SQUAWK&nbsp;&nbsp; ' + sqk;
       document.getElementById('counter').textContent = ctr;
 
-      // Fetch photo and weather (async, non-blocking)
+      // Fetch photo (async, non-blocking)
       fetchPhoto(reg, f.hex || '', type);
-      fetchWeather().then(renderWeather);
 
       // Dot matrix canvas
       drawProfile('dm-canvas', dist, altFt, '#ff6600', '#1a0a00', '#7a3300');
@@ -295,39 +313,6 @@
       });
     }
 
-    // ── Fetch METAR for YSSY from aviationweather.gov
-    let weatherCache = null, weatherFetchedAt = 0;
-    async function fetchWeather() {
-      if (Date.now() - weatherFetchedAt < 5 * 60 * 1000 && weatherCache) return weatherCache;
-      try {
-        const url = 'https://aviationweather.gov/api/data/metar?ids=YSSY&format=json';
-        const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
-        if (!res.ok) return null;
-        const data = await res.json();
-        const m = data && data[0];
-        if (!m) return null;
-        const wd = m.wdir != null ? m.wdir + '°' : '---';
-        const ws = m.wspd != null ? m.wspd + 'KT' : '---';
-        const vis = m.visib != null ? m.visib + 'SM' : '---';
-        const fc = m.fltcat || m.flightCategory || '---';
-        const temp = m.temp != null ? m.temp + '°C' : '---';
-        weatherCache = { wd, ws, vis, fc, temp, raw: m.rawOb || '' };
-        weatherFetchedAt = Date.now();
-        return weatherCache;
-      } catch(e) { return null; }
-    }
-    function renderWeather(w) {
-      if (!w) return;
-      const fcColor = { VFR:'#20c520', MVFR:'#4af', IFR:'#f44', LIFR:'#f4f' }[w.fc] || '#20c520';
-      const dmEl = document.getElementById('dm-weather');
-      if (dmEl) dmEl.innerHTML =
-        'WIND&nbsp;&nbsp;&nbsp;&nbsp; ' + w.wd + ' / ' + w.ws + '<br>' +
-        'VIS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + w.vis + '<br>' +
-        'TEMP&nbsp;&nbsp;&nbsp;&nbsp; ' + w.temp + '<br>' +
-        'FLT CAT&nbsp; <span style="color:' + fcColor + '">' + w.fc + '</span>';
-
-    }
-
     function go(n) { if (flights.length) { i = (n + flights.length) % flights.length; render(flights[i]); } }
     function next() { go(i + 1); }
     function prev() { go(i - 1); }
@@ -350,11 +335,11 @@ document.getElementById('error').textContent = '';
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         let ac = data.ac || [];
-        // Exclude traffic near Bankstown (YSBK) — within 8km is likely a Bankstown arrival
+        // Exclude traffic near Bankstown (BWU) — within 8km is likely a Bankstown arrival
         const BANK_LAT = -33.9244, BANK_LON = 150.9883;
         function nearBankstown(f) { return haversineKm(BANK_LAT, BANK_LON, f.lat, f.lon) < 8; }
         // Also exclude aircraft heading to/from west (Bankstown approaches from west)
-        // Primary filter: descending, not near Bankstown, within 50nm of YSSY
+        // Primary filter: descending, not near Bankstown, within 50nm of SYD
         ac = ac.filter(f =>
           typeof f.alt_baro === 'number' && f.lat && f.lon &&
           f.baro_rate < 0 &&
