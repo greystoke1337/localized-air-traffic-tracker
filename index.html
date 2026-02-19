@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Overhead Tracker</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -35,7 +36,6 @@
       padding: 4px 14px; cursor: pointer; text-shadow: 0 0 6px #ff4400;
     }
     body.dotmatrix button:hover { background: #ff660022; }
-    body.dotmatrix .theme-btn { border-color: #ff4400; color: #ff4400; float: right; }
     #location-ctrl { display: flex; gap: 6px; align-items: center; margin: 10px 0 4px; }
     #suburb-input {
       background: none; border: 1px solid #ff6600; color: #ff6600;
@@ -45,7 +45,8 @@
     }
     #suburb-input::placeholder { color: #7a3300; text-shadow: none; }
     #geofence-status { font-size: 0.75rem; opacity: 0.6; margin: 0 0 8px; }
-    #dm-canvas { display: block; margin-top: 16px; image-rendering: pixelated; }
+    /* max-width: 100% prevents overflow on narrow screens; JS also resizes the pixel buffer */
+    #dm-canvas { display: block; margin-top: 16px; image-rendering: pixelated; max-width: 100%; }
 
     /* Photo */
     #dm-photo { display:block; width:100%; max-height:120px; object-fit:cover; object-position:center; margin-top:10px; opacity:0.85; }
@@ -79,7 +80,7 @@
     <p id="error"></p>
     <p id="info">LOADING...</p>
     <p id="main"></p>
-    <canvas id="dm-canvas" width="460" height="120"></canvas>
+    <canvas id="dm-canvas"></canvas>
     <div id="dm-map"></div>
     <img id="dm-photo" style="display:none" alt="Aircraft photo">
     <p id="dm-photo-credit"></p>
@@ -87,16 +88,37 @@
     <button onclick="prev()">&#9664; PREV</button>
     <span id="counter"></span>
     <button onclick="next()">NEXT &#9654;</button>
-    <button onclick="go(0)">NOW</button>
+    <button onclick="go(0)">NEAREST</button>
+    <button onclick="manualRefresh()">REFRESH</button>
     <br><br>
     <span id="refresh-timer"></span>
   </div>
   <script>
     const SYD_LAT = -33.9461, SYD_LON = 151.1772;
     const GEOFENCE_KM = 5;
+    // Query radius in nm — ~4× the geofence km converted to nm, for generous margin.
+    // Update automatically if GEOFENCE_KM changes.
+    const API_RADIUS_NM = Math.ceil((GEOFENCE_KM / 1.852) * 4);
+
     let suburbName = 'RUSSELL LEA';
-    let suburbLat = -33.8598, suburbLon = 151.1369; // Russell Lea, NSW
-    let flights = [], i = 0;
+    let suburbLat = -33.8598, suburbLon = 151.1369; // Russell Lea, NSW default
+    let flights = [], flightIndex = 0;
+    let fetchController = null;
+
+    // ── Restore last suburb from localStorage
+    (function () {
+      try {
+        const saved = localStorage.getItem('suburb');
+        if (saved) {
+          const { name, lat, lon } = JSON.parse(saved);
+          suburbName = name.toUpperCase();
+          suburbLat = lat;
+          suburbLon = lon;
+          document.getElementById('suburb-input').value = name;
+          document.getElementById('suburb-display').textContent = suburbName;
+        }
+      } catch (e) { /* ignore corrupt saved data */ }
+    })();
 
     function haversineKm(lat1, lon1, lat2, lon2) {
       const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
@@ -104,12 +126,23 @@
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
-    function fmtUTC() {
-      return new Date().toLocaleTimeString('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + 'Z';
+    // ── Resize canvas pixel buffer to fit its container, preserving 460×120 aspect ratio.
+    // CSS max-width:100% prevents overflow; this keeps rendering crisp on narrow screens.
+    function resizeCanvas() {
+      const canvas = document.getElementById('dm-canvas');
+      const w = Math.min(460, canvas.parentElement.clientWidth || 460);
+      const h = Math.round(w * 120 / 460);
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+        if (flights.length) render(flights[flightIndex]);
+      }
     }
+    window.addEventListener('resize', resizeCanvas);
 
-    // ── Draw descent profile on a canvas
-    // color: stroke color, bgcolor: background
+    // ── Draw descent profile on a canvas.
+    // distKm and altFt are relative to SYD — used as the glideslope reference point,
+    // not the suburb. This shows the aircraft's progress on the ILS approach to SYD.
     function drawProfile(canvasId, distKm, altFt, color, bgcolor, dimColor) {
       const canvas = document.getElementById(canvasId);
       if (!canvas) return;
@@ -131,12 +164,10 @@
       // Normalize: always center the view around the aircraft
       // Show aircraft at ~60% from right, with 15nm window
       const WINDOW_NM = 15;
-      const WINDOW_KM = WINDOW_NM * 1.852;
       const distNm = distKm / 1.852;
 
       // X range: aircraft sits at 60% from left, so show [dist-9nm .. dist+6nm] roughly
-      const xCenterNm = distNm;
-      const xMinNm = Math.max(0, xCenterNm - WINDOW_NM * 0.6);
+      const xMinNm = Math.max(0, distNm - WINDOW_NM * 0.6);
       const xMaxNm = xMinNm + WINDOW_NM;
       const xMinKm = xMinNm * 1.852, xMaxKm = xMaxNm * 1.852;
 
@@ -244,7 +275,7 @@
       // Deviation label
       const devFt = Math.round(altFt - gsAltAtDist);
       ctx.fillStyle = above ? '#e8e820' : color;
-      ctx.textAlign = above ? 'left' : 'left';
+      ctx.textAlign = 'left';
       ctx.font = 'bold 9px Share Tech Mono, monospace';
       ctx.fillText((devFt > 0 ? '+' : '') + Math.round(devFt / 100) * 100 + 'FT', ac_x + 7, ac_y - 3);
     }
@@ -278,7 +309,7 @@
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap © Carto', maxZoom: 14
       }).addTo(map);
-      // SYD airport — dimmer since it's now a reference point, not the focus
+      // SYD airport — reference point for the glideslope profile
       L.circleMarker([SYD_LAT, SYD_LON], {
         radius: 4, color: '#7a3300', fillColor: '#7a3300', fillOpacity: 1, weight: 2
       }).addTo(map)
@@ -325,12 +356,20 @@
       else acLine = L.polyline([pos, [suburbLat, suburbLon]], {
         color: '#ff6600', weight: 1, opacity: 0.4, dashArray: '4 6'
       }).addTo(map);
-      map.fitBounds(L.latLngBounds([pos, [suburbLat, suburbLon], [SYD_LAT, SYD_LON]]).pad(0.3));
+      // Only pull SYD into the fit-bounds when the suburb is close to the airport;
+      // otherwise distant suburbs (e.g. Penrith) would zoom out excessively.
+      const distSuburbSyd = haversineKm(suburbLat, suburbLon, SYD_LAT, SYD_LON);
+      const boundsPoints = distSuburbSyd < 40
+        ? [pos, [suburbLat, suburbLon], [SYD_LAT, SYD_LON]]
+        : [pos, [suburbLat, suburbLon]];
+      map.fitBounds(L.latLngBounds(boundsPoints).pad(0.3));
     }
 
     function render(f) {
-      const ctr = '[' + (i+1) + '/' + flights.length + ']';
+      const ctr = '[' + (flightIndex+1) + '/' + flights.length + ']';
       const distLoc = haversineKm(suburbLat, suburbLon, f.lat, f.lon);
+      // distSyd drives the glideslope canvas — measures approach progress toward SYD,
+      // which is the ILS reference regardless of which suburb is selected.
       const distSyd = haversineKm(SYD_LAT, SYD_LON, f.lat, f.lon);
       const altFt = typeof f.alt_baro === 'number' ? f.alt_baro : 0;
       const altStr = typeof f.alt_baro === 'number' ? f.alt_baro.toLocaleString() + ' FT' : '---';
@@ -380,9 +419,7 @@
         if (!photo) return;
         const src = photo.thumbnail_large?.src || photo.thumbnail?.src;
         const credit = photo.photographer ? '© ' + photo.photographer : '';
-        if (src) {
-          setPhoto(src, credit);
-        }
+        if (src) setPhoto(src, credit);
       } catch(e) { /* silent fail */ }
     }
     function setPhoto(src, credit) {
@@ -392,28 +429,25 @@
       if (cr) cr.textContent = credit;
     }
     function clearPhoto() {
-      ['dm-photo'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) { el.src=''; el.style.display='none'; }
-      });
+      const el = document.getElementById('dm-photo');
+      if (el) { el.src = ''; el.style.display = 'none'; }
     }
 
-    function go(n) { if (flights.length) { i = (n + flights.length) % flights.length; render(flights[i]); } }
-    function next() { go(i + 1); }
-    function prev() { go(i - 1); }
-
-
+    function go(n) { if (flights.length) { flightIndex = (n + flights.length) % flights.length; render(flights[flightIndex]); } }
+    function next() { go(flightIndex + 1); }
+    function prev() { go(flightIndex - 1); }
+    function manualRefresh() { secs = 30; fetchFlights(); }
 
     let secs = 30;
     setInterval(() => {
       secs--;
       document.getElementById('refresh-timer').textContent = 'REFRESH IN ' + secs + 'S';
-      if (secs <= 0) { secs = 30; fetchFlights(); }
+      if (secs <= 0) fetchFlights();
     }, 1000);
 
     // ── Geocode suburb name → lat/lon via Nominatim (OSM)
     async function geocodeSuburb(name) {
-      const q = encodeURIComponent(name + ', New South Wales, Australia');
+      const q = encodeURIComponent(name + ', Australia');
       const url = 'https://nominatim.openstreetmap.org/search?q=' + q + '&format=json&limit=1';
       const res = await fetch(url, {
         signal: AbortSignal.timeout(8000),
@@ -436,9 +470,10 @@
         suburbLon = lon;
         document.getElementById('suburb-display').textContent = suburbName;
         document.getElementById('error').textContent = '';
+        lastPhotoReg = null; // reset so photo re-fetches for new location's aircraft
         clearAircraftMarker();
         updateGeofenceCircle();
-        secs = 30;
+        try { localStorage.setItem('suburb', JSON.stringify({ name: input, lat, lon })); } catch(e) {}
         await fetchFlights();
       } catch(e) {
         document.getElementById('error').textContent = 'LOCATION ERR: ' + e.message;
@@ -446,13 +481,18 @@
     }
 
     async function fetchFlights() {
+      // Cancel any in-flight request before starting a new one
+      if (fetchController) fetchController.abort();
+      fetchController = new AbortController();
+      const signal = fetchController.signal;
+
       document.getElementById('info').textContent = 'FETCHING DATA...';
       document.getElementById('error').textContent = '';
       try {
-        // Query a 10nm (~18.5km) radius around the suburb — larger than our 5km geofence
-        // so aircraft clipping the edge of the circle are captured, then we filter precisely
-        const url = 'https://api.airplanes.live/v2/point/' + suburbLat + '/' + suburbLon + '/10';
-        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        // API_RADIUS_NM is derived from GEOFENCE_KM with generous margin;
+        // we then filter precisely to GEOFENCE_KM below.
+        const url = 'https://api.airplanes.live/v2/point/' + suburbLat + '/' + suburbLon + '/' + API_RADIUS_NM;
+        const res = await fetch(url, { signal });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         let ac = (data.ac || []).filter(f =>
@@ -472,12 +512,15 @@
           return;
         }
         flights = ac;
-        i = 0;
+        flightIndex = 0;
         render(flights[0]);
       } catch(e) {
+        if (e.name === 'AbortError') return; // superseded by a newer fetch — ignore silently
         console.error(e);
         document.getElementById('error').textContent = 'ERR: ' + e.message;
         document.getElementById('info').textContent = '^ SEE ABOVE';
+      } finally {
+        secs = 30; // always reset the countdown after a fetch completes or errors
       }
     }
 
@@ -491,6 +534,7 @@
     });
 
     initMap();
+    resizeCanvas();
     fetchFlights();
   </script>
 </body>
