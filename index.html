@@ -220,6 +220,27 @@
       ctx.fillText((devFt > 0 ? '+' : '') + Math.round(devFt / 100) * 100 + 'FT', ac_x + 7, ac_y - 3);
     }
 
+    // ── ICAO airline designator → name (for airlines serving SYD)
+    const AIRLINE_DB = {
+      QFA:'QANTAS',         VOZ:'VIRGIN AUSTRALIA', JST:'JETSTAR',
+      TGW:'TIGERAIR',       RXA:'REX',              NWL:'NETWORK AVIATION',
+      UAE:'EMIRATES',       ETD:'ETIHAD',            QTR:'QATAR AIRWAYS',
+      SIA:'SINGAPORE AIR',  MAS:'MALAYSIA AIRLINES', CPA:'CATHAY PACIFIC',
+      ANZ:'AIR NEW ZEALAND',FJI:'FIJI AIRWAYS',      THA:'THAI AIRWAYS',
+      GIA:'GARUDA',         PAL:'PHILIPPINE AIR',    AIQ:'THAI AIRASIA X',
+      XAX:'AIRASIA X',      VNA:'VIETNAM AIRLINES',  EVA:'EVA AIR',
+      CCA:'AIR CHINA',      CSN:'CHINA SOUTHERN',    CES:'CHINA EASTERN',
+      KAL:'KOREAN AIR',     AAR:'ASIANA',            ANA:'ANA',
+      JAL:'JAPAN AIRLINES', AAL:'AMERICAN AIRLINES', UAL:'UNITED AIRLINES',
+      DAL:'DELTA AIR LINES',ACA:'AIR CANADA',        BAW:'BRITISH AIRWAYS',
+      AFR:'AIR FRANCE',     DLH:'LUFTHANSA',         HAL:'HAWAIIAN AIRLINES',
+    };
+    function airlineFromCallsign(callsign) {
+      if (!callsign || callsign === '---') return '---';
+      const prefix = callsign.match(/^[A-Z]+/)?.[0] || '';
+      return AIRLINE_DB[prefix] || prefix || '---';
+    }
+
     function render(f) {
       const ctr = '[' + (i+1) + '/' + flights.length + ']';
       const dist = haversineKm(SYD_LAT, SYD_LON, f.lat, f.lon);
@@ -233,7 +254,7 @@
       const reg = (f.r || '---').toUpperCase();
       const sqk = f.squawk || '---';
 
-      const airline = (f.airline || f.op || '---').toUpperCase();
+      const airline = airlineFromCallsign(call);
 
       // Dot matrix text
       document.getElementById('info').innerHTML =
@@ -314,11 +335,11 @@ document.getElementById('error').textContent = '';
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         let ac = data.ac || [];
-        // Exclude traffic near Bankstown (YSBK) — within 8km is likely a Bankstown arrival
+        // Exclude traffic near Bankstown (BWU) — within 8km is likely a Bankstown arrival
         const BANK_LAT = -33.9244, BANK_LON = 150.9883;
         function nearBankstown(f) { return haversineKm(BANK_LAT, BANK_LON, f.lat, f.lon) < 8; }
         // Also exclude aircraft heading to/from west (Bankstown approaches from west)
-        // Primary filter: descending, not near Bankstown, within 50nm of YSSY
+        // Primary filter: descending, not near Bankstown, within 50nm of SYD
         ac = ac.filter(f =>
           typeof f.alt_baro === 'number' && f.lat && f.lon &&
           f.baro_rate < 0 &&
