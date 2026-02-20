@@ -32,13 +32,14 @@
     }
     body.dotmatrix hr { border-color: var(--c-main); opacity: 0.3; margin: 12px 0; }
     body.dotmatrix #info { font-size: 1.3rem; margin: 16px 0 8px; }
-    body.dotmatrix #main { line-height: 2; margin-bottom: 16px; }
+    body.dotmatrix #main { line-height: 1.8; margin-bottom: 16px; font-size: 0.78rem; opacity: 0.85; }
     body.dotmatrix #counter { margin: 0 12px; }
     body.dotmatrix #error { color: var(--c-glow); word-break: break-all; font-size: 0.85rem; }
     body.dotmatrix button {
       background: none; border: 1px solid var(--c-main); color: var(--c-main);
-      font-family: 'Share Tech Mono', monospace; font-size: 0.9rem;
-      padding: 4px 14px; cursor: pointer; text-shadow: 0 0 6px var(--c-glow);
+      font-family: 'Share Tech Mono', monospace; font-size: 0.82rem;
+      padding: 5px 0; cursor: pointer; text-shadow: 0 0 6px var(--c-glow);
+      width: 80px; text-align: center; display: inline-block;
     }
     body.dotmatrix button:hover { background: color-mix(in srgb, var(--c-main) 13%, transparent); }
     #location-ctrl { display: flex; gap: 6px; align-items: center; margin: 10px 0 4px; }
@@ -55,7 +56,7 @@
     .photo-wrap { position:relative; display:block; margin-top:10px; z-index: 0; border:1px solid var(--c-dim); }
     .photo-wrap::after {
       content:''; position:absolute; inset:0; pointer-events:none; z-index: 1;
-      background-image: radial-gradient(circle, var(--c-overlay) 1px, transparent 1px);
+      background-image: radial-gradient(circle, rgba(0,0,0,0.25) 1px, transparent 1px);
       background-size: 3px 3px;
     }
     #dm-photo { display:block; width:100%; max-height:120px; object-fit:cover; object-position:center; opacity:0.85; }
@@ -102,7 +103,6 @@
     <button onclick="next()">NEXT &#9654;</button>
     <button onclick="go(0)">NEAREST</button>
     <button onclick="manualRefresh()">REFRESH</button>
-    <button onclick="toggleTheme()" id="theme-btn">&#9679; BLUE</button>
     <br><br>
     <span id="refresh-timer"></span>
   </div>
@@ -116,10 +116,9 @@
     let flights = [], flightIndex = 0;
     let fetchController = null;
 
-    // ── Themes
+    // ── Theme (orange only)
     const THEMES = {
-      orange: { main: '#ffa600', glow: '#ff8000', dim: '#7a5200', bg: '#1a0a00', overlay: 'rgba(26,10,0,0.65)',  acMarker: '#e8e820' },
-      blue:   { main: '#0080ff', glow: '#0055cc', dim: '#003a80', bg: '#00091a', overlay: 'rgba(0,9,26,0.65)',   acMarker: '#e8e820' },
+      orange: { main: '#ffa600', glow: '#ff8000', dim: '#7a5200', bg: '#1a0a00', overlay: 'rgba(26,10,0,0.65)', acMarker: '#e8e820' },
     };
     let currentTheme = 'orange';
 
@@ -131,17 +130,11 @@
       b.style.setProperty('--c-dim',     t.dim);
       b.style.setProperty('--c-bg',      t.bg);
       b.style.setProperty('--c-overlay', t.overlay);
-      // Update Leaflet layers if they exist
       if (geofenceCircle) geofenceCircle.setStyle({ color: t.main, fillColor: t.main });
       if (acLine)         acLine.setStyle({ color: t.main });
-      document.getElementById('theme-btn').textContent =
-        name === 'orange' ? '● BLUE' : '● ORANGE';
+      if (acVector)       acVector.setStyle({ color: t.acMarker });
+      if (acArrowHead)    acArrowHead.setStyle({ color: t.acMarker });
       currentTheme = name;
-      try { localStorage.setItem('theme', name); } catch(e) {}
-    }
-
-    function toggleTheme() {
-      applyTheme(currentTheme === 'orange' ? 'blue' : 'orange');
     }
 
     // ── Restore last suburb from localStorage
@@ -157,10 +150,6 @@
           document.getElementById('suburb-display').textContent = suburbName;
         }
       } catch (e) {}
-      try {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme && THEMES[savedTheme]) applyTheme(savedTheme);
-      } catch(e) {}
     })();
 
     function haversineKm(lat1, lon1, lat2, lon2) {
@@ -197,10 +186,59 @@
       A6:'HIGH PERF', A7:'ROTORCRAFT', B1:'GLIDER', B2:'AIRSHIP',
       B4:'SKYDIVER', B6:'UAV', B7:'SPACECRAFT', C1:'GROUND VEH',
     };
+    // ── ICAO aircraft type code → full name
+    const AIRCRAFT_TYPE_DB = {
+      // Boeing narrowbody
+      B737:'B737-700', B738:'B737-800', B739:'B737-900', B73X:'B737-900ER',
+      B37M:'B737 MAX 7', B38M:'B737 MAX 8', B39M:'B737 MAX 9', B3XM:'B737 MAX 10',
+      B752:'B757-200', B753:'B757-300',
+      // Boeing widebody
+      B762:'B767-200', B763:'B767-300', B764:'B767-400',
+      B772:'B777-200', B77L:'B777-200LR', B773:'B777-300', B77W:'B777-300ER',
+      B778:'B777X-8', B779:'B777X-9',
+      B788:'B787-8', B789:'B787-9', B78X:'B787-10',
+      // Boeing classic / other
+      B712:'B717-200', B721:'B727-100', B722:'B727-200',
+      B741:'B747-100', B742:'B747-200', B743:'B747-300', B744:'B747-400', B748:'B747-8',
+      // Airbus narrowbody
+      A318:'A318', A319:'A319', A320:'A320', A321:'A321',
+      A19N:'A319neo', A20N:'A320neo', A21N:'A321neo', A21X:'A321XLR',
+      // Airbus widebody
+      A332:'A330-200', A333:'A330-300', A338:'A330-800neo', A339:'A330-900neo',
+      A342:'A340-200', A343:'A340-300', A345:'A340-500', A346:'A340-600',
+      A359:'A350-900', A35K:'A350-1000',
+      A380:'A380', A388:'A380-800',
+      // Embraer
+      E170:'E170', E175:'E175', E190:'E190', E195:'E195',
+      E75L:'E175-E2', E290:'E190-E2', E295:'E195-E2',
+      // Bombardier / CRJ
+      CRJ2:'CRJ-200', CRJ7:'CRJ-700', CRJ9:'CRJ-900', CRJX:'CRJ-1000',
+      DH8A:'DASH 8-100', DH8B:'DASH 8-200', DH8C:'DASH 8-300', DH8D:'DASH 8-400',
+      // ATR
+      AT43:'ATR 42-300', AT45:'ATR 42-500', AT72:'ATR 72-200', AT75:'ATR 72-500', AT76:'ATR 72-600',
+      // Airbus A220 (formerly Bombardier CSeries)
+      BCS1:'A220-100', BCS3:'A220-300',
+      // Regional / turboprop
+      SF34:'SAAB 340', SB20:'SAAB 2000', JS41:'JETSTREAM 41',
+      PC12:'PILATUS PC-12', C208:'CESSNA CARAVAN',
+      // Business jets
+      GL5T:'GULFSTREAM G550', GLEX:'GLOBAL EXPRESS', GLF6:'GULFSTREAM G650',
+      C25A:'CITATION CJ2', C25B:'CITATION CJ3', C68A:'CITATION SOVEREIGN',
+      FA7X:'FALCON 7X', FA8X:'FALCON 8X',
+      // Military / special
+      C130:'C-130 HERCULES', C17:'C-17 GLOBEMASTER', P8:'P-8 POSEIDON',
+      E3CF:'E-3 SENTRY', B52:'B-52 STRATOFORTRESS',
+      // Helicopter
+      EC35:'H135', EC45:'H145', S76:'SIKORSKY S-76', AS32:'SUPER PUMA',
+      B06:'BELL 206', B407:'BELL 407',
+    };
     function formatType(t, category) {
       const typeCode = (t || '').toUpperCase();
       const cat = (category || '').toUpperCase();
+      const fullName = AIRCRAFT_TYPE_DB[typeCode];
       const catLabel = CATEGORY_DB[cat];
+      if (fullName && catLabel) return fullName + ' (' + catLabel + ')';
+      if (fullName) return fullName;
       if (typeCode && catLabel) return typeCode + ' (' + catLabel + ')';
       if (typeCode) return typeCode;
       if (catLabel) return catLabel;
@@ -224,7 +262,7 @@
     }
 
     // ── Map
-    let map, acMarker, acLine, geofenceCircle, suburbMarker;
+    let map, acMarker, acLine, acVector, acArrowHead, geofenceCircle, suburbMarker;
     function initMap() {
       map = L.map('dm-map', { zoomControl: false })
         .setView([suburbLat, suburbLon], 11);
@@ -261,12 +299,23 @@
       map.setView([suburbLat, suburbLon], 11);
     }
     function clearAircraftMarker() {
-      if (acMarker) { acMarker.remove(); acMarker = null; }
-      if (acLine)   { acLine.remove();   acLine = null; }
+      if (acMarker)    { acMarker.remove();    acMarker = null; }
+      if (acLine)      { acLine.remove();      acLine = null; }
+      if (acVector)    { acVector.remove();    acVector = null; }
+      if (acArrowHead) { acArrowHead.remove(); acArrowHead = null; }
     }
-    function updateMap(lat, lon, callsign) {
+    // Returns a lat/lon point distKm away from [lat,lon] in bearingDeg direction
+    function destPoint(lat, lon, bearingDeg, distKm) {
+      const R = 6371, d = distKm / R, brng = bearingDeg * Math.PI / 180;
+      const lat1 = lat * Math.PI / 180, lon1 = lon * Math.PI / 180;
+      const lat2 = Math.asin(Math.sin(lat1)*Math.cos(d) + Math.cos(lat1)*Math.sin(d)*Math.cos(brng));
+      const lon2 = lon1 + Math.atan2(Math.sin(brng)*Math.sin(d)*Math.cos(lat1), Math.cos(d)-Math.sin(lat1)*Math.sin(lat2));
+      return [lat2 * 180/Math.PI, lon2 * 180/Math.PI];
+    }
+    function updateMap(lat, lon, callsign, groundSpeedKt, trackDeg) {
       const pos = [lat, lon];
       const t = THEMES[currentTheme];
+      // Aircraft dot
       if (acMarker) {
         acMarker.setLatLng(pos);
         acMarker.getTooltip().setContent(callsign);
@@ -276,10 +325,30 @@
         }).addTo(map)
           .bindTooltip(callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
       }
+      // Dashed line to suburb
       if (acLine) acLine.setLatLngs([pos, [suburbLat, suburbLon]]);
       else acLine = L.polyline([pos, [suburbLat, suburbLon]], {
         color: t.main, weight: 1, opacity: 0.4, dashArray: '4 6'
       }).addTo(map);
+      // Speed-scaled heading vector + chevron arrowhead
+      if (typeof groundSpeedKt === 'number' && groundSpeedKt > 0 && typeof trackDeg === 'number') {
+        const vectorKm = Math.max(0.5, Math.min(groundSpeedKt / 100, 8));
+        const tip = destPoint(lat, lon, trackDeg, vectorKm);
+        const headKm = vectorKm * 0.28;
+        const leftWing  = destPoint(tip[0], tip[1], (trackDeg + 180 - 28 + 360) % 360, headKm);
+        const rightWing = destPoint(tip[0], tip[1], (trackDeg + 180 + 28) % 360, headKm);
+        const vs = { color: t.acMarker, weight: 2, opacity: 0.9 };
+        if (acVector) {
+          acVector.setLatLngs([pos, tip]);
+          acArrowHead.setLatLngs([leftWing, tip, rightWing]);
+        } else {
+          acVector    = L.polyline([pos, tip], vs).addTo(map);
+          acArrowHead = L.polyline([leftWing, tip, rightWing], vs).addTo(map);
+        }
+      } else {
+        if (acVector)    { acVector.remove();    acVector = null; }
+        if (acArrowHead) { acArrowHead.remove(); acArrowHead = null; }
+      }
       const distSuburbSyd = haversineKm(suburbLat, suburbLon, SYD_LAT, SYD_LON);
       const boundsPoints = distSuburbSyd < 40
         ? [pos, [suburbLat, suburbLon], [SYD_LAT, SYD_LON]]
@@ -321,7 +390,7 @@
       document.getElementById('counter').textContent = ctr;
 
       fetchPhoto(reg, f.hex || '', (f.t || '').toUpperCase());
-      updateMap(f.lat, f.lon, call);
+      updateMap(f.lat, f.lon, call, f.gs, f.track);
     }
 
     // ── Fetch aircraft photo from Planespotters
