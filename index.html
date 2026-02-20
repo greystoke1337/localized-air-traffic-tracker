@@ -11,39 +11,39 @@
     /* ─── DOTMATRIX THEME ─── */
     body.dotmatrix {
       background: #1a0a00;
-      color: #ff6600;
+      color: #ffa600;
       font-family: 'Share Tech Mono', monospace;
       font-size: 1rem;
       padding: 30px;
       max-width: 520px;
       margin: 0 auto;
     }
-    body.dotmatrix * { text-shadow: 0 0 2px #ff6600, 0 0 8px #ff4400; }
+    body.dotmatrix * { text-shadow: 0 0 2px #ffa600, 0 0 8px #ff8000; }
     body.dotmatrix::after {
       content: '';
       position: fixed; inset: 0;
       background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.18) 3px, rgba(0,0,0,0.18) 4px);
       pointer-events: none; z-index: 99;
     }
-    body.dotmatrix hr { border-color: #ff6600; opacity: 0.3; margin: 12px 0; }
+    body.dotmatrix hr { border-color: #ffa600; opacity: 0.3; margin: 12px 0; }
     body.dotmatrix #info { font-size: 1.3rem; margin: 16px 0 8px; }
     body.dotmatrix #main { line-height: 2; margin-bottom: 16px; }
     body.dotmatrix #counter { margin: 0 12px; }
-    body.dotmatrix #error { color: #ff4400; word-break: break-all; font-size: 0.85rem; }
+    body.dotmatrix #error { color: #ff8000; word-break: break-all; font-size: 0.85rem; }
     body.dotmatrix button {
-      background: none; border: 1px solid #ff6600; color: #ff6600;
+      background: none; border: 1px solid #ffa600; color: #ffa600;
       font-family: 'Share Tech Mono', monospace; font-size: 0.9rem;
-      padding: 4px 14px; cursor: pointer; text-shadow: 0 0 6px #ff4400;
+      padding: 4px 14px; cursor: pointer; text-shadow: 0 0 6px #ff8000;
     }
-    body.dotmatrix button:hover { background: #ff660022; }
+    body.dotmatrix button:hover { background: #ffa60022; }
     #location-ctrl { display: flex; gap: 6px; align-items: center; margin: 10px 0 4px; }
     #suburb-input {
-      background: none; border: 1px solid #ff6600; color: #ff6600;
+      background: none; border: 1px solid #ffa600; color: #ffa600;
       font-family: 'Share Tech Mono', monospace; font-size: 0.85rem;
       padding: 4px 8px; flex: 1; outline: none;
-      text-shadow: 0 0 6px #ff4400;
+      text-shadow: 0 0 6px #ff8000;
     }
-    #suburb-input::placeholder { color: #7a3300; text-shadow: none; }
+    #suburb-input::placeholder { color: #7a5200; text-shadow: none; }
     #geofence-status { font-size: 0.75rem; opacity: 0.6; margin: 0 0 8px; }
     /* Photo */
     .photo-wrap { position:relative; display:block; margin-top:10px; z-index: 0; }
@@ -59,9 +59,9 @@
     @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
 
     /* Map */
-    #dm-map { width:100%; height:220px; margin-top:14px; border:1px solid #7a3300; }
+    #dm-map { width:100%; height:220px; margin-top:14px; border:1px solid #7a5200; }
     #dm-map * { text-shadow: none; }
-    .dm-callout { background:#1a0a00; border:1px solid #ff6600; color:#ff6600;
+    .dm-callout { background:#1a0a00; border:1px solid #ffa600; color:#ffa600;
       font-family:'Share Tech Mono',monospace; font-size:11px; padding:2px 5px;
       border-radius:0; white-space:nowrap; }
     .dm-callout::before { display:none; }
@@ -158,7 +158,7 @@
         attribution: '© OpenStreetMap © Carto', maxZoom: 14
       }).addTo(map);
       L.circleMarker([SYD_LAT, SYD_LON], {
-        radius: 4, color: '#7a3300', fillColor: '#7a3300', fillOpacity: 1, weight: 2
+        radius: 4, color: '#7a5200', fillColor: '#7a5200', fillOpacity: 1, weight: 2
       }).addTo(map)
         .bindTooltip('SYD', { permanent: true, direction: 'right', className: 'dm-callout' });
       updateGeofenceCircle();
@@ -169,7 +169,7 @@
       } else {
         geofenceCircle = L.circle([suburbLat, suburbLon], {
           radius: GEOFENCE_KM * 1000,
-          color: '#ff6600', fillColor: '#ff6600', fillOpacity: 0.05,
+          color: '#ffa600', fillColor: '#ffa600', fillOpacity: 0.05,
           weight: 1, dashArray: '5 5'
         }).addTo(map);
       }
@@ -201,7 +201,7 @@
       }
       if (acLine) acLine.setLatLngs([pos, [suburbLat, suburbLon]]);
       else acLine = L.polyline([pos, [suburbLat, suburbLon]], {
-        color: '#ff6600', weight: 1, opacity: 0.4, dashArray: '4 6'
+        color: '#ffa600', weight: 1, opacity: 0.4, dashArray: '4 6'
       }).addTo(map);
       const distSuburbSyd = haversineKm(suburbLat, suburbLon, SYD_LAT, SYD_LON);
       const boundsPoints = distSuburbSyd < 40
