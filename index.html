@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Overhead Tracker</title>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     /* ─── DOTMATRIX THEME ─── */
     body.dotmatrix {
@@ -55,6 +57,16 @@
 
     .blink { animation: blink 1s step-end infinite; }
     @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
+
+    /* Map */
+    #dm-map { width:100%; height:220px; margin-top:14px; border:1px solid #886600; }
+    #dm-map * { text-shadow: none; }
+    .dm-callout { background:#1a1400; border:1px solid #ffaa00; color:#ffaa00;
+      font-family:'Share Tech Mono',monospace; font-size:11px; padding:2px 5px;
+      border-radius:0; white-space:nowrap; }
+    .dm-callout::before { display:none; }
+    .leaflet-control-attribution { font-size:9px; opacity:0.35; background:transparent !important; color:#aaa !important; }
+    .leaflet-control-attribution a { color:#aaa !important; }
   </style>
 </head>
 <body class="dotmatrix">
@@ -71,6 +83,7 @@
     <p id="error"></p>
     <p id="info">LOADING...</p>
     <p id="main"></p>
+    <div id="dm-map"></div>
     <div class="photo-wrap" id="photo-wrap" style="display:none"><img id="dm-photo" alt="Aircraft photo"></div>
     <p id="dm-photo-credit"></p>
     <hr>
@@ -136,6 +149,67 @@
       return AIRLINE_DB[prefix] || prefix || '---';
     }
 
+    // ── Map
+    let map, acMarker, acLine, geofenceCircle, suburbMarker;
+    function initMap() {
+      map = L.map('dm-map', { zoomControl: false })
+        .setView([suburbLat, suburbLon], 11);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap © Carto', maxZoom: 14
+      }).addTo(map);
+      L.circleMarker([SYD_LAT, SYD_LON], {
+        radius: 4, color: '#886600', fillColor: '#886600', fillOpacity: 1, weight: 2
+      }).addTo(map)
+        .bindTooltip('SYD', { permanent: true, direction: 'right', className: 'dm-callout' });
+      updateGeofenceCircle();
+    }
+    function updateGeofenceCircle() {
+      if (geofenceCircle) {
+        geofenceCircle.setLatLng([suburbLat, suburbLon]);
+      } else {
+        geofenceCircle = L.circle([suburbLat, suburbLon], {
+          radius: GEOFENCE_KM * 1000,
+          color: '#ffaa00', fillColor: '#ffaa00', fillOpacity: 0.05,
+          weight: 1, dashArray: '5 5'
+        }).addTo(map);
+      }
+      if (suburbMarker) {
+        suburbMarker.setLatLng([suburbLat, suburbLon]);
+        suburbMarker.getTooltip().setContent(suburbName);
+      } else {
+        suburbMarker = L.circleMarker([suburbLat, suburbLon], {
+          radius: 5, color: '#ffffff', fillColor: '#ffffff', fillOpacity: 0.9, weight: 2
+        }).addTo(map)
+          .bindTooltip(suburbName, { permanent: true, direction: 'right', className: 'dm-callout' });
+      }
+      map.setView([suburbLat, suburbLon], 11);
+    }
+    function clearAircraftMarker() {
+      if (acMarker) { acMarker.remove(); acMarker = null; }
+      if (acLine) { acLine.remove(); acLine = null; }
+    }
+    function updateMap(lat, lon, callsign) {
+      const pos = [lat, lon];
+      if (acMarker) {
+        acMarker.setLatLng(pos);
+        acMarker.getTooltip().setContent(callsign);
+      } else {
+        acMarker = L.circleMarker(pos, {
+          radius: 7, color: '#e8e820', fillColor: '#e8e820', fillOpacity: 1, weight: 2
+        }).addTo(map)
+          .bindTooltip(callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
+      }
+      if (acLine) acLine.setLatLngs([pos, [suburbLat, suburbLon]]);
+      else acLine = L.polyline([pos, [suburbLat, suburbLon]], {
+        color: '#ffaa00', weight: 1, opacity: 0.4, dashArray: '4 6'
+      }).addTo(map);
+      const distSuburbSyd = haversineKm(suburbLat, suburbLon, SYD_LAT, SYD_LON);
+      const boundsPoints = distSuburbSyd < 40
+        ? [pos, [suburbLat, suburbLon], [SYD_LAT, SYD_LON]]
+        : [pos, [suburbLat, suburbLon]];
+      map.fitBounds(L.latLngBounds(boundsPoints).pad(0.3));
+    }
+
     function render(f) {
       const ctr = '[' + (flightIndex+1) + '/' + flights.length + ']';
       const distLoc = haversineKm(suburbLat, suburbLon, f.lat, f.lon);
@@ -167,6 +241,7 @@
       document.getElementById('counter').textContent = ctr;
 
       fetchPhoto(reg, f.hex || '', type);
+      updateMap(f.lat, f.lon, call);
     }
 
     // ── Fetch aircraft photo from Planespotters
@@ -241,6 +316,8 @@
         document.getElementById('suburb-display').textContent = suburbName;
         document.getElementById('error').textContent = '';
         lastPhotoReg = null; // reset so photo re-fetches for new location's aircraft
+        clearAircraftMarker();
+        updateGeofenceCircle();
         try { localStorage.setItem('suburb', JSON.stringify({ name: input, lat, lon })); } catch(e) {}
         await fetchFlights();
       } catch(e) {
@@ -272,6 +349,7 @@
           haversineKm(suburbLat, suburbLon, b.lat, b.lon)
         );
         if (!ac.length) {
+          clearAircraftMarker();
           clearPhoto();
           document.getElementById('info').textContent = 'NO AIRCRAFT ABOVE ' + suburbName + '.';
           document.getElementById('main').textContent = '';
@@ -300,6 +378,7 @@
       if (e.key === 'Enter') setLocation();
     });
 
+    initMap();
     fetchFlights();
   </script>
 </body>
