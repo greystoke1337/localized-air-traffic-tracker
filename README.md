@@ -1,6 +1,6 @@
-# Sydney Localized Air Traffic Tracker
+# Overhead // Live Aircraft Tracker
 
-A real-time tracker that shows **which aircraft are flying directly above any Australian suburb**, built as a single HTML file with no dependencies or backend required.
+A real-time tracker that shows **which aircraft are flying directly above any location in the world**, built as a single HTML file with no dependencies or backend required.
 
 🔗 **Live:** https://greystoke1337.github.io/sydney-localized-air-traffic-tracker
 
@@ -9,7 +9,7 @@ A real-time tracker that shows **which aircraft are flying directly above any Au
 ## Features
 
 ### Location & Filtering
-- **Worldwide location search** — type any city, suburb, or address anywhere in the world; defaults to Russell Lea, Sydney
+- **Worldwide location search** — type any city, suburb, or address anywhere in the world
 - **Adjustable geofence radius** — slider from 2km to 20km; the map circle updates live and the next auto-refresh applies the new radius
 - **Altitude floor** — slider from 200ft to 5,000ft filters out low-flying helicopters or taxiing aircraft
 - **Persisted settings** — location, geofence radius, and altitude floor are saved to `localStorage` and restored on next visit
@@ -24,12 +24,12 @@ A real-time tracker that shows **which aircraft are flying directly above any Au
 ### Flight Information
 - **Airline lookup** — airline name derived from the ICAO callsign prefix (e.g. QFA001 → Qantas)
 - **Full aircraft type names** — ICAO type codes translated to readable names (e.g. B789 → B787-9, A20N → A320neo); covers Boeing, Airbus, Embraer, ATR, CRJ, turboprops, business jets, military, and helicopters
-- **Flight phase detection** — classifies each aircraft as LANDING, TAKING OFF, APPROACH, DESCENDING, CLIMBING, or OVERHEAD based on altitude, vertical speed, and distance from SYD
+- **Flight phase detection** — classifies each aircraft as LANDING, TAKING OFF, APPROACH, DESCENDING, CLIMBING, or OVERHEAD based on altitude and vertical speed
 - **Emergency squawk highlighting** — 7700 (MAYDAY), 7600 (NORDO), and 7500 (HIJACK) are displayed in red with a ⚠ warning
 - **Altitude display** — Flight Level notation above 10,000ft (FL350), QNH feet below
 
 ### Map
-- **Live map** — Leaflet map with dark CartoDB tiles; shows the geofence circle, suburb marker, and a dashed line from the aircraft to your location; SYD is pulled into view when within 40km of the suburb
+- **Live map** — Leaflet map with dark CartoDB tiles; shows the geofence circle, location marker, and a dashed line from the aircraft to your location
 - **Speed-scaled heading vector** — directional arrow from the aircraft dot, scaled by ground speed (100kt = ~1km, 500kt = ~5km) with a chevron arrowhead
 
 ### Visual Design
@@ -39,7 +39,7 @@ A real-time tracker that shows **which aircraft are flying directly above any Au
 - **Aircraft photo** — fetched automatically from [Planespotters.net](https://planespotters.net) by registration, displayed as a hero image with a halftone dot overlay
 
 ### Navigation & UX
-- **Keyboard navigation** — arrow keys to browse flights (disabled while typing in the suburb input)
+- **Keyboard navigation** — arrow keys to browse flights (disabled while typing in the location input)
 - **NEAREST button** — jump back to the closest overhead aircraft instantly
 - **Sound alert** — optional radar ping (🔊 SND button) when a new aircraft becomes #1 overhead; synthesised via Web Audio API, no audio files required
 - **Session log** — collapsible list of every unique flight seen during the current session, with timestamps and phase labels
@@ -52,7 +52,7 @@ A real-time tracker that shows **which aircraft are flying directly above any Au
 1. Geocodes the entered location via Nominatim (OpenStreetMap) — no API key needed; works worldwide
 2. Queries airplanes.live for all aircraft within a radius derived from the geofence size (4× the geofence in nautical miles, to cast a wider net)
 3. Filters precisely to aircraft within the geofence radius and above the altitude floor
-4. Sorts by distance to suburb — closest overhead first
+4. Sorts by distance — closest overhead first
 5. Renders flight data, map (with heading vector), altitude bar, phase colour bleed, and photo
 6. Repeats every 15 seconds; slider changes are picked up on the next auto-refresh without triggering extra API calls
 
@@ -77,7 +77,7 @@ open index.html
 | Source | Data | Key required |
 |---|---|---|
 | [airplanes.live](https://api.airplanes.live) | Live ADS-B positions | No |
-| [Nominatim / OpenStreetMap](https://nominatim.openstreetmap.org) | Suburb geocoding | No |
+| [Nominatim / OpenStreetMap](https://nominatim.openstreetmap.org) | Location geocoding | No |
 | [Planespotters.net](https://planespotters.net) | Aircraft photos | No |
 | [Carto](https://carto.com) / OpenStreetMap | Map tiles | No |
 
