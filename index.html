@@ -1,117 +1,50 @@
 <!DOCTYPE html>
 <!--
-  ╔══════════════════════════════════════════════════════════════════════╗
-  ║            OVERHEAD // LIVE AIRCRAFT TRACKER                        ║
-  ║                                                                      ║
-  ║  A single-file web app that shows real aircraft flying above any    ║
-  ║  Australian suburb in real time. No server, no API keys, no build   ║
-  ║  step — just open index.html in a browser.                          ║
-  ║                                                                      ║
-  ║  HOW IT WORKS (big picture):                                         ║
-  ║  1. User types a suburb name                                         ║
-  ║  2. We ask OpenStreetMap for the lat/lon of that suburb              ║
-  ║  3. We ask airplanes.live for all aircraft near those coordinates    ║
-  ║  4. We filter to only aircraft within the geofence radius            ║
-  ║  5. We display flight data, a map, and a photo                       ║
-  ║  6. We repeat steps 3–5 every 15 seconds automatically              ║
-  ║                                                                      ║
-  ║  EXTERNAL LIBRARIES USED:                                            ║
-  ║  - Leaflet.js  — draws the interactive map                           ║
-  ║  - Google Fonts — Share Tech Mono and Orbitron typefaces             ║
-  ║                                                                      ║
-  ║  EXTERNAL APIs USED (all free, no keys required):                    ║
-  ║  - api.airplanes.live    — live ADS-B aircraft positions             ║
-  ║  - nominatim.openstreetmap.org — suburb name → lat/lon              ║
-  ║  - api.planespotters.net — aircraft photos by registration           ║
-  ║  - basemaps.cartocdn.com — dark map tiles                            ║
-  ╚══════════════════════════════════════════════════════════════════════╝
+  OVERHEAD // LIVE AIRCRAFT TRACKER
+  Single-file app — no server, no build step, no API keys.
+
+  Flow: user types a location → geocode via OSM → query airplanes.live
+        → filter to geofence → display flight data, map, photo → repeat every 15s
+
+  Libraries: Leaflet.js (map), Google Fonts
+  APIs: airplanes.live (ADS-B), Nominatim/OSM (geocoding),
+        Planespotters.net (photos), CartoDB (map tiles)
 -->
 <html>
 <head>
   <meta charset="UTF-8">
-
-  <!--
-    viewport meta tag: tells mobile browsers not to zoom out to fit a
-    desktop-width page. "width=device-width" means "use the screen width",
-    "initial-scale=1" means "start at 100% zoom". Without this, the app
-    would look tiny on a phone.
-  -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <title>Overhead Tracker</title>
-
-  <!-- Google Fonts: two typefaces loaded from the web -->
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-
-  <!-- Leaflet CSS: styles for the interactive map (markers, popups, controls) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-  <!-- Leaflet JS: the map library itself. Must load before our own script. -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
   <style>
-    /*
-    ═══════════════════════════════════════════════════════
-      CSS CUSTOM PROPERTIES ("variables")
-      These let us define colours once and reuse them
-      everywhere. Change a value here and it updates
-      the whole page automatically.
-    ═══════════════════════════════════════════════════════
-    */
-
-    /*
-      box-sizing: border-box means that padding and borders
-      are included in an element's width/height calculation,
-      which makes layout much more predictable.
-      The * selector applies this to every single element.
-    */
+    /* Include padding/border in element size calculations */
     *, *::before, *::after { box-sizing: border-box; }
 
     body.dotmatrix {
-      /* Colour palette — orange-on-black CRT/dot-matrix aesthetic */
-      --c-main: #ffa600;          /* primary orange: text, borders */
-      --c-glow: #ff8000;          /* slightly redder orange: glow effects */
-      --c-dim:  #7a5200;          /* muted orange: subtle borders, placeholders */
-      --c-bg:   #1a0a00;          /* near-black background */
-      --c-overlay: rgba(26,10,0,0.65); /* semi-transparent bg for overlays */
-      --scanline-opacity: 0.18;   /* CRT scanline darkness, controlled by slider */
+      /* Orange-on-black CRT colour palette */
+      --c-main: #ffa600;
+      --c-glow: #ff8000;
+      --c-dim:  #7a5200;
+      --c-bg:   #1a0a00;
+      --c-overlay: rgba(26,10,0,0.65);
+      --scanline-opacity: 0.05;
 
       background: var(--c-bg);
       color: var(--c-main);
-      font-family: 'Share Tech Mono', monospace; /* fixed-width font for data readouts */
-
-      /*
-        clamp(min, preferred, max) is a responsive font-size trick:
-        - never smaller than 0.85rem
-        - ideally 2.5% of the viewport width (scales with screen size)
-        - never larger than 1rem
-      */
-      font-size: clamp(0.85rem, 2.5vw, 1rem);
-
+      font-family: 'Share Tech Mono', monospace;
+      font-size: clamp(0.85rem, 2.5vw, 1rem); /* fluid: scales between min/max */
       padding: 16px;
-      max-width: 520px;   /* cap the layout width on wide screens */
-      margin: 0 auto;     /* centre the layout horizontally */
-      min-height: 100dvh; /* dvh = "dynamic viewport height", handles mobile browser chrome */
+      max-width: 520px;
+      margin: 0 auto;
+      min-height: 100dvh; /* dvh accounts for mobile browser chrome */
     }
 
-    /*
-      Apply a soft orange glow to all text using text-shadow.
-      Two shadows layered: a tight inner glow and a wider outer bloom.
-    */
+    /* Soft orange glow on all text */
     body.dotmatrix * { text-shadow: 0 0 2px var(--c-main), 0 0 8px var(--c-glow); }
 
-    /*
-      ::after creates a pseudo-element (a fake extra element) as a
-      child of body. We use it to draw the CRT scanline overlay.
-
-      repeating-linear-gradient creates alternating transparent/dark
-      horizontal stripes every 4px — 3px transparent, 1px dark.
-      --scanline-opacity controls how dark the lines are.
-
-      position: fixed + inset: 0 stretches it across the entire viewport.
-      pointer-events: none means clicks pass straight through it.
-      z-index: 99 puts it above everything else visually.
-    */
+    /* CRT scanline overlay — fixed pseudo-element, passes clicks through */
     body.dotmatrix::after {
       content: '';
       position: fixed; inset: 0;
@@ -127,438 +60,156 @@
     body.dotmatrix #counter { margin: 0 6px; }
     body.dotmatrix #error { color: var(--c-glow); word-break: break-all; font-size: 0.85rem; }
 
-
-    /*
-    ═══════════════════════════════════════════════════════
-      FLIGHT INFO BLOCK — with phase colour bleed
-      The left border changes colour based on what the
-      aircraft is doing (landing, climbing, etc.)
-    ═══════════════════════════════════════════════════════
-    */
+    /* Flight info block — left border changes colour with flight phase */
     #info-wrap {
-      position: relative;       /* needed so the altitude bar can be absolutely positioned inside */
+      position: relative; /* needed so the altitude bar can sit inside */
       margin: 12px 0 6px;
       padding-left: 10px;
-      border-left: 3px solid var(--c-main); /* default orange left accent bar */
-
-      /*
-        transition: when the class changes (and thus the border-color or
-        box-shadow changes), animate smoothly over 0.5 seconds instead
-        of jumping instantly.
-      */
+      border-left: 3px solid var(--c-main);
       transition: border-color 0.5s, box-shadow 0.5s;
     }
-
-    /*
-      These classes are added/removed by JavaScript depending on flight phase.
-      Each one overrides the border colour and adds a matching coloured glow
-      to the left edge of the info block.
-
-      box-shadow with a negative X offset creates a glow on the left side.
-      e.g. "-4px 0 12px rgba(255,96,96,0.3)" = 4px left, 0 vertical, 12px blur, 30% red
-    */
     #info-wrap.phase-landing    { border-color: #ff6060; box-shadow: -4px 0 12px rgba(255,96,96,0.3); }
     #info-wrap.phase-takeoff    { border-color: #60ff90; box-shadow: -4px 0 12px rgba(96,255,144,0.3); }
     #info-wrap.phase-climbing   { border-color: #60ff90; box-shadow: -4px 0 12px rgba(96,255,144,0.2); }
     #info-wrap.phase-descending { border-color: #ff9040; box-shadow: -4px 0 12px rgba(255,144,64,0.25); }
     #info-wrap.phase-approach   { border-color: #ffcc40; box-shadow: -4px 0 12px rgba(255,204,64,0.25); }
 
-
-    /*
-    ═══════════════════════════════════════════════════════
-      ALTITUDE BAR
-      A thin vertical bar on the right of the info block.
-      It fills from bottom to top proportional to altitude.
-      JS controls the height via style.height on #alt-bar-fill.
-    ═══════════════════════════════════════════════════════
-    */
+    /* Altitude bar — thin vertical strip on the right, fills bottom-to-top */
     #alt-bar-wrap {
-      position: absolute;   /* positioned relative to #info-wrap */
-      right: 0; top: 0; bottom: 0;  /* stick to the right edge, full height */
-      width: 6px;
-      background: rgba(255,166,0,0.1); /* faint track behind the fill */
-      border: 1px solid var(--c-dim);
+      position: absolute; right: 0; top: 0; bottom: 0;
+      width: 6px; background: rgba(255,166,0,0.1); border: 1px solid var(--c-dim);
     }
     #alt-bar-fill {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;  /* grows upward from the bottom */
+      position: absolute; bottom: 0; left: 0; right: 0;
       background: var(--c-main);
-      transition: height 0.6s ease;  /* smooth animation when altitude changes */
+      transition: height 0.6s ease;
       box-shadow: 0 0 6px var(--c-glow);
     }
 
-    /* Primary info text (flight, reg, type, airline, phase) — larger */
-    #info {
-      font-size: clamp(1rem, 4vw, 1.3rem);
-      line-height: 1.7;
-      padding-right: 14px; /* gap so text doesn't overlap the altitude bar */
-    }
-
-    /* Secondary info text (alt, speed, distance, squawk) — smaller, dimmer */
+    #info { font-size: clamp(1rem, 4vw, 1.3rem); line-height: 1.7; padding-right: 14px; }
     #main { line-height: 1.8; margin-bottom: 12px; font-size: clamp(0.72rem, 2vw, 0.78rem); opacity: 0.85; }
 
-
-    /*
-    ═══════════════════════════════════════════════════════
-      BUTTONS
-    ═══════════════════════════════════════════════════════
-    */
-
-    /* flex-wrap: wrap means buttons wrap to a new line if the row is too narrow */
+    /* Buttons — equal-width flex row that wraps on narrow screens */
     #btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-
     body.dotmatrix button {
-      background: none;
-      border: 1px solid var(--c-main);
-      color: var(--c-main);
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 0.82rem;
-      padding: 10px 0;
-      cursor: pointer;
-      text-shadow: 0 0 6px var(--c-glow);
-
-      /*
-        flex: 1 1 60px means each button:
-        - can grow to fill available space (flex-grow: 1)
-        - can shrink if needed (flex-shrink: 1)
-        - starts at 60px wide (flex-basis: 60px)
-        This makes all buttons equal width and responsive.
-      */
-      flex: 1 1 60px;
-      text-align: center;
-      min-height: 44px; /* Apple's recommended minimum touch target size */
-      -webkit-tap-highlight-color: transparent; /* removes grey flash on iOS tap */
+      background: none; border: 1px solid var(--c-main); color: var(--c-main);
+      font-family: 'Share Tech Mono', monospace; font-size: 0.82rem;
+      padding: 10px 0; cursor: pointer; text-shadow: 0 0 6px var(--c-glow);
+      flex: 1 1 60px; text-align: center;
+      min-height: 44px; /* minimum touch target */
+      -webkit-tap-highlight-color: transparent;
     }
-
     body.dotmatrix button:hover, body.dotmatrix button:active {
-      /* color-mix() blends the orange with transparent — a light tint on hover */
       background: color-mix(in srgb, var(--c-main) 13%, transparent);
     }
-
-    /* .active class used for the sound toggle button when sound is ON */
     body.dotmatrix button.active {
       background: color-mix(in srgb, var(--c-main) 20%, transparent);
       border-color: var(--c-glow);
     }
 
-
-    /*
-    ═══════════════════════════════════════════════════════
-      SUBURB INPUT ROW
-    ═══════════════════════════════════════════════════════
-    */
-
-    /* display: flex puts the input and button side by side */
+    /* Location input row */
     #location-ctrl { display: flex; gap: 6px; align-items: stretch; margin: 10px 0 6px; }
-
-    #suburb-input {
-      background: none;
-      border: 1px solid var(--c-main);
-      color: var(--c-main);
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 0.85rem;
-      padding: 10px 8px;
-      flex: 1;          /* input takes up all remaining space after the button */
-      outline: none;    /* removes the default blue focus ring */
+    #location-input {
+      background: none; border: 1px solid var(--c-main); color: var(--c-main);
+      font-family: 'Share Tech Mono', monospace; font-size: 0.85rem;
+      padding: 10px 8px; flex: 1; outline: none;
       text-shadow: 0 0 6px var(--c-glow);
-      min-height: 44px;
-      -webkit-appearance: none; /* prevents iOS from adding its own styling */
+      min-height: 44px; -webkit-appearance: none;
     }
-    #suburb-input::placeholder { color: var(--c-dim); text-shadow: none; }
-
-    /* The SET LOC button in the input row: don't let it stretch like the other buttons */
+    #location-input::placeholder { color: var(--c-dim); text-shadow: none; }
     #location-ctrl button { flex: 0 0 auto; width: auto; padding: 10px 12px; }
 
+    /* Sliders */
+    .slider-ctrl { font-size: 0.75rem; opacity: 0.8; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+    .slider-ctrl input[type=range] { flex: 1; accent-color: var(--c-main); cursor: pointer; height: 20px; }
+    .slider-ctrl span:last-child { min-width: 52px; text-align: right; }
 
-    /*
-    ═══════════════════════════════════════════════════════
-      SLIDERS (geofence, altitude floor, scanlines)
-    ═══════════════════════════════════════════════════════
-    */
-
-    .slider-ctrl {
-      font-size: 0.75rem; opacity: 0.8; margin: 0 0 6px;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .slider-ctrl input[type=range] {
-      flex: 1;               /* slider track fills the middle space */
-      accent-color: var(--c-main); /* colours the slider thumb and track orange */
-      cursor: pointer;
-      height: 20px;          /* bigger touch area on mobile */
-    }
-    .slider-ctrl span:last-child {
-      min-width: 52px;       /* fixed width so the label doesn't cause layout shifts */
-      text-align: right;
-    }
-
-
-    /*
-    ═══════════════════════════════════════════════════════
-      AIRCRAFT PHOTO
-      The photo is displayed as a "hero" image — wide,
-      fixed height, cropped to fill the space.
-      A dot-pattern overlay gives it a halftone print look.
-    ═══════════════════════════════════════════════════════
-    */
-
-    .photo-wrap {
-      position: relative;   /* so the ::after overlay can be positioned inside */
-      display: block;
-      margin-top: 10px;
-      z-index: 0;
-      border: 1px solid var(--c-dim);
-      overflow: hidden;     /* clip anything that sticks out */
-    }
-
-    /*
-      This ::after pseudo-element draws the halftone dot pattern over the photo.
-      radial-gradient creates a tiny circle at each 3x3px tile.
-    */
+    /* Aircraft photo — hero-style, halftone dot overlay for texture */
+    .photo-wrap { position: relative; display: block; margin-top: 10px; z-index: 0; border: 1px solid var(--c-dim); overflow: hidden; }
     .photo-wrap::after {
-      content: '';
-      position: absolute; inset: 0;
-      pointer-events: none; z-index: 1;
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
       background-image: radial-gradient(circle, rgba(0,0,0,0.25) 1px, transparent 1px);
       background-size: 3px 3px;
     }
-
-    #dm-photo {
-      display: block;
-      width: 100%;
-      height: clamp(140px, 35vw, 200px); /* responsive height */
-      object-fit: cover;          /* crop the image to fill, rather than squash it */
-      object-position: center 30%; /* favour the top 30% of the image (usually where the plane is) */
-      opacity: 0.9;
-    }
-
+    #dm-photo { display: block; width: 100%; height: clamp(140px, 35vw, 200px); object-fit: cover; object-position: center 30%; opacity: 0.9; }
     #dm-photo-credit { font-size: 0.6rem; opacity: 0.5; margin-top: 2px; }
 
-
-    /*
-    ═══════════════════════════════════════════════════════
-      BLINKING CURSOR
-    ═══════════════════════════════════════════════════════
-    */
-
-    /* step-end means it switches instantly (on/off) rather than fading */
     .blink { animation: blink 1s step-end infinite; }
     @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
-
-    /*
-    ═══════════════════════════════════════════════════════
-      LEAFLET MAP
-    ═══════════════════════════════════════════════════════
-    */
-
-    #dm-map {
-      width: 100%;
-      height: clamp(180px, 40vw, 240px); /* responsive height */
-      margin-top: 12px;
-      border: 1px solid var(--c-dim);
-    }
-
-    /* Cancel the global text-shadow inside the map — it looks bad on map labels */
+    /* Map */
+    #dm-map { width: 100%; height: clamp(180px, 40vw, 240px); margin-top: 12px; border: 1px solid var(--c-dim); }
     #dm-map * { text-shadow: none; }
-
-    /*
-      Custom style for Leaflet tooltip labels (the callsign tags on the map).
-      Leaflet calls them "tooltips" but they look like callout boxes.
-    */
     .dm-callout {
-      background: var(--c-bg);
-      border: 1px solid var(--c-main);
-      color: var(--c-main);
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-      padding: 2px 5px;
-      border-radius: 0;    /* sharp corners to match the aesthetic */
-      white-space: nowrap; /* don't let the label wrap to multiple lines */
+      background: var(--c-bg); border: 1px solid var(--c-main); color: var(--c-main);
+      font-family: 'Share Tech Mono', monospace; font-size: 11px; padding: 2px 5px;
+      border-radius: 0; white-space: nowrap;
     }
-    .dm-callout::before { display: none; } /* hide Leaflet's default tooltip arrow */
-
-    /* Make the Leaflet attribution ("© OpenStreetMap © Carto") subtle */
-    .leaflet-control-attribution {
-      font-size: 9px; opacity: 0.35;
-      background: transparent !important;
-      color: #aaa !important;
-    }
+    .dm-callout::before { display: none; }
+    .leaflet-control-attribution { font-size: 9px; opacity: 0.35; background: transparent !important; color: #aaa !important; }
     .leaflet-control-attribution a { color: #aaa !important; }
 
-    /* Leftover style from when we used an emoji marker — kept in case we re-enable it */
-    .ac-emoji-marker {
-      font-size: 20px; line-height: 1; display: block; text-align: center;
-      filter: drop-shadow(0 0 4px #e8e820);
-      transform-origin: center center;
-    }
+    /* Footer: counter left, timer right */
+    #footer-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 0.75rem; opacity: 0.7; }
 
-
-    /*
-    ═══════════════════════════════════════════════════════
-      FOOTER ROW (flight counter + refresh countdown)
-    ═══════════════════════════════════════════════════════
-    */
-
-    #footer-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between; /* pushes counter left, timer right */
-      margin-top: 8px;
-      font-size: 0.75rem;
-      opacity: 0.7;
-    }
-
-
-    /*
-    ═══════════════════════════════════════════════════════
-      SESSION LOG
-      A collapsible list of every flight seen this session.
-      Uses the HTML <details>/<summary> elements which
-      handle open/close natively with no JavaScript needed.
-    ═══════════════════════════════════════════════════════
-    */
-
+    /* Session log — native <details> collapsible */
     #log-section { margin-top: 10px; }
-
-    #log-section summary {
-      cursor: pointer;
-      font-size: 0.78rem;
-      opacity: 0.7;
-      padding: 4px 0;
-      list-style: none;         /* hide the default disclosure triangle */
-      user-select: none;        /* prevent text selection on tap */
-      -webkit-user-select: none;
-    }
-    #log-section summary::-webkit-details-marker { display: none; } /* Safari */
-
-    #log-list {
-      margin-top: 6px;
-      max-height: 180px;
-      overflow-y: auto;         /* scroll if there are many entries */
-      border: 1px solid var(--c-dim);
-      padding: 6px 8px;
-      font-size: 0.68rem;
-      line-height: 1.9;
-      opacity: 0.8;
-    }
-
-    /* Custom scrollbar — thin and orange to match the theme */
+    #log-section summary { cursor: pointer; font-size: 0.78rem; opacity: 0.7; padding: 4px 0; list-style: none; user-select: none; -webkit-user-select: none; }
+    #log-section summary::-webkit-details-marker { display: none; }
+    #log-list { margin-top: 6px; max-height: 180px; overflow-y: auto; border: 1px solid var(--c-dim); padding: 6px 8px; font-size: 0.68rem; line-height: 1.9; opacity: 0.8; }
     #log-list::-webkit-scrollbar { width: 4px; }
     #log-list::-webkit-scrollbar-thumb { background: var(--c-dim); }
-
     .log-entry { border-bottom: 1px solid rgba(255,166,0,0.1); padding: 1px 0; }
     .log-entry:last-child { border-bottom: none; }
-
   </style>
 </head>
 <body class="dotmatrix">
-
-  <!--
-  ═══════════════════════════════════════════════════════════
-    HTML STRUCTURE
-    Everything lives inside .classic-layout.
-    Sections in order:
-      1. Title
-      2. Suburb input + sliders
-      3. Error display
-      4. Flight info block (with altitude bar)
-      5. Map
-      6. Aircraft photo
-      7. Navigation buttons
-      8. Footer (counter + timer)
-      9. Session log
-  ═══════════════════════════════════════════════════════════
-  -->
   <div class="classic-layout">
 
-    <!-- Title bar. suburb-display is updated by JS when location changes. -->
-    <p>OVERHEAD // <span id="suburb-display">RUSSELL LEA</span><br>LIVE AIRCRAFT TRACKER ✈ <span class="blink">█</span></p>
+    <!-- Title: location-display updated by JS on each location change -->
+    <p>OVERHEAD // <span id="location-display">RUSSELL LEA</span><br>LIVE AIRCRAFT TRACKER ✈ <span class="blink">█</span></p>
     <hr>
 
-    <!-- Suburb input: type a suburb name and press SET LOC or hit Enter -->
+    <!-- Location input: any city, suburb, or address worldwide -->
     <div id="location-ctrl">
-      <input id="suburb-input" value="Russell Lea" placeholder="Enter suburb...">
+      <input id="location-input" value="Russell Lea" placeholder="City, suburb, address...">
       <button onclick="setLocation()">SET LOC</button>
     </div>
 
-    <!--
-      GEOFENCE SLIDER
-      Controls the radius (in km) around the suburb centre to search.
-      Range: 2km to 20km. Default: 5km.
-      The label updates instantly as you drag.
-      API is NOT re-called on drag — the next 15s auto-refresh picks it up.
-    -->
+    <!-- GEOFENCE: search radius. Label updates live; API refreshes on next 15s cycle. -->
     <div class="slider-ctrl">
       <span>GEOFENCE</span>
       <input type="range" id="geofence-slider" min="2" max="20" value="5" step="1">
       <span id="geofence-label">5 KM</span>
     </div>
 
-    <!--
-      ALTITUDE FLOOR SLIDER
-      Filters out aircraft below this altitude. Useful to hide
-      low-flying helicopters or aircraft that are taxiing.
-      Range: 200ft to 5000ft. Default: 500ft.
-    -->
+    <!-- ALT FLOOR: hide aircraft below this altitude -->
     <div class="slider-ctrl">
       <span>ALT FLOOR</span>
       <input type="range" id="altfloor-slider" min="200" max="5000" value="500" step="100">
       <span id="altfloor-label">500 FT</span>
     </div>
 
-    <!--
-      SCANLINE SLIDER
-      Controls the opacity of the CRT scanline overlay (the horizontal
-      dark lines drawn by body::after). 0% = invisible, 60% = very heavy.
-      Updates instantly — no API call needed.
-    -->
-    <div class="slider-ctrl">
-      <span>SCANLINES</span>
-      <input type="range" id="scanline-slider" min="0" max="60" value="18" step="1">
-      <span id="scanline-label">18%</span>
-    </div>
-
-    <!-- Error messages appear here (geocoding failures, API errors, etc.) -->
     <p id="error"></p>
 
-    <!--
-      FLIGHT INFO BLOCK
-      #info-wrap: the container — has the coloured left border and altitude bar
-      #alt-bar-fill: the filling portion of the altitude bar (height set by JS)
-      #info: the primary data (flight number, reg, type, airline, phase)
-      #main: the secondary data (altitude, speed, distances, squawk)
-    -->
+    <!-- Flight info: left border + altitude bar + primary/secondary data -->
     <div id="info-wrap">
-      <div id="alt-bar-wrap">
-        <div id="alt-bar-fill" style="height:0%"></div>
-      </div>
+      <div id="alt-bar-wrap"><div id="alt-bar-fill" style="height:0%"></div></div>
       <div id="info">LOADING...</div>
     </div>
     <p id="main"></p>
 
-    <!-- The Leaflet map renders into this div. ID must match initMap(). -->
     <div id="dm-map"></div>
 
-    <!--
-      Aircraft photo from Planespotters.net.
-      Hidden by default (display:none). JS shows it when a photo is found.
-    -->
+    <!-- Aircraft photo — hidden until a photo is found -->
     <div class="photo-wrap" id="photo-wrap" style="display:none">
       <img id="dm-photo" alt="Aircraft photo">
     </div>
-    <!-- Photographer credit shown below the photo -->
     <p id="dm-photo-credit"></p>
 
     <hr>
 
-    <!--
-      NAVIGATION BUTTONS
-      ◀ PREV / NEXT ▶ — browse through all aircraft in the geofence
-      NEAREST — jump back to flight[0] (closest to suburb)
-      REFRESH — trigger an immediate API fetch
-      🔇 SND — toggle the radar ping sound on/off
-      ↗ SHARE — copy a shareable URL to clipboard
-    -->
+    <!-- PREV/NEXT: browse flights | NEAREST: jump to closest | SND: ping toggle | SHARE: copy URL -->
     <div id="btn-row">
       <button onclick="prev()">&#9664; PREV</button>
       <button onclick="next()">NEXT &#9654;</button>
@@ -568,214 +219,98 @@
       <button onclick="shareUrl()">&#x2197; SHARE</button>
     </div>
 
-    <!-- Counter shows e.g. "[2/7]", timer shows "REFRESH IN 12S" -->
     <div id="footer-row">
       <span id="counter"></span>
       <span id="refresh-timer"></span>
     </div>
 
-    <!--
-      SESSION LOG
-      <details> is a native HTML collapsible element.
-      Click the <summary> to expand/collapse — no JS required.
-      The flight list inside is populated by JS as flights are seen.
-    -->
+    <!-- Session log: collapsible, populated by JS, newest entries first -->
     <details id="log-section">
       <summary>▶ SESSION LOG (<span id="log-count">0</span> FLIGHTS)</summary>
-      <div id="log-list">
-        <span style="opacity:0.4">No flights recorded yet.</span>
-      </div>
+      <div id="log-list"><span style="opacity:0.4">No flights recorded yet.</span></div>
     </details>
 
-  </div><!-- end .classic-layout -->
-
+  </div>
 
   <script>
-    /*
-    ════════════════════════════════════════════════════════════════════
-      CONSTANTS & STATE VARIABLES
-      These live at the top level so every function can access them.
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Constants & state ────────────────────────────────────────────
 
-    /* Sydney Airport coordinates — used as the ILS reference point */
-    const SYD_LAT = -33.9461, SYD_LON = 151.1772;
+    let geofenceKm = 5;   // search radius, set by slider
+    let altFloorFt = 500; // minimum altitude filter, set by slider
 
-    /*
-      geofenceKm: radius of the search area around the suburb.
-      Set by the slider; default 5km.
-    */
-    let geofenceKm = 5;
-
-    /*
-      altFloorFt: minimum altitude to include aircraft.
-      Set by the slider; default 500ft.
-    */
-    let altFloorFt = 500;
-
-    /*
-      apiRadiusNm(): converts our km geofence into nautical miles
-      for the airplanes.live API query, with a 4x multiplier to cast
-      a wider net (we then filter precisely with haversineKm).
-      1 nautical mile = 1.852 km.
-    */
+    // Converts geofence km → nautical miles for the API, with 4× buffer.
+    // We then filter precisely with haversineKm on the results.
     function apiRadiusNm() { return Math.ceil((geofenceKm / 1.852) * 4); }
 
-    /* Current suburb: name and coordinates. Defaults to Russell Lea. */
-    let suburbName = 'RUSSELL LEA';
-    let suburbLat = -33.8598, suburbLon = 151.1369;
+    let locationName = 'RUSSELL LEA';
+    let locationLat  = -33.8598, locationLon = 151.1369;
 
-    /* flights: the array of aircraft returned by the API and filtered */
-    let flights = [];
-
-    /* flightIndex: which aircraft in the flights array we're currently displaying */
-    let flightIndex = 0;
-
-    /*
-      fetchController: an AbortController used to cancel in-flight HTTP
-      requests. If a new fetch starts before the last one finishes, we
-      abort the old one to prevent stale data arriving late and overwriting
-      fresh results.
-    */
-    let fetchController = null;
+    let flights = [], flightIndex = 0;
+    let fetchController = null; // AbortController — cancels stale requests
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      THEME SYSTEM
-      Colours are defined here as a JavaScript object so they can be
-      applied both to CSS custom properties (for UI elements) and to
-      Leaflet map layers (which need JS colour values directly).
-
-      Currently only one theme (orange) exists, but the structure
-      makes it easy to add more later.
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Theme ────────────────────────────────────────────────────────
+    // Colours live here so they can be applied to both CSS vars and Leaflet layers.
 
     const THEMES = {
-      orange: {
-        main:     '#ffa600', /* primary colour */
-        glow:     '#ff8000', /* glow/highlight colour */
-        dim:      '#7a5200', /* muted/subtle colour */
-        bg:       '#1a0a00', /* background */
-        overlay:  'rgba(26,10,0,0.65)',
-        acMarker: '#e8e820', /* aircraft dot on map — yellow for contrast */
-      },
+      orange: { main: '#ffa600', glow: '#ff8000', dim: '#7a5200', bg: '#1a0a00', overlay: 'rgba(26,10,0,0.65)', acMarker: '#e8e820' },
     };
     let currentTheme = 'orange';
 
-    /*
-      applyTheme(): updates CSS custom properties on the <body> element
-      and refreshes Leaflet map layer colours to match the chosen theme.
-      setProperty() is the JS way to change a CSS variable.
-    */
     function applyTheme(name) {
       const t = THEMES[name];
       const b = document.body;
-      b.style.setProperty('--c-main',    t.main);
-      b.style.setProperty('--c-glow',    t.glow);
-      b.style.setProperty('--c-dim',     t.dim);
-      b.style.setProperty('--c-bg',      t.bg);
+      b.style.setProperty('--c-main', t.main);
+      b.style.setProperty('--c-glow', t.glow);
+      b.style.setProperty('--c-dim',  t.dim);
+      b.style.setProperty('--c-bg',   t.bg);
       b.style.setProperty('--c-overlay', t.overlay);
-      /* Update map layer colours if they already exist */
       if (geofenceCircle) geofenceCircle.setStyle({ color: t.main, fillColor: t.main });
       if (acLine)         acLine.setStyle({ color: t.main });
       currentTheme = name;
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      STARTUP: URL PARAM AND LOCALSTORAGE RESTORE
-
-      These run immediately when the page loads (before initMap or
-      fetchFlights). They use IIFEs — Immediately Invoked Function
-      Expressions — written as (function() { ... })()
-      This pattern is used to create a private scope so variables
-      inside don't accidentally affect the rest of the code.
-    ════════════════════════════════════════════════════════════════════
-    */
-
-    /*
-      URL param: if the URL contains ?suburb=Newtown, pre-fill the input.
-      This is used by the SHARE button so shared links open the right suburb.
-      URLSearchParams parses the query string from the URL.
-    */
+    // ── Startup: URL param + localStorage restore ────────────────────
+    // If ?location= is in the URL (from SHARE), pre-fill the input.
     (function () {
       try {
-        const s = new URLSearchParams(window.location.search).get('suburb');
-        if (s) document.getElementById('suburb-input').value = s;
+        const s = new URLSearchParams(window.location.search).get('location');
+        if (s) document.getElementById('location-input').value = s;
       } catch(e) {}
     })();
 
-    /*
-      localStorage restore: remember the last suburb the user visited
-      and restore it next time they open the app.
-
-      localStorage is a key-value store built into every browser.
-      It persists across page reloads and browser restarts.
-      We store the suburb as a JSON string: '{"name":"Newtown","lat":-33.8,"lon":151.1}'
-
-      URL param takes precedence over localStorage — if both exist,
-      the URL param wins (handled by checking params.get('suburb') first).
-    */
+    // Restore last location from localStorage (URL param takes precedence).
     (function () {
       try {
         const params = new URLSearchParams(window.location.search);
-        if (!params.get('suburb')) {
-          const saved = localStorage.getItem('suburb');
+        if (!params.get('location')) {
+          const saved = localStorage.getItem('location');
           if (saved) {
             const { name, lat, lon } = JSON.parse(saved);
-            suburbName = name.toUpperCase();
-            suburbLat = lat;
-            suburbLon = lon;
-            document.getElementById('suburb-input').value = name;
-            document.getElementById('suburb-display').textContent = suburbName;
+            locationName = name.toUpperCase();
+            locationLat  = lat;
+            locationLon  = lon;
+            document.getElementById('location-input').value = name;
+            document.getElementById('location-display').textContent = locationName;
           }
         }
-      } catch (e) {}
+      } catch(e) {}
     })();
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      HAVERSINE DISTANCE FORMULA
-      Calculates the great-circle distance between two lat/lon points
-      on Earth's surface, in kilometres.
-
-      Why not just use Pythagoras? Because the Earth is curved — at
-      Sydney's latitude, 1 degree of longitude is only ~88km, not 111km.
-      Haversine accounts for this correctly.
-
-      Used to:
-      1. Filter aircraft to those within geofenceKm of the suburb
-      2. Sort aircraft by distance (closest first)
-      3. Calculate distances shown in the UI (DIST LOC, DIST SYD)
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Haversine distance ───────────────────────────────────────────
+    // Great-circle distance between two lat/lon points, in km.
     function haversineKm(lat1, lon1, lat2, lon2) {
-      const R = 6371; /* Earth's radius in km */
-      const dLat = (lat2 - lat1) * Math.PI / 180; /* convert degrees to radians */
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2
-              + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180)
-              * Math.sin(dLon/2)**2;
+      const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      LOOKUP TABLES
-      These are plain objects used as dictionaries to translate codes
-      into human-readable labels.
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Lookup tables ────────────────────────────────────────────────
 
-    /*
-      AIRLINE_DB: maps the first 3 letters of an ICAO callsign to an
-      airline name. e.g. "QFA001" → prefix "QFA" → "QANTAS"
-    */
+    // ICAO callsign prefix → airline name (e.g. "QFA001" → "QANTAS")
     const AIRLINE_DB = {
       QFA:'QANTAS',         VOZ:'VIRGIN AUSTRALIA', JST:'JETSTAR',
       RXA:'REX',            NWL:'NETWORK AVIATION',
@@ -791,85 +326,54 @@
       BAW:'BRITISH AIRWAYS',AFR:'AIR FRANCE',        DLH:'LUFTHANSA',
       HAL:'HAWAIIAN AIRLINES',
     };
-
-    /*
-      airlineFromCallsign(): extract the letter prefix from a callsign
-      and look it up in AIRLINE_DB.
-      The regex /^[A-Z]+/ matches one or more capital letters at the start.
-      ?. is "optional chaining" — returns undefined instead of crashing if
-      there's no match.
-    */
     function airlineFromCallsign(cs) {
       if (!cs || cs === '---') return '---';
       const prefix = cs.match(/^[A-Z]+/)?.[0] || '';
       return AIRLINE_DB[prefix] || prefix || '---';
     }
 
-    /*
-      CATEGORY_DB: ADS-B emitter category codes → plain English labels.
-      These come from the "category" field in the airplanes.live API response.
-    */
+    // ADS-B emitter category codes → plain English
     const CATEGORY_DB = {
       A1:'LIGHT', A2:'SMALL', A3:'LARGE', A4:'B757 CLASS', A5:'HEAVY',
       A6:'HIGH PERF', A7:'ROTORCRAFT', B1:'GLIDER', B2:'AIRSHIP',
       B4:'SKYDIVER', B6:'UAV', B7:'SPACECRAFT', C1:'GROUND VEH',
     };
 
-    /*
-      AIRCRAFT_TYPE_DB: ICAO type codes → full model names.
-      e.g. "B738" → "B737-800", "A20N" → "A320neo"
-      The API gives us 4-character ICAO codes; this makes them readable.
-    */
+    // ICAO type codes → full model names (e.g. "B789" → "B787-9")
     const AIRCRAFT_TYPE_DB = {
-      /* Boeing narrowbody */
       B737:'B737-700', B738:'B737-800', B739:'B737-900', B73X:'B737-900ER',
       B37M:'B737 MAX 7', B38M:'B737 MAX 8', B39M:'B737 MAX 9', B3XM:'B737 MAX 10',
       B752:'B757-200', B753:'B757-300',
-      /* Boeing widebody */
       B762:'B767-200', B763:'B767-300', B764:'B767-400',
       B772:'B777-200', B77L:'B777-200LR', B773:'B777-300', B77W:'B777-300ER',
-      B778:'B777X-8', B779:'B777X-9',
-      B788:'B787-8', B789:'B787-9', B78X:'B787-10',
-      /* Boeing classic */
+      B778:'B777X-8',  B779:'B777X-9',
+      B788:'B787-8',   B789:'B787-9',   B78X:'B787-10',
       B712:'B717-200', B721:'B727-100', B722:'B727-200',
       B741:'B747-100', B742:'B747-200', B743:'B747-300', B744:'B747-400', B748:'B747-8',
-      /* Airbus narrowbody */
       A318:'A318', A319:'A319', A320:'A320', A321:'A321',
       A19N:'A319neo', A20N:'A320neo', A21N:'A321neo', A21X:'A321XLR',
-      /* Airbus widebody */
       A332:'A330-200', A333:'A330-300', A338:'A330-800neo', A339:'A330-900neo',
       A342:'A340-200', A343:'A340-300', A345:'A340-500', A346:'A340-600',
       A359:'A350-900', A35K:'A350-1000',
       A380:'A380', A388:'A380-800',
-      /* Embraer E-jets */
       E170:'E170', E175:'E175', E190:'E190', E195:'E195',
       E75L:'E175-E2', E290:'E190-E2', E295:'E195-E2',
-      /* Bombardier / CRJ */
       CRJ2:'CRJ-200', CRJ7:'CRJ-700', CRJ9:'CRJ-900', CRJX:'CRJ-1000',
       DH8A:'DASH 8-100', DH8B:'DASH 8-200', DH8C:'DASH 8-300', DH8D:'DASH 8-400',
-      /* ATR turboprop */
       AT43:'ATR 42-300', AT45:'ATR 42-500', AT72:'ATR 72-200', AT75:'ATR 72-500', AT76:'ATR 72-600',
-      /* Airbus A220 (ex Bombardier CSeries) */
       BCS1:'A220-100', BCS3:'A220-300',
-      /* Regional & turboprop */
       SF34:'SAAB 340', SB20:'SAAB 2000', JS41:'JETSTREAM 41',
       PC12:'PILATUS PC-12', C208:'CESSNA CARAVAN',
-      /* Business jets */
       GL5T:'GULFSTREAM G550', GLEX:'GLOBAL EXPRESS', GLF6:'GULFSTREAM G650',
       C25A:'CITATION CJ2', C25B:'CITATION CJ3', C68A:'CITATION SOVEREIGN',
       FA7X:'FALCON 7X', FA8X:'FALCON 8X',
-      /* Military */
       C130:'C-130 HERCULES', C17:'C-17 GLOBEMASTER', P8:'P-8 POSEIDON',
-      /* Helicopters */
       EC35:'H135', EC45:'H145', S76:'SIKORSKY S-76', AS32:'SUPER PUMA',
       B06:'BELL 206', B407:'BELL 407',
     };
 
-    /*
-      formatType(): combines the ICAO type code and emitter category
-      into a single readable string. Falls back gracefully if either is missing.
-      e.g. type="B789", category="A5" → "B787-9 (HEAVY)"
-    */
+    // Combines type code + emitter category into one readable string.
+    // e.g. type="B789", category="A5" → "B787-9 (HEAVY)"
     function formatType(t, category) {
       const typeCode = (t || '').toUpperCase();
       const cat      = (category || '').toUpperCase();
@@ -884,25 +388,10 @@
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      FORMATTING HELPERS
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Formatting helpers ───────────────────────────────────────────
 
-    /*
-      EMERG_SQUAWKS: transponder codes with special meaning.
-      7700 = general emergency (MAYDAY)
-      7600 = radio failure (NORDO = No Radio)
-      7500 = hijack
-    */
+    // Emergency squawk codes — displayed in red with ⚠
     const EMERG_SQUAWKS = { '7700':'MAYDAY', '7600':'NORDO', '7500':'HIJACK' };
-
-    /*
-      formatSquawk(): if the squawk is an emergency code, wrap it in a
-      red <span> with a warning symbol. Otherwise return as plain text.
-      \u26a0 is the Unicode ⚠ warning symbol.
-    */
     function formatSquawk(sqk) {
       if (!sqk || sqk === '---') return '---';
       const emerg = EMERG_SQUAWKS[sqk];
@@ -910,12 +399,7 @@
       return sqk;
     }
 
-    /*
-      formatAlt(): converts altitude in feet to a display string.
-      Above 10,000ft: use Flight Level notation (FL350 = 35,000ft).
-      Below 10,000ft: show as feet with QNH label (local pressure altitude).
-      padStart(3, '0') ensures FL levels are always 3 digits: FL035 not FL35.
-    */
+    // Above 10,000ft → Flight Level notation; below → feet QNH
     function formatAlt(alt) {
       if (typeof alt !== 'number') return '---';
       if (alt >= 10000) return 'FL' + String(Math.round(alt / 100)).padStart(3, '0');
@@ -923,300 +407,137 @@
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      FLIGHT PHASE DETECTION
-      Determines what stage of flight the aircraft is in based on:
-      - alt_baro: barometric altitude in feet
-      - baro_rate: vertical speed in feet per minute (+ve = climbing)
-      - distance from Sydney Airport (SYD)
-
-      Returns an object with:
-      - label: text shown in the UI
-      - color: hex colour (null = use default orange)
-      - cls:   CSS class to apply to #info-wrap for the colour bleed effect
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Flight phase detection ───────────────────────────────────────
+    // Classifies aircraft by altitude + vertical speed.
+    // Returns { label, color, cls } for the UI and colour bleed effect.
     function flightPhase(f) {
-      const alt     = typeof f.alt_baro  === 'number' ? f.alt_baro  : null;
-      const vspd    = typeof f.baro_rate === 'number' ? f.baro_rate : 0;
-      const distSyd = haversineKm(SYD_LAT, SYD_LON, f.lat, f.lon);
-
+      const alt  = typeof f.alt_baro  === 'number' ? f.alt_baro  : null;
+      const vspd = typeof f.baro_rate === 'number' ? f.baro_rate : 0;
       if (alt === null) return { label: '---', color: null, cls: '' };
-
-      /*
-        Within 15km of SYD and below 3000ft: the aircraft is in the
-        terminal area — it's either landing, taking off, or on approach.
-      */
-      if (distSyd < 15 && alt < 3000) {
-        if (vspd < -50)  return { label: '▼ LANDING',    color: '#ff6060', cls: 'phase-landing' };
+      if (alt < 3000) {
+        if (vspd < -200) return { label: '▼ LANDING',    color: '#ff6060', cls: 'phase-landing' };
         if (vspd >  200) return { label: '▲ TAKING OFF', color: '#60ff90', cls: 'phase-takeoff' };
-        return { label: '~ APPROACH', color: '#ffcc40', cls: 'phase-approach' };
+        if (vspd < -50)  return { label: '~ APPROACH',   color: '#ffcc40', cls: 'phase-approach' };
       }
-
-      /* Anywhere else: classify by vertical speed */
       if (vspd < -100) return { label: '▼ DESCENDING', color: '#ff9040', cls: 'phase-descending' };
       if (vspd >  100) return { label: '▲ CLIMBING',   color: '#60ff90', cls: 'phase-climbing' };
-
-      /* Stable cruise: no meaningful vertical movement */
       return { label: '── OVERHEAD', color: null, cls: '' };
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      SOUND — Web Audio API
-      We synthesise a radar ping using the browser's built-in audio
-      engine. No audio files required.
-
-      The Web Audio API works like a signal chain:
-        Oscillator → Gain Node → Destination (speakers)
-
-      We start the audio context only after the user clicks (browsers
-      require a user interaction before audio can play, to prevent
-      websites from blasting sounds on load).
-    ════════════════════════════════════════════════════════════════════
-    */
-
-    let audioCtx = null; /* AudioContext — created lazily on first toggle */
+    // ── Sound ────────────────────────────────────────────────────────
+    // Synthesised radar ping via Web Audio API — no audio files needed.
+    // AudioContext created on first user interaction (browser autoplay policy).
+    let audioCtx = null;
     let soundOn  = false;
 
     function toggleSound() {
-      soundOn = !soundOn; /* flip between true and false */
+      soundOn = !soundOn;
       const btn = document.getElementById('sound-btn');
       btn.textContent = soundOn ? '🔊 SND' : '🔇 SND';
-      btn.classList.toggle('active', soundOn); /* add/remove the .active class */
-
-      /* Create the AudioContext the first time sound is turned on */
-      if (soundOn && !audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        /* webkitAudioContext is the older Safari name — || handles both */
-      }
+      btn.classList.toggle('active', soundOn);
+      if (soundOn && !audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
 
     function playPing() {
       if (!soundOn || !audioCtx) return;
-
-      /* Create an oscillator: generates a pure tone at a given frequency */
       const osc  = audioCtx.createOscillator();
-
-      /* Create a gain node: controls the volume */
       const gain = audioCtx.createGain();
-
-      /* Connect the signal chain: oscillator → gain → speakers */
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      osc.type = 'sine'; /* sine wave = smooth, pure tone */
-
-      /* Frequency envelope: start at 880Hz (A5), slide down to 440Hz (A4) */
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.type = 'sine';
       osc.frequency.setValueAtTime(880, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
-
-      /* Volume envelope: start at 0.3 (30%), fade to near-silence over 0.5s */
       gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-      /* Note: we can't ramp to exactly 0 — exponential ramp requires non-zero */
-
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.5); /* stop after 0.5 seconds */
+      osc.start(); osc.stop(audioCtx.currentTime + 0.5);
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      SHARE URL
-      Builds a URL with ?suburb= set to the current suburb, then
-      copies it to the clipboard. Anyone opening that link will have
-      the suburb pre-filled and geocoded automatically on load.
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Share URL ────────────────────────────────────────────────────
+    // Copies a ?location= link to clipboard; opening it auto-geocodes on load.
     function shareUrl() {
-      /* Build the share URL from the current page URL */
       const url = new URL(window.location.href);
-      url.searchParams.set('suburb', document.getElementById('suburb-input').value.trim() || suburbName);
+      url.searchParams.set('location', document.getElementById('location-input').value.trim() || locationName);
       const str = url.toString();
-
       const btn = document.querySelector('button[onclick="shareUrl()"]');
-
-      /* navigator.clipboard is available on HTTPS and localhost */
       if (navigator.clipboard) {
         navigator.clipboard.writeText(str).then(() => {
-          /* Give the user visual feedback: briefly change the button label */
           const orig = btn.textContent;
           btn.textContent = '✓ COPIED';
           setTimeout(() => btn.textContent = orig, 2000);
         });
       } else {
-        /* Fallback for HTTP or older browsers: show a prompt box */
         prompt('Copy this link:', str);
       }
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      SESSION LOG
-      Keeps a record of every unique aircraft seen during this browser
-      session. Uses a Map (hex → entry) to avoid logging duplicates.
-
-      A Map is like an object but allows any value as a key and
-      preserves insertion order. We key by the aircraft's hex code
-      (a unique 6-digit identifier assigned by country of registration).
-    ════════════════════════════════════════════════════════════════════
-    */
-
-    const sessionLog = new Map(); /* hex code → { call, type, timeStr, phase } */
+    // ── Session log ──────────────────────────────────────────────────
+    // Records every unique aircraft (by hex) seen this session. Newest first.
+    const sessionLog = new Map(); // hex → { call, type, timeStr, phase }
 
     function logFlight(f, phase) {
       const hex = f.hex || f.r || '';
-      if (!hex || sessionLog.has(hex)) return; /* skip if no hex or already logged */
-
+      if (!hex || sessionLog.has(hex)) return;
       const call    = (f.flight || '---').trim().toUpperCase();
       const type    = formatType(f.t, f.category);
       const now     = new Date();
-
-      /* Format the time as HH:MM — padStart ensures e.g. "09" not "9" */
-      const timeStr = now.getHours().toString().padStart(2, '0') + ':' +
-                      now.getMinutes().toString().padStart(2, '0');
-
+      const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
       sessionLog.set(hex, { call, type, timeStr, phase: phase.label });
-      renderLog(); /* update the DOM whenever a new entry is added */
+      renderLog();
     }
 
     function renderLog() {
-      const list  = document.getElementById('log-list');
-      const count = document.getElementById('log-count');
-
-      /* .values() returns the entries in insertion order. .reverse() shows newest first. */
+      const list    = document.getElementById('log-list');
+      const count   = document.getElementById('log-count');
       const entries = Array.from(sessionLog.values()).reverse();
       count.textContent = entries.length;
-
-      if (!entries.length) {
-        list.innerHTML = '<span style="opacity:0.4">No flights recorded yet.</span>';
-        return;
-      }
-
-      /*
-        .map() transforms each entry into an HTML string.
-        .join('') concatenates them with no separator.
-      */
+      if (!entries.length) { list.innerHTML = '<span style="opacity:0.4">No flights recorded yet.</span>'; return; }
       list.innerHTML = entries.map(e =>
         '<div class="log-entry">' +
         '<span style="opacity:0.5">' + e.timeStr + '</span> ' +
         '<strong>' + e.call + '</strong> ' + e.type +
-        ' <span style="opacity:0.6">' + e.phase + '</span>' +
-        '</div>'
+        ' <span style="opacity:0.6">' + e.phase + '</span></div>'
       ).join('');
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      LEAFLET MAP
-      Leaflet is a JavaScript library for interactive maps.
-      We use it to show:
-        - Dark CartoDB map tiles as the background
-        - A white dot for the suburb centre
-        - A dashed circle for the geofence boundary
-        - A fixed dot for Sydney Airport (SYD)
-        - A yellow dot for the current aircraft
-        - A dashed line from the aircraft to the suburb
-        - A directional arrow showing the aircraft's heading and speed
+    // ── Map ──────────────────────────────────────────────────────────
 
-      Map layer variables are declared here so all functions can access them.
-    ════════════════════════════════════════════════════════════════════
-    */
+    let map, acMarker, acLine, acVector, acArrowHead, geofenceCircle, locationMarker;
 
-    let map;             /* the Leaflet map instance */
-    let acMarker;        /* yellow dot: current aircraft position */
-    let acLine;          /* dashed line: aircraft → suburb */
-    let acVector;        /* solid line: aircraft heading vector (speed scaled) */
-    let acArrowHead;     /* two lines forming a chevron at the vector tip */
-    let geofenceCircle;  /* dashed circle: geofence boundary */
-    let suburbMarker;    /* white dot: suburb centre */
-
-    /*
-      initMap(): creates the map and adds the static layers (tiles, SYD dot).
-      Called once on page load.
-    */
     function initMap() {
-      /*
-        L.map('dm-map') attaches a map to the div with id="dm-map".
-        zoomControl: false removes the +/- zoom buttons (keeps it clean).
-        setView([lat, lon], zoom) centres and zooms the map.
-      */
-      map = L.map('dm-map', { zoomControl: false })
-        .setView([suburbLat, suburbLon], 11);
-
-      /*
-        Tile layer: the actual map imagery, loaded in 256x256px tiles.
-        {s} = subdomain (a/b/c for load balancing)
-        {z} = zoom level, {x} {y} = tile coordinates
-        {r} = retina suffix (@2x on hi-dpi screens, empty otherwise)
-      */
+      map = L.map('dm-map', { zoomControl: false }).setView([locationLat, locationLon], 11);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap © Carto',
-        maxZoom: 14
+        attribution: '© OpenStreetMap © Carto', maxZoom: 14
       }).addTo(map);
-
-      /* Fixed dot for Sydney Airport — always visible for reference */
-      L.circleMarker([SYD_LAT, SYD_LON], {
-        radius: 4,
-        color:       THEMES[currentTheme].dim,
-        fillColor:   THEMES[currentTheme].dim,
-        fillOpacity: 1,
-        weight: 2
-      }).addTo(map)
-        .bindTooltip('SYD', { permanent: true, direction: 'right', className: 'dm-callout' });
-
-      updateGeofenceCircle(); /* draw the suburb marker and geofence ring */
+      updateGeofenceCircle();
     }
 
-    /*
-      updateGeofenceCircle(): draws (or repositions) the suburb marker and
-      geofence circle. Called on load and whenever the suburb or geofence size changes.
-
-      We check if the layer already exists before creating it — if it does,
-      we just move/resize it, which is faster than removing and re-adding.
-    */
+    // Draws or repositions the location marker + geofence ring.
+    // Reuses existing layers to avoid flicker.
     function updateGeofenceCircle() {
       const t = THEMES[currentTheme];
-
       if (geofenceCircle) {
-        /* Already exists — just update position and radius */
-        geofenceCircle.setLatLng([suburbLat, suburbLon]);
-        geofenceCircle.setRadius(geofenceKm * 1000); /* Leaflet uses metres */
+        geofenceCircle.setLatLng([locationLat, locationLon]);
+        geofenceCircle.setRadius(geofenceKm * 1000); // Leaflet uses metres
       } else {
-        /* First time — create the circle */
-        geofenceCircle = L.circle([suburbLat, suburbLon], {
-          radius:      geofenceKm * 1000,
-          color:       t.main,
-          fillColor:   t.main,
-          fillOpacity: 0.05,    /* very faint fill */
-          weight:      1,
-          dashArray:   '5 5'   /* dashed border */
+        geofenceCircle = L.circle([locationLat, locationLon], {
+          radius: geofenceKm * 1000, color: t.main, fillColor: t.main,
+          fillOpacity: 0.05, weight: 1, dashArray: '5 5'
         }).addTo(map);
       }
-
-      if (suburbMarker) {
-        suburbMarker.setLatLng([suburbLat, suburbLon]);
-        suburbMarker.getTooltip().setContent(suburbName);
+      if (locationMarker) {
+        locationMarker.setLatLng([locationLat, locationLon]);
+        locationMarker.getTooltip().setContent(locationName);
       } else {
-        suburbMarker = L.circleMarker([suburbLat, suburbLon], {
+        locationMarker = L.circleMarker([locationLat, locationLon], {
           radius: 5, color: '#ffffff', fillColor: '#ffffff', fillOpacity: 0.9, weight: 2
-        }).addTo(map)
-          .bindTooltip(suburbName, { permanent: true, direction: 'right', className: 'dm-callout' });
+        }).addTo(map).bindTooltip(locationName, { permanent: true, direction: 'right', className: 'dm-callout' });
       }
-
-      map.setView([suburbLat, suburbLon], 11);
+      map.setView([locationLat, locationLon], 11);
     }
 
-    /*
-      clearAircraftMarker(): removes all aircraft-related layers from the map
-      and nulls out the references. Called when changing suburb, or when no
-      aircraft are in range.
-    */
     function clearAircraftMarker() {
       if (acMarker)    { acMarker.remove();    acMarker = null; }
       if (acLine)      { acLine.remove();      acLine = null; }
@@ -1224,201 +545,99 @@
       if (acArrowHead) { acArrowHead.remove(); acArrowHead = null; }
     }
 
-    /*
-      destPoint(): given a starting lat/lon, a compass bearing in degrees,
-      and a distance in km, returns the lat/lon of the destination point.
-      Used to calculate the arrowhead tip and wing positions.
-
-      This is the "forward geodetic problem" — solving it properly requires
-      converting to radians and using spherical trigonometry.
-    */
+    // Returns a lat/lon point distKm away in direction bearingDeg (spherical trig).
     function destPoint(lat, lon, bearingDeg, distKm) {
-      const R    = 6371; /* Earth radius in km */
-      const d    = distKm / R; /* angular distance in radians */
-      const brng = bearingDeg * Math.PI / 180; /* bearing in radians */
-      const lat1 = lat * Math.PI / 180;
-      const lon1 = lon * Math.PI / 180;
-      const lat2 = Math.asin(
-        Math.sin(lat1) * Math.cos(d) +
-        Math.cos(lat1) * Math.sin(d) * Math.cos(brng)
-      );
-      const lon2 = lon1 + Math.atan2(
-        Math.sin(brng) * Math.sin(d) * Math.cos(lat1),
-        Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
-      );
-      return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
+      const R = 6371, d = distKm / R, brng = bearingDeg * Math.PI / 180;
+      const lat1 = lat * Math.PI / 180, lon1 = lon * Math.PI / 180;
+      const lat2 = Math.asin(Math.sin(lat1)*Math.cos(d) + Math.cos(lat1)*Math.sin(d)*Math.cos(brng));
+      const lon2 = lon1 + Math.atan2(Math.sin(brng)*Math.sin(d)*Math.cos(lat1), Math.cos(d)-Math.sin(lat1)*Math.sin(lat2));
+      return [lat2 * 180/Math.PI, lon2 * 180/Math.PI];
     }
 
-    /*
-      updateMap(): places or moves all aircraft-related map layers.
-      Called every time we render a flight.
-
-      Parameters:
-        lat, lon       — aircraft position
-        callsign       — label shown on the map marker
-        groundSpeedKt  — knots (used to scale the heading vector length)
-        trackDeg       — compass bearing 0-360° (used to aim the vector)
-    */
+    // Places/moves the aircraft dot, dashed line to location, and
+    // a speed-scaled heading vector with chevron arrowhead.
     function updateMap(lat, lon, callsign, groundSpeedKt, trackDeg) {
       const pos = [lat, lon];
       const t   = THEMES[currentTheme];
 
-      /* ── Aircraft dot (yellow circle) */
+      // Aircraft dot
       if (acMarker) {
-        /* Already exists — just reposition and update label */
         acMarker.setLatLng(pos);
         acMarker.getTooltip().setContent(callsign);
       } else {
-        /* Create for the first time */
-        acMarker = L.circleMarker(pos, {
-          radius: 7, color: t.acMarker, fillColor: t.acMarker, fillOpacity: 1, weight: 2
-        }).addTo(map)
-          .bindTooltip(callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
+        acMarker = L.circleMarker(pos, { radius: 7, color: t.acMarker, fillColor: t.acMarker, fillOpacity: 1, weight: 2 })
+          .addTo(map).bindTooltip(callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
       }
 
-      /* ── Dashed line from aircraft to suburb centre */
-      if (acLine) acLine.setLatLngs([pos, [suburbLat, suburbLon]]);
-      else acLine = L.polyline([pos, [suburbLat, suburbLon]], {
-        color: t.main, weight: 1, opacity: 0.4, dashArray: '4 6'
-      }).addTo(map);
+      // Dashed line to location centre
+      if (acLine) acLine.setLatLngs([pos, [locationLat, locationLon]]);
+      else acLine = L.polyline([pos, [locationLat, locationLon]], { color: t.main, weight: 1, opacity: 0.4, dashArray: '4 6' }).addTo(map);
 
-      /*
-        ── Speed-scaled heading vector + chevron arrowhead
-        The vector is a line extending from the aircraft in the direction
-        of its ground track. Its length represents speed:
-          100kt → 1km, 500kt → 5km (clamped between 0.5 and 8km)
-
-        The arrowhead is two lines fanning out ±28° from the tip,
-        each 28% the length of the vector shaft.
-      */
+      // Speed-scaled heading vector + arrowhead (100kt=1km, clamped 0.5–8km)
       if (typeof groundSpeedKt === 'number' && groundSpeedKt > 0 && typeof trackDeg === 'number') {
-        /* Clamp vector length: slow = short, fast = long, max 8km */
-        const vectorKm   = Math.max(0.5, Math.min(groundSpeedKt / 100, 8));
-        const tip        = destPoint(lat, lon, trackDeg, vectorKm);
-        const headKm     = vectorKm * 0.28;
-
-        /*
-          Arrowhead wings: start at tip, aim backwards ±28°
-          (trackDeg + 180) is the reverse direction.
-          The % 360 wraps values above 360 back around.
-        */
-        const leftWing   = destPoint(tip[0], tip[1], (trackDeg + 180 - 28 + 360) % 360, headKm);
-        const rightWing  = destPoint(tip[0], tip[1], (trackDeg + 180 + 28) % 360, headKm);
-
-        const lineStyle  = { color: t.acMarker, weight: 2, opacity: 0.7 };
-
+        const vectorKm  = Math.max(0.5, Math.min(groundSpeedKt / 100, 8));
+        const tip       = destPoint(lat, lon, trackDeg, vectorKm);
+        const headKm    = vectorKm * 0.28;
+        const leftWing  = destPoint(tip[0], tip[1], (trackDeg + 180 - 28 + 360) % 360, headKm);
+        const rightWing = destPoint(tip[0], tip[1], (trackDeg + 180 + 28) % 360, headKm);
+        const vs        = { color: t.acMarker, weight: 2, opacity: 0.7 };
         if (acVector) {
-          /* Already exists — reposition */
           acVector.setLatLngs([pos, tip]);
           acArrowHead.setLatLngs([leftWing, tip, rightWing]);
         } else {
-          /* Create both layers */
-          acVector    = L.polyline([pos, tip], lineStyle).addTo(map);
-          acArrowHead = L.polyline([leftWing, tip, rightWing], lineStyle).addTo(map);
+          acVector    = L.polyline([pos, tip], vs).addTo(map);
+          acArrowHead = L.polyline([leftWing, tip, rightWing], vs).addTo(map);
         }
       } else {
-        /* No speed/track data — remove the vector if it exists */
         if (acVector)    { acVector.remove();    acVector = null; }
         if (acArrowHead) { acArrowHead.remove(); acArrowHead = null; }
       }
 
-      /*
-        Auto-fit map bounds to show the aircraft, the suburb, and SYD
-        (if the suburb is within 40km of the airport).
-        .pad(0.3) adds 30% padding around the bounds so nothing is right
-        at the edge of the map.
-      */
-      const distSuburbSyd = haversineKm(suburbLat, suburbLon, SYD_LAT, SYD_LON);
-      const boundsPoints  = distSuburbSyd < 40
-        ? [pos, [suburbLat, suburbLon], [SYD_LAT, SYD_LON]]
-        : [pos, [suburbLat, suburbLon]];
-      map.fitBounds(L.latLngBounds(boundsPoints).pad(0.3));
+      map.fitBounds(L.latLngBounds([pos, [locationLat, locationLon]]).pad(0.3));
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      ALTITUDE BAR
-      Maps altitude (0–45,000ft) to a percentage height for the
-      CSS bar. Clamps to 0–100% to handle unusual values.
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Altitude bar ─────────────────────────────────────────────────
+    // Maps 0–45,000ft to a 0–100% CSS height on the right-edge bar.
     function updateAltBar(alt) {
       const fill = document.getElementById('alt-bar-fill');
-      if (typeof alt !== 'number') {
-        fill.style.height = '0%';
-        return;
-      }
-      const pct = Math.min(100, Math.max(0, (alt / 45000) * 100));
-      fill.style.height = pct + '%';
+      if (typeof alt !== 'number') { fill.style.height = '0%'; return; }
+      fill.style.height = Math.min(100, Math.max(0, (alt / 45000) * 100)) + '%';
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      RENDER — display a single flight
-      This is the heart of the UI. Given a flight object from the API,
-      it formats all the data and updates every part of the page.
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Render ───────────────────────────────────────────────────────
+    // Formats and displays all data for one aircraft from the API.
+    // Key API fields: flight, r (reg), t (type), hex, lat, lon,
+    //                 alt_baro (ft), gs (kt), baro_rate (fpm), track (°), squawk, category
 
-    /* prevTopHex: tracks which aircraft was last at position #1, so we
-       can detect when a new plane takes the top spot and play a ping. */
-    let prevTopHex = null;
+    let prevTopHex = null; // used to detect when the #1 aircraft changes (triggers ping)
 
     function render(f) {
-      /*
-        f is a single aircraft object from the airplanes.live API.
-        Key fields:
-          f.flight   — callsign e.g. "QFA001"
-          f.r        — registration e.g. "VH-OQA"
-          f.t        — ICAO type code e.g. "B789"
-          f.hex      — unique hex identifier e.g. "7C6B2D"
-          f.lat, f.lon — position
-          f.alt_baro — barometric altitude in feet
-          f.gs       — ground speed in knots
-          f.baro_rate — vertical speed in feet/min
-          f.track    — ground track (compass bearing) in degrees
-          f.squawk   — transponder code (4-digit octal)
-          f.category — ADS-B emitter category e.g. "A5"
-      */
-
-      const ctr     = '[' + (flightIndex + 1) + '/' + flights.length + ']';
-      const distLoc = haversineKm(suburbLat, suburbLon, f.lat, f.lon);
-      const distSyd = haversineKm(SYD_LAT, SYD_LON, f.lat, f.lon);
+      const ctr     = '[' + (flightIndex+1) + '/' + flights.length + ']';
+      const distLoc = haversineKm(locationLat, locationLon, f.lat, f.lon);
       const altStr  = formatAlt(f.alt_baro);
-
-      /* Vertical speed: prepend + for positive values so it's always signed */
       const spd     = f.gs        ? Math.round(f.gs) + ' KT' : '---';
       const vs      = f.baro_rate ? (f.baro_rate > 0 ? '+' : '') + f.baro_rate + ' FPM' : '---';
       const hdg     = f.track     ? Math.round(f.track) + '°' : '---';
-
       const call    = (f.flight || '---').trim().toUpperCase();
       const typeStr = formatType(f.t, f.category);
       const reg     = (f.r || '---').toUpperCase();
       const sqkStr  = formatSquawk(f.squawk || '---');
       const airline = airlineFromCallsign(call);
 
-      /*
-        Build a hyperlink for the callsign that opens FlightAware
-        in a new tab. rel="noopener" is a security best practice
-        when using target="_blank".
-      */
+      // Callsign links to FlightAware
       const callLink = call !== '---'
-        ? '<a href="https://www.flightaware.com/live/flight/' + call +
-          '" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">' + call + '</a>'
+        ? '<a href="https://www.flightaware.com/live/flight/' + call + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">' + call + '</a>'
         : '---';
 
-      /* Determine flight phase and build coloured HTML for it */
       const phase     = flightPhase(f);
       const phaseHtml = phase.color
         ? '<span style="color:' + phase.color + ';text-shadow:0 0 8px ' + phase.color + ';">' + phase.label + '</span>'
         : phase.label;
 
-      /* Apply the phase class to #info-wrap for the left border colour bleed */
       document.getElementById('info-wrap').className = phase.cls || '';
 
-      /* Primary info block: flight identity */
       document.getElementById('info').innerHTML =
         'FLIGHT&nbsp;&nbsp; ' + callLink + '<br>' +
         'REG&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + reg + '<br>' +
@@ -1426,138 +645,73 @@
         'AIRLINE&nbsp; ' + airline + '<br>' +
         'PHASE&nbsp;&nbsp;&nbsp; ' + phaseHtml;
 
-      /* Secondary info block: flight data */
       document.getElementById('main').innerHTML =
         'ALT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + altStr + '<br>' +
         'SPEED&nbsp;&nbsp;&nbsp; ' + spd + '<br>' +
         'V/SPEED&nbsp; ' + vs + '<br>' +
         'GND TRK&nbsp; ' + hdg + '<br>' +
         'DIST LOC&nbsp; ' + distLoc.toFixed(1) + ' KM<br>' +
-        'DIST SYD&nbsp; ' + distSyd.toFixed(1) + ' KM<br>' +
         'SQUAWK&nbsp;&nbsp; ' + sqkStr;
 
       document.getElementById('counter').textContent = ctr;
-
-      /* Update the altitude bar */
       updateAltBar(f.alt_baro);
 
-      /*
-        Play a ping if the #1 aircraft has changed.
-        We only ping after the first load (prevTopHex !== null check)
-        so we don't ping on the initial page load.
-      */
+      // Play ping when a new aircraft becomes #1 closest
       if (flightIndex === 0 && f.hex !== prevTopHex) {
         if (prevTopHex !== null) playPing();
         prevTopHex = f.hex;
       }
 
-      /* Add to session log (ignored if already logged) */
       logFlight(f, phase);
-
-      /* Fetch a photo for this aircraft */
       fetchPhoto(reg, f.hex || '', (f.t || '').toUpperCase());
-
-      /* Update the map */
       updateMap(f.lat, f.lon, call, f.gs, f.track);
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      AIRCRAFT PHOTO — Planespotters.net API
-      We query by hex code (and optionally reg + type) to get a photo.
-      The response includes a URL to a thumbnail image and the
-      photographer's name.
-
-      We cache the last registration to avoid re-fetching the same photo
-      as the auto-refresh cycles (the plane hasn't moved much).
-    ════════════════════════════════════════════════════════════════════
-    */
-
-    let lastPhotoReg = null; /* last registration we fetched a photo for */
+    // ── Photo ────────────────────────────────────────────────────────
+    // Fetches from Planespotters.net by hex/reg. Caches last reg to avoid re-fetching.
+    let lastPhotoReg = null;
 
     async function fetchPhoto(reg, hex, type) {
       if (!reg || reg === '---') { clearPhoto(); return; }
-      if (reg === lastPhotoReg)  return; /* same plane as before — skip */
-
+      if (reg === lastPhotoReg)  return;
       lastPhotoReg = reg;
-      clearPhoto(); /* clear the old photo while we fetch */
-
+      clearPhoto();
       try {
-        const url = 'https://api.planespotters.net/pub/photos/hex/' + hex +
-                    '?reg=' + reg + '&icaoType=' + type;
-
-        /*
-          AbortSignal.timeout(6000): automatically cancels the request
-          after 6 seconds if it hasn't responded.
-        */
-        const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+        const res = await fetch(
+          'https://api.planespotters.net/pub/photos/hex/' + hex + '?reg=' + reg + '&icaoType=' + type,
+          { signal: AbortSignal.timeout(6000) }
+        );
         if (!res.ok) return;
-
         const data  = await res.json();
-        const photo = data.photos && data.photos[0]; /* take the first result */
+        const photo = data.photos && data.photos[0];
         if (!photo) return;
-
-        /* Prefer the large thumbnail, fall back to the small one */
         const src    = photo.thumbnail_large?.src || photo.thumbnail?.src;
         const credit = photo.photographer ? '© ' + photo.photographer : '';
-
         if (src) setPhoto(src, credit);
-      } catch(e) {
-        /* Silently ignore errors (timeouts, 404s, etc.) */
-      }
+      } catch(e) {}
     }
 
     function setPhoto(src, credit) {
-      const dm   = document.getElementById('dm-photo');
-      const wrap = document.getElementById('photo-wrap');
-      const cr   = document.getElementById('dm-photo-credit');
-      if (dm)   dm.src = src;
-      if (wrap) wrap.style.display = 'block'; /* reveal the photo container */
-      if (cr)   cr.textContent = credit;
+      document.getElementById('dm-photo').src = src;
+      document.getElementById('photo-wrap').style.display = 'block';
+      document.getElementById('dm-photo-credit').textContent = credit;
     }
-
     function clearPhoto() {
-      const dm   = document.getElementById('dm-photo');
-      const wrap = document.getElementById('photo-wrap');
-      if (dm)   dm.src = '';
-      if (wrap) wrap.style.display = 'none'; /* hide the photo container */
+      document.getElementById('dm-photo').src = '';
+      document.getElementById('photo-wrap').style.display = 'none';
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      NAVIGATION FUNCTIONS
-      go(n): display flight at index n (wraps around using modulo)
-      next()/prev(): convenience wrappers
-      manualRefresh(): reset the countdown and fetch immediately
-    ════════════════════════════════════════════════════════════════════
-    */
-
-    function go(n) {
-      if (flights.length) {
-        /* The % (modulo) operator makes the index wrap around.
-           e.g. at the end: (7 + 1) % 7 = 0 → wraps to start */
-        flightIndex = (n + flights.length) % flights.length;
-        render(flights[flightIndex]);
-      }
-    }
+    // ── Navigation ───────────────────────────────────────────────────
+    function go(n) { if (flights.length) { flightIndex = (n + flights.length) % flights.length; render(flights[flightIndex]); } }
     function next() { go(flightIndex + 1); }
     function prev() { go(flightIndex - 1); }
     function manualRefresh() { secs = 15; fetchFlights(); }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      AUTO-REFRESH TIMER
-      setInterval() calls its callback every 1000ms (1 second).
-      We decrement a counter and call fetchFlights() when it hits 0.
-      The display in #refresh-timer is updated every second.
-    ════════════════════════════════════════════════════════════════════
-    */
-
-    let secs = 15; /* countdown seconds */
-
+    // ── Auto-refresh timer ───────────────────────────────────────────
+    let secs = 15;
     setInterval(() => {
       secs--;
       document.getElementById('refresh-timer').textContent = 'REFRESH IN ' + secs + 'S';
@@ -1565,70 +719,34 @@
     }, 1000);
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      GEOCODING — suburb name to lat/lon
-      We use Nominatim, OpenStreetMap's free geocoding service.
-      It accepts a text query and returns JSON with coordinates.
-
-      We append ", Australia" to bias results toward Australian suburbs.
-      encodeURIComponent() makes the suburb name safe to put in a URL
-      (e.g. "Russell Lea" → "Russell%20Lea").
-    ════════════════════════════════════════════════════════════════════
-    */
-
-    async function geocodeSuburb(name) {
-      const q   = encodeURIComponent(name + ', Australia');
-      const url = 'https://nominatim.openstreetmap.org/search?q=' + q + '&format=json&limit=1';
-
-      const res = await fetch(url, {
-        signal:  AbortSignal.timeout(8000),
-        headers: { 'Accept-Language': 'en' } /* request English place names */
-      });
-
+    // ── Geocoding ────────────────────────────────────────────────────
+    // Converts any location string to lat/lon via Nominatim (OSM).
+    // Works worldwide — no country restriction.
+    async function geocodeLocation(name) {
+      const url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(name) + '&format=json&limit=1';
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000), headers: { 'Accept-Language': 'en' } });
       if (!res.ok) throw new Error('Geocoding request failed');
-
       const data = await res.json();
-      if (!data.length) throw new Error('Suburb not found: ' + name);
-
-      /* parseFloat() converts the string coordinates from JSON to numbers */
+      if (!data.length) throw new Error('Location not found: ' + name);
       return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
     }
 
-    /*
-      setLocation(): called when the user clicks SET LOC or presses Enter.
-      Geocodes the input, updates all state, saves to localStorage, then fetches.
-    */
     async function setLocation() {
-      const input = document.getElementById('suburb-input').value.trim();
+      const input = document.getElementById('location-input').value.trim();
       if (!input) return;
-
       document.getElementById('error').textContent = 'LOCATING ' + input.toUpperCase() + '...';
-
       try {
-        const { lat, lon } = await geocodeSuburb(input);
-
-        /* Update global state */
-        suburbName = input.toUpperCase();
-        suburbLat  = lat;
-        suburbLon  = lon;
-
-        /* Update UI */
-        document.getElementById('suburb-display').textContent = suburbName;
+        const { lat, lon } = await geocodeLocation(input);
+        locationName = input.toUpperCase();
+        locationLat  = lat;
+        locationLon  = lon;
+        document.getElementById('location-display').textContent = locationName;
         document.getElementById('error').textContent = '';
-
-        /* Reset photo cache and ping detection for the new location */
         lastPhotoReg = null;
         prevTopHex   = null;
-
         clearAircraftMarker();
         updateGeofenceCircle();
-
-        /* Persist to localStorage so it's restored next visit */
-        try {
-          localStorage.setItem('suburb', JSON.stringify({ name: input, lat, lon }));
-        } catch(e) {}
-
+        try { localStorage.setItem('location', JSON.stringify({ name: input, lat, lon })); } catch(e) {}
         await fetchFlights();
       } catch(e) {
         document.getElementById('error').textContent = 'LOCATION ERR: ' + e.message;
@@ -1636,139 +754,70 @@
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      FETCH FLIGHTS — the main data pipeline
-      1. Cancel any previous in-flight request
-      2. Query airplanes.live for aircraft near our suburb
-      3. Filter to those within geofenceKm and above altFloorFt
-      4. Sort by distance (closest first)
-      5. Render the first (closest) aircraft
-      6. Reset the countdown timer
-    ════════════════════════════════════════════════════════════════════
-    */
-
+    // ── Fetch flights ────────────────────────────────────────────────
+    // Queries airplanes.live, filters to geofence + alt floor, sorts by distance.
+    // Aborts any in-progress request first to prevent stale data overwrites.
     async function fetchFlights() {
-      /*
-        Cancel any previous request that's still in progress.
-        This prevents "stale" responses from arriving late and
-        overwriting the most recent data.
-      */
       if (fetchController) fetchController.abort();
       fetchController = new AbortController();
       const signal = fetchController.signal;
-
       document.getElementById('info').textContent  = 'FETCHING DATA...';
       document.getElementById('error').textContent = '';
-
       try {
-        /*
-          airplanes.live API: point query.
-          Returns all aircraft within the given radius in nautical miles.
-          We query a larger radius than the geofence and then filter
-          precisely with haversineKm — this works around the API's
-          coarser circular query area.
-        */
-        const url = 'https://api.airplanes.live/v2/point/' +
-                    suburbLat + '/' + suburbLon + '/' + apiRadiusNm();
-
-        const res = await fetch(url, { signal });
+        const res = await fetch(
+          'https://api.airplanes.live/v2/point/' + locationLat + '/' + locationLon + '/' + apiRadiusNm(),
+          { signal }
+        );
         if (!res.ok) throw new Error('HTTP ' + res.status);
-
         const data = await res.json();
-
-        /*
-          Filter aircraft:
-          - Must have a numeric barometric altitude (filters out ground vehicles)
-          - Must be above the altitude floor (set by slider)
-          - Must have lat/lon coordinates
-          - Must be within geofenceKm of the suburb centre
-        */
         let ac = (data.ac || []).filter(f =>
-          typeof f.alt_baro === 'number' &&
-          f.alt_baro >= altFloorFt &&
+          typeof f.alt_baro === 'number' && f.alt_baro >= altFloorFt &&
           f.lat && f.lon &&
-          haversineKm(suburbLat, suburbLon, f.lat, f.lon) <= geofenceKm
+          haversineKm(locationLat, locationLon, f.lat, f.lon) <= geofenceKm
         );
-
-        /* Sort by distance: closest aircraft first */
         ac.sort((a, b) =>
-          haversineKm(suburbLat, suburbLon, a.lat, a.lon) -
-          haversineKm(suburbLat, suburbLon, b.lat, b.lon)
+          haversineKm(locationLat, locationLon, a.lat, a.lon) -
+          haversineKm(locationLat, locationLon, b.lat, b.lon)
         );
-
-        /* No aircraft found — clear the display */
         if (!ac.length) {
-          clearAircraftMarker();
-          clearPhoto();
-          document.getElementById('info').textContent    = 'NO AIRCRAFT ABOVE ' + suburbName + '.';
+          clearAircraftMarker(); clearPhoto();
+          document.getElementById('info').textContent    = 'NO AIRCRAFT ABOVE ' + locationName + '.';
           document.getElementById('main').textContent    = '';
           document.getElementById('counter').textContent = '';
           document.getElementById('info-wrap').className = '';
           updateAltBar(null);
           return;
         }
-
-        /* Aircraft found — store them and render the closest one */
-        flights     = ac;
-        flightIndex = 0;
+        flights = ac; flightIndex = 0;
         render(flights[0]);
-
       } catch(e) {
-        /* AbortError is expected (we aborted it ourselves) — ignore silently */
         if (e.name === 'AbortError') return;
-
         console.error(e);
         document.getElementById('error').textContent = 'ERR: ' + e.message;
         document.getElementById('info').textContent  = '^ SEE ABOVE';
       } finally {
-        /*
-          finally runs whether the try succeeded or failed.
-          Always reset the countdown so the timer restarts cleanly
-          after every fetch, including errored ones.
-        */
-        secs = 15;
+        secs = 15; // always reset countdown after each fetch attempt
       }
     }
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      KEYBOARD NAVIGATION
-      Arrow keys browse between flights.
-      We skip handling when the suburb input is focused, so typing
-      a suburb name doesn't accidentally change the flight.
-    ════════════════════════════════════════════════════════════════════
-    */
-
+    // ── Keyboard navigation ──────────────────────────────────────────
+    // Arrow keys browse flights; suppressed while typing in the location input.
     document.addEventListener('keydown', e => {
-      if (document.activeElement === document.getElementById('suburb-input')) return;
+      if (document.activeElement === document.getElementById('location-input')) return;
       if (e.key === 'ArrowRight') next();
       if (e.key === 'ArrowLeft')  prev();
     });
-
-    /* Also allow pressing Enter in the suburb input to trigger SET LOC */
-    document.getElementById('suburb-input').addEventListener('keydown', e => {
+    document.getElementById('location-input').addEventListener('keydown', e => {
       if (e.key === 'Enter') setLocation();
     });
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      SLIDER SETUP
-      Each slider has two parts:
-      1. An IIFE that runs once on load to restore the saved value from
-         localStorage (so the slider position is remembered across visits)
-      2. An event listener on 'input' that fires as the slider is dragged,
-         updating the label and saving to localStorage.
+    // ── Sliders ──────────────────────────────────────────────────────
+    // Each slider restores its saved value on load, then updates state + localStorage on drag.
+    // They do NOT trigger an API fetch — the next 15s refresh picks up the new value.
 
-      NOTE: Sliders deliberately do NOT trigger an API fetch when dragged.
-      The next automatic 15-second refresh picks up the new value.
-      This prevents hammering the API while a slider is being dragged.
-    ════════════════════════════════════════════════════════════════════
-    */
-
-    /* GEOFENCE SLIDER */
+    // Geofence
     (function () {
       try {
         const saved = parseInt(localStorage.getItem('geofenceKm'), 10);
@@ -1779,16 +828,14 @@
         }
       } catch(e) {}
     })();
-
     document.getElementById('geofence-slider').addEventListener('input', function () {
       geofenceKm = parseInt(this.value, 10);
       document.getElementById('geofence-label').textContent = geofenceKm + ' KM';
-      if (geofenceCircle) updateGeofenceCircle(); /* resize the circle on the map immediately */
+      if (geofenceCircle) updateGeofenceCircle();
       try { localStorage.setItem('geofenceKm', geofenceKm); } catch(e) {}
     });
 
-
-    /* ALT FLOOR SLIDER */
+    // Altitude floor
     (function () {
       try {
         const saved = parseInt(localStorage.getItem('altFloorFt'), 10);
@@ -1799,56 +846,23 @@
         }
       } catch(e) {}
     })();
-
     document.getElementById('altfloor-slider').addEventListener('input', function () {
-      altFloorFt = Math.max(200, parseInt(this.value, 10)); /* enforce minimum of 200ft */
+      altFloorFt = Math.max(200, parseInt(this.value, 10));
       document.getElementById('altfloor-label').textContent = altFloorFt + ' FT';
       try { localStorage.setItem('altFloorFt', altFloorFt); } catch(e) {}
     });
 
 
-    /* SCANLINE SLIDER */
+    // ── Share link: auto-geocode on load ─────────────────────────────
+    // If opened with ?location= (via SHARE button), geocode it automatically.
+    // Small delay ensures the map is initialised before setLocation() runs.
     (function () {
-      try {
-        const saved = parseInt(localStorage.getItem('scanlineOpacity'), 10);
-        if (!isNaN(saved) && saved >= 0 && saved <= 60) {
-          document.getElementById('scanline-slider').value = saved;
-          document.getElementById('scanline-label').textContent = saved + '%';
-          /* Convert 0-60 integer to 0.00-0.60 decimal for the CSS variable */
-          document.body.style.setProperty('--scanline-opacity', (saved / 100).toFixed(2));
-        }
-      } catch(e) {}
-    })();
-
-    document.getElementById('scanline-slider').addEventListener('input', function () {
-      const val = parseInt(this.value, 10);
-      document.getElementById('scanline-label').textContent = val + '%';
-      document.body.style.setProperty('--scanline-opacity', (val / 100).toFixed(2));
-      try { localStorage.setItem('scanlineOpacity', val); } catch(e) {}
-    });
-
-
-    /*
-    ════════════════════════════════════════════════════════════════════
-      SHARE LINK: auto-geocode on load
-      If the page was opened with ?suburb= in the URL (via the SHARE
-      button), we automatically geocode and fetch that suburb.
-      setTimeout(..., 50) gives the map a moment to initialise first.
-    ════════════════════════════════════════════════════════════════════
-    */
-    (function () {
-      const s = new URLSearchParams(window.location.search).get('suburb');
+      const s = new URLSearchParams(window.location.search).get('location');
       if (s) setTimeout(() => setLocation(), 50);
     })();
 
 
-    /*
-    ════════════════════════════════════════════════════════════════════
-      STARTUP
-      initMap() must come before fetchFlights() because fetchFlights()
-      calls updateMap() which needs the Leaflet map to exist.
-    ════════════════════════════════════════════════════════════════════
-    */
+    // ── Start ────────────────────────────────────────────────────────
     initMap();
     fetchFlights();
 
