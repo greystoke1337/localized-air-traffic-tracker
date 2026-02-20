@@ -10,46 +10,51 @@
   <style>
     /* ─── DOTMATRIX THEME ─── */
     body.dotmatrix {
-      background: #1a0a00;
-      color: #ffa600;
+      --c-main: #ffa600;
+      --c-glow: #ff8000;
+      --c-dim:  #7a5200;
+      --c-bg:   #1a0a00;
+      --c-overlay: rgba(26,10,0,0.65);
+      background: var(--c-bg);
+      color: var(--c-main);
       font-family: 'Share Tech Mono', monospace;
       font-size: 1rem;
       padding: 30px;
       max-width: 520px;
       margin: 0 auto;
     }
-    body.dotmatrix * { text-shadow: 0 0 2px #ffa600, 0 0 8px #ff8000; }
+    body.dotmatrix * { text-shadow: 0 0 2px var(--c-main), 0 0 8px var(--c-glow); }
     body.dotmatrix::after {
       content: '';
       position: fixed; inset: 0;
       background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.18) 3px, rgba(0,0,0,0.18) 4px);
       pointer-events: none; z-index: 99;
     }
-    body.dotmatrix hr { border-color: #ffa600; opacity: 0.3; margin: 12px 0; }
+    body.dotmatrix hr { border-color: var(--c-main); opacity: 0.3; margin: 12px 0; }
     body.dotmatrix #info { font-size: 1.3rem; margin: 16px 0 8px; }
     body.dotmatrix #main { line-height: 2; margin-bottom: 16px; }
     body.dotmatrix #counter { margin: 0 12px; }
-    body.dotmatrix #error { color: #ff8000; word-break: break-all; font-size: 0.85rem; }
+    body.dotmatrix #error { color: var(--c-glow); word-break: break-all; font-size: 0.85rem; }
     body.dotmatrix button {
-      background: none; border: 1px solid #ffa600; color: #ffa600;
+      background: none; border: 1px solid var(--c-main); color: var(--c-main);
       font-family: 'Share Tech Mono', monospace; font-size: 0.9rem;
-      padding: 4px 14px; cursor: pointer; text-shadow: 0 0 6px #ff8000;
+      padding: 4px 14px; cursor: pointer; text-shadow: 0 0 6px var(--c-glow);
     }
-    body.dotmatrix button:hover { background: #ffa60022; }
+    body.dotmatrix button:hover { background: color-mix(in srgb, var(--c-main) 13%, transparent); }
     #location-ctrl { display: flex; gap: 6px; align-items: center; margin: 10px 0 4px; }
     #suburb-input {
-      background: none; border: 1px solid #ffa600; color: #ffa600;
+      background: none; border: 1px solid var(--c-main); color: var(--c-main);
       font-family: 'Share Tech Mono', monospace; font-size: 0.85rem;
       padding: 4px 8px; flex: 1; outline: none;
-      text-shadow: 0 0 6px #ff8000;
+      text-shadow: 0 0 6px var(--c-glow);
     }
-    #suburb-input::placeholder { color: #7a5200; text-shadow: none; }
+    #suburb-input::placeholder { color: var(--c-dim); text-shadow: none; }
     #geofence-status { font-size: 0.75rem; opacity: 0.6; margin: 0 0 8px; }
     /* Photo */
     .photo-wrap { position:relative; display:block; margin-top:10px; z-index: 0; }
     .photo-wrap::after {
       content:''; position:absolute; inset:0; pointer-events:none; z-index: 1;
-      background-image: radial-gradient(circle, rgba(26,10,0,0.65) 1px, transparent 1px);
+      background-image: radial-gradient(circle, var(--c-overlay) 1px, transparent 1px);
       background-size: 3px 3px;
     }
     #dm-photo { display:block; width:100%; max-height:120px; object-fit:cover; object-position:center; opacity:0.85; }
@@ -59,9 +64,9 @@
     @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
 
     /* Map */
-    #dm-map { width:100%; height:220px; margin-top:14px; border:1px solid #7a5200; }
+    #dm-map { width:100%; height:220px; margin-top:14px; border:1px solid var(--c-dim); }
     #dm-map * { text-shadow: none; }
-    .dm-callout { background:#1a0a00; border:1px solid #ffa600; color:#ffa600;
+    .dm-callout { background: var(--c-bg); border:1px solid var(--c-main); color: var(--c-main);
       font-family:'Share Tech Mono',monospace; font-size:11px; padding:2px 5px;
       border-radius:0; white-space:nowrap; }
     .dm-callout::before { display:none; }
@@ -92,20 +97,47 @@
     <button onclick="next()">NEXT &#9654;</button>
     <button onclick="go(0)">NEAREST</button>
     <button onclick="manualRefresh()">REFRESH</button>
+    <button onclick="toggleTheme()" id="theme-btn">&#9679; BLUE</button>
     <br><br>
     <span id="refresh-timer"></span>
   </div>
   <script>
     const SYD_LAT = -33.9461, SYD_LON = 151.1772;
     const GEOFENCE_KM = 5;
-    // Query radius in nm — ~4× the geofence km converted to nm, for generous margin.
-    // Update automatically if GEOFENCE_KM changes.
     const API_RADIUS_NM = Math.ceil((GEOFENCE_KM / 1.852) * 4);
 
     let suburbName = 'RUSSELL LEA';
-    let suburbLat = -33.8598, suburbLon = 151.1369; // Russell Lea, NSW default
+    let suburbLat = -33.8598, suburbLon = 151.1369;
     let flights = [], flightIndex = 0;
     let fetchController = null;
+
+    // ── Themes
+    const THEMES = {
+      orange: { main: '#ffa600', glow: '#ff8000', dim: '#7a5200', bg: '#1a0a00', overlay: 'rgba(26,10,0,0.65)',  acMarker: '#e8e820' },
+      blue:   { main: '#0080ff', glow: '#0055cc', dim: '#003a80', bg: '#00091a', overlay: 'rgba(0,9,26,0.65)',   acMarker: '#e8e820' },
+    };
+    let currentTheme = 'orange';
+
+    function applyTheme(name) {
+      const t = THEMES[name];
+      const b = document.body;
+      b.style.setProperty('--c-main',    t.main);
+      b.style.setProperty('--c-glow',    t.glow);
+      b.style.setProperty('--c-dim',     t.dim);
+      b.style.setProperty('--c-bg',      t.bg);
+      b.style.setProperty('--c-overlay', t.overlay);
+      // Update Leaflet layers if they exist
+      if (geofenceCircle) geofenceCircle.setStyle({ color: t.main, fillColor: t.main });
+      if (acLine)         acLine.setStyle({ color: t.main });
+      document.getElementById('theme-btn').textContent =
+        name === 'orange' ? '● BLUE' : '● ORANGE';
+      currentTheme = name;
+      try { localStorage.setItem('theme', name); } catch(e) {}
+    }
+
+    function toggleTheme() {
+      applyTheme(currentTheme === 'orange' ? 'blue' : 'orange');
+    }
 
     // ── Restore last suburb from localStorage
     (function () {
@@ -119,7 +151,11 @@
           document.getElementById('suburb-input').value = name;
           document.getElementById('suburb-display').textContent = suburbName;
         }
-      } catch (e) { /* ignore corrupt saved data */ }
+      } catch (e) {}
+      try {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme && THEMES[savedTheme]) applyTheme(savedTheme);
+      } catch(e) {}
     })();
 
     function haversineKm(lat1, lon1, lat2, lon2) {
@@ -158,18 +194,19 @@
         attribution: '© OpenStreetMap © Carto', maxZoom: 14
       }).addTo(map);
       L.circleMarker([SYD_LAT, SYD_LON], {
-        radius: 4, color: '#7a5200', fillColor: '#7a5200', fillOpacity: 1, weight: 2
+        radius: 4, color: THEMES[currentTheme].dim, fillColor: THEMES[currentTheme].dim, fillOpacity: 1, weight: 2
       }).addTo(map)
         .bindTooltip('SYD', { permanent: true, direction: 'right', className: 'dm-callout' });
       updateGeofenceCircle();
     }
     function updateGeofenceCircle() {
+      const t = THEMES[currentTheme];
       if (geofenceCircle) {
         geofenceCircle.setLatLng([suburbLat, suburbLon]);
       } else {
         geofenceCircle = L.circle([suburbLat, suburbLon], {
           radius: GEOFENCE_KM * 1000,
-          color: '#ffa600', fillColor: '#ffa600', fillOpacity: 0.05,
+          color: t.main, fillColor: t.main, fillOpacity: 0.05,
           weight: 1, dashArray: '5 5'
         }).addTo(map);
       }
@@ -186,22 +223,23 @@
     }
     function clearAircraftMarker() {
       if (acMarker) { acMarker.remove(); acMarker = null; }
-      if (acLine) { acLine.remove(); acLine = null; }
+      if (acLine)   { acLine.remove();   acLine = null; }
     }
     function updateMap(lat, lon, callsign) {
       const pos = [lat, lon];
+      const t = THEMES[currentTheme];
       if (acMarker) {
         acMarker.setLatLng(pos);
         acMarker.getTooltip().setContent(callsign);
       } else {
         acMarker = L.circleMarker(pos, {
-          radius: 7, color: '#e8e820', fillColor: '#e8e820', fillOpacity: 1, weight: 2
+          radius: 7, color: t.acMarker, fillColor: t.acMarker, fillOpacity: 1, weight: 2
         }).addTo(map)
           .bindTooltip(callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
       }
       if (acLine) acLine.setLatLngs([pos, [suburbLat, suburbLon]]);
       else acLine = L.polyline([pos, [suburbLat, suburbLon]], {
-        color: '#ffa600', weight: 1, opacity: 0.4, dashArray: '4 6'
+        color: t.main, weight: 1, opacity: 0.4, dashArray: '4 6'
       }).addTo(map);
       const distSuburbSyd = haversineKm(suburbLat, suburbLon, SYD_LAT, SYD_LON);
       const boundsPoints = distSuburbSyd < 40
@@ -248,7 +286,7 @@
     let lastPhotoReg = null;
     async function fetchPhoto(reg, hex, type) {
       if (!reg || reg === '---') { clearPhoto(); return; }
-      if (reg === lastPhotoReg) return; // same aircraft, don't re-fetch
+      if (reg === lastPhotoReg) return;
       lastPhotoReg = reg;
       clearPhoto();
       try {
@@ -261,7 +299,7 @@
         const src = photo.thumbnail_large?.src || photo.thumbnail?.src;
         const credit = photo.photographer ? '© ' + photo.photographer : '';
         if (src) setPhoto(src, credit);
-      } catch(e) { /* silent fail */ }
+      } catch(e) {}
     }
     function setPhoto(src, credit) {
       const dm = document.getElementById('dm-photo');
@@ -315,7 +353,7 @@
         suburbLon = lon;
         document.getElementById('suburb-display').textContent = suburbName;
         document.getElementById('error').textContent = '';
-        lastPhotoReg = null; // reset so photo re-fetches for new location's aircraft
+        lastPhotoReg = null;
         clearAircraftMarker();
         updateGeofenceCircle();
         try { localStorage.setItem('suburb', JSON.stringify({ name: input, lat, lon })); } catch(e) {}
@@ -326,7 +364,6 @@
     }
 
     async function fetchFlights() {
-      // Cancel any in-flight request before starting a new one
       if (fetchController) fetchController.abort();
       fetchController = new AbortController();
       const signal = fetchController.signal;
@@ -334,8 +371,6 @@
       document.getElementById('info').textContent = 'FETCHING DATA...';
       document.getElementById('error').textContent = '';
       try {
-        // API_RADIUS_NM is derived from GEOFENCE_KM with generous margin;
-        // we then filter precisely to GEOFENCE_KM below.
         const url = 'https://api.airplanes.live/v2/point/' + suburbLat + '/' + suburbLon + '/' + API_RADIUS_NM;
         const res = await fetch(url, { signal });
         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -360,12 +395,12 @@
         flightIndex = 0;
         render(flights[0]);
       } catch(e) {
-        if (e.name === 'AbortError') return; // superseded by a newer fetch — ignore silently
+        if (e.name === 'AbortError') return;
         console.error(e);
         document.getElementById('error').textContent = 'ERR: ' + e.message;
         document.getElementById('info').textContent = '^ SEE ABOVE';
       } finally {
-        secs = 30; // always reset the countdown after a fetch completes or errors
+        secs = 30;
       }
     }
 
