@@ -2,7 +2,7 @@
 
 A real-time tracker that shows **which aircraft are flying directly above any location in the world**, built as a single HTML file with no dependencies or backend required.
 
-🔗 **Live:** https://greystoke1337.github.io/localized-air-traffic-tracker/
+🔗 **Live:** https://greystoke1337.github.io/sydney-localized-air-traffic-tracker
 
 ---
 
@@ -16,7 +16,7 @@ A real-time tracker that shows **which aircraft are flying directly above any lo
 - **Share link** — the ↗ SHARE button copies a `?location=` URL to the clipboard; anyone opening it lands directly on your location
 
 ### Live Data
-- **Live ADS-B data** via [airplanes.live](https://airplanes.live) — free, no API key required
+- **Live ADS-B data** via [airplanes.live](https://airplanes.live), routed through a self-hosted proxy at [api.overheadtracker.com](https://api.overheadtracker.com) — free, no API key required
 - **Auto-refresh** every 15 seconds; countdown resets cleanly after each fetch completes
 - **Manual refresh** — REFRESH button triggers an immediate fetch and resets the countdown
 - **Stale-request cancellation** — any in-flight API request is aborted before a new one starts, preventing stale data from overwriting fresh results
@@ -50,7 +50,7 @@ A real-time tracker that shows **which aircraft are flying directly above any lo
 ## How It Works
 
 1. Geocodes the entered location via Nominatim (OpenStreetMap) — no API key needed; works worldwide
-2. Queries airplanes.live for all aircraft within a radius derived from the geofence size (4× the geofence in nautical miles, to cast a wider net)
+2. Queries [api.overheadtracker.com](https://api.overheadtracker.com) (a self-hosted Raspberry Pi proxy backed by airplanes.live) for all aircraft within a radius derived from the geofence size (4× the geofence in nautical miles, to cast a wider net)
 3. Filters precisely to aircraft within the geofence radius and above the altitude floor
 4. Sorts by distance — closest overhead first
 5. Renders flight data, map (with heading vector), altitude bar, phase colour bleed, and photo
@@ -62,7 +62,7 @@ A real-time tracker that shows **which aircraft are flying directly above any lo
 
 Just open `index.html` in a browser. No server, no build step, no API keys needed.
 
-> **Note:** The app makes requests to external APIs (`api.airplanes.live`, `nominatim.openstreetmap.org`, `api.planespotters.net`). These all support CORS. If you open the file over `http://` some browsers may block mixed-content requests — serve over `https://` or use a local server if you hit issues.
+> **Note:** The app makes requests to `api.overheadtracker.com` (flight data proxy), `nominatim.openstreetmap.org` (geocoding), and `api.planespotters.net` (photos). All are served over HTTPS and support CORS.
 
 ```bash
 git clone https://github.com/greystoke1337/sydney-localized-air-traffic-tracker.git
@@ -76,7 +76,8 @@ open index.html
 
 | Source | Data | Key required |
 |---|---|---|
-| [airplanes.live](https://api.airplanes.live) | Live ADS-B positions | No |
+| [api.overheadtracker.com](https://api.overheadtracker.com) | Flight data proxy (Raspberry Pi + Cloudflare Tunnel) | No |
+| [airplanes.live](https://api.airplanes.live) | Live ADS-B positions (via proxy) | No |
 | [Nominatim / OpenStreetMap](https://nominatim.openstreetmap.org) | Location geocoding | No |
 | [Planespotters.net](https://planespotters.net) | Aircraft photos | No |
 | [Carto](https://carto.com) / OpenStreetMap | Map tiles | No |
