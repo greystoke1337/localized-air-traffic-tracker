@@ -746,14 +746,50 @@
       return AIRPORT_DB[code] || code; // fall back to raw code if unknown
     }
 
-    function formatRoute(f) {
-      // airplanes.live provides dep/arr as ICAO, orig_iata/dest_iata as IATA
-      const dep = f.dep || f.orig_iata || null;
-      const arr = f.arr || f.dest_iata || null;
+    // Route cache — keyed by callsign, avoids repeat lookups
+    const routeCache = new Map();
+
+    function formatRoute(dep, arr) {
       if (!dep && !arr) return null;
       const depName = dep ? airportName(dep) : '?';
       const arrName = arr ? airportName(arr) : '?';
       return depName + ' → ' + arrName;
+    }
+
+    // Updates the ROUTE line in #info without re-rendering everything else
+    function updateRouteDisplay(routeStr) {
+      const info = document.getElementById('info');
+      // Remove any existing route line, then append
+      info.innerHTML = info.innerHTML.replace(/<br>ROUTE.*$/s, '');
+      if (routeStr) info.innerHTML += '<br>ROUTE&nbsp;&nbsp;&nbsp; ' + routeStr;
+    }
+
+    // Looks up route by callsign from adsbdb.com, falls back gracefully.
+    // Results are cached so each callsign is only fetched once per session.
+    async function lookupRoute(callsign) {
+      if (!callsign || callsign === '---') return null;
+      if (routeCache.has(callsign)) return routeCache.get(callsign);
+
+      try {
+        const res = await fetch(
+          'https://api.adsbdb.com/v0/callsign/' + callsign,
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (!res.ok) { routeCache.set(callsign, null); return null; }
+        const data = await res.json();
+        const r = data?.response?.flightroute;
+        if (!r) { routeCache.set(callsign, null); return null; }
+
+        // adsbdb returns IATA codes in origin/destination
+        const dep = r.origin?.iata_code || r.origin?.icao_code || null;
+        const arr = r.destination?.iata_code || r.destination?.icao_code || null;
+        const route = formatRoute(dep, arr);
+        routeCache.set(callsign, route);
+        return route;
+      } catch(e) {
+        routeCache.set(callsign, null);
+        return null;
+      }
     }
 
     // ── Render ───────────────────────────────────────────────────────
@@ -789,8 +825,10 @@
 
       document.getElementById('info-wrap').className = phase.cls || '';
 
-      const route     = formatRoute(f);
-      const routeHtml = route ? '<br>ROUTE&nbsp;&nbsp;&nbsp; ' + route : '';
+      // Try inline route from ADS-B data first
+      const inlineDep = f.dep || f.orig_iata || null;
+      const inlineArr = f.arr || f.dest_iata || null;
+      const inlineRoute = formatRoute(inlineDep, inlineArr);
 
       document.getElementById('info').innerHTML =
         'FLIGHT&nbsp;&nbsp; ' + callLink + '<br>' +
@@ -798,7 +836,15 @@
         'TYPE&nbsp;&nbsp;&nbsp;&nbsp; ' + typeStr + '<br>' +
         'AIRLINE&nbsp; ' + airline + '<br>' +
         'PHASE&nbsp;&nbsp;&nbsp; ' + phaseHtml +
-        routeHtml;
+        (inlineRoute ? '<br>ROUTE&nbsp;&nbsp;&nbsp; ' + inlineRoute : '');
+
+      // If no inline route, async lookup from adsbdb (updates display when ready)
+      if (!inlineRoute && call !== '---') {
+        lookupRoute(call).then(route => {
+          // Only update if this flight is still the one being displayed
+          if (flights[flightIndex] === f) updateRouteDisplay(route);
+        });
+      }
 
       document.getElementById('d-alt').textContent  = altStr;
       document.getElementById('d-spd').textContent  = spd;
