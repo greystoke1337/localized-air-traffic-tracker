@@ -165,13 +165,43 @@
     #log-list::-webkit-scrollbar-thumb { background: var(--c-dim); }
     .log-entry { border-bottom: 1px solid rgba(255,166,0,0.1); padding: 1px 0; }
     .log-entry:last-child { border-bottom: none; }
+
+    /* Fetching pulse — subtle border flicker on info-wrap while loading */
+    #info-wrap.fetching { animation: fetch-pulse 0.8s ease-in-out infinite; }
+    @keyframes fetch-pulse {
+      0%, 100% { border-left-color: var(--c-main); }
+      50%       { border-left-color: var(--c-dim); }
+    }
+    #fetch-dot {
+      display: inline-block; width: 6px; height: 6px;
+      background: var(--c-main); border-radius: 50%;
+      margin-left: 6px; vertical-align: middle;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    #fetch-dot.active { opacity: 1; animation: fetch-pulse-dot 0.8s ease-in-out infinite; }
+    @keyframes fetch-pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+    /* 2-column secondary data grid */
+    #main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 12px;
+      margin-bottom: 12px;
+      font-size: clamp(0.72rem, 2vw, 0.78rem);
+      opacity: 0.85;
+      line-height: 1.8;
+    }
+    #main-grid .data-item { display: flex; flex-direction: column; }
+    #main-grid .data-label { font-size: 0.6rem; opacity: 0.6; letter-spacing: 0.05em; }
+    #main-grid .data-value { font-size: 0.82rem; }
   </style>
 </head>
 <body class="dotmatrix">
   <div class="classic-layout">
 
     <!-- Title: location-display updated by JS on each location change -->
-    <p>OVERHEAD // <span id="location-display">---</span><br>LIVE AIRCRAFT TRACKER ✈ <span class="blink">█</span></p>
+    <p>OVERHEAD // <span id="location-display">---</span><br>LIVE AIRCRAFT TRACKER ✈ <span class="blink">█</span><span id="fetch-dot"></span></p>
     <hr>
 
     <!-- Location input: any city, suburb, or address worldwide -->
@@ -201,7 +231,14 @@
       <div id="alt-bar-wrap"><div id="alt-bar-fill" style="height:0%"></div></div>
       <div id="info">LOADING...</div>
     </div>
-    <p id="main"></p>
+    <div id="main-grid">
+      <div class="data-item"><span class="data-label">ALT</span><span class="data-value" id="d-alt">---</span></div>
+      <div class="data-item"><span class="data-label">SPEED</span><span class="data-value" id="d-spd">---</span></div>
+      <div class="data-item"><span class="data-label">V/SPEED</span><span class="data-value" id="d-vs">---</span></div>
+      <div class="data-item"><span class="data-label">GND TRK</span><span class="data-value" id="d-hdg">---</span></div>
+      <div class="data-item"><span class="data-label">DIST LOC</span><span class="data-value" id="d-dist">---</span></div>
+      <div class="data-item"><span class="data-label">SQUAWK</span><span class="data-value" id="d-sqk">---</span></div>
+    </div>
 
     <div id="dm-map"></div>
 
@@ -225,6 +262,7 @@
 
     <div id="footer-row">
       <span id="counter"></span>
+      <span id="proxy-status" style="font-size:0.65rem;opacity:0.5;"></span>
       <span id="refresh-timer"></span>
     </div>
 
@@ -609,10 +647,120 @@
     }
 
 
+
+    // ── Airport database ─────────────────────────────────────────────
+    // ICAO and IATA codes → city name. Covers major airports worldwide.
+    const AIRPORT_DB = {
+      // Australia
+      YSSY:'Sydney',YSAY:'Sydney',YMLB:'Melbourne',YMML:'Melbourne',YBBN:'Brisbane',
+      YPPH:'Perth',YPAD:'Adelaide',YSCB:'Canberra',YBCS:'Cairns',YBHM:'Hamilton Is',
+      YBTL:'Townsville',YBAS:'Alice Springs',YBDG:'Bendigo',YDBY:'Derby',
+      YSNF:'Norfolk Is',YAGD:'Aganda',
+      SYD:'Sydney',MEL:'Melbourne',BNE:'Brisbane',PER:'Perth',ADL:'Adelaide',
+      CBR:'Canberra',CNS:'Cairns',OOL:'Gold Coast',TSV:'Townsville',DRW:'Darwin',
+      HBA:'Hobart',LST:'Launceston',MKY:'Mackay',ROK:'Rockhampton',
+      // Asia Pacific
+      NZAA:'Auckland',NZCH:'Christchurch',NZWN:'Wellington',NZQN:'Queenstown',
+      AKL:'Auckland',CHC:'Christchurch',WLG:'Wellington',ZQN:'Queenstown',
+      WSSS:'Singapore',WSAP:'Singapore',SIN:'Singapore',
+      VHHH:'Hong Kong',HKG:'Hong Kong',
+      RJAA:'Tokyo',RJTT:'Tokyo',NRT:'Tokyo',HND:'Tokyo',
+      RJBB:'Osaka',RJOO:'Osaka',KIX:'Osaka',ITM:'Osaka',
+      RKSI:'Seoul',RKSS:'Seoul',ICN:'Seoul',GMP:'Seoul',
+      RCTP:'Taipei',RCSS:'Taipei',TPE:'Taipei',TSA:'Taipei',
+      VTBS:'Bangkok',VTBD:'Bangkok',BKK:'Bangkok',DMK:'Bangkok',
+      WMKK:'Kuala Lumpur',KUL:'Kuala Lumpur',
+      WADD:'Bali',WIII:'Jakarta',DPS:'Bali',CGK:'Jakarta',
+      RPLL:'Manila',MNL:'Manila',
+      VVTS:'Ho Chi Minh',VVNB:'Hanoi',SGN:'Ho Chi Minh',HAN:'Hanoi',
+      ZBAA:'Beijing',ZGSZ:'Shenzhen',ZGGG:'Guangzhou',ZSPD:'Shanghai',
+      ZSSS:'Shanghai',PEK:'Beijing',SZX:'Shenzhen',CAN:'Guangzhou',PVG:'Shanghai',SHA:'Shanghai',
+      ZUCK:'Chongqing',ZUUU:'Chengdu',ZUUU:'Chengdu',CKG:'Chongqing',CTU:'Chengdu',
+      OMDB:'Dubai',OMDW:'Dubai',DXB:'Dubai',DWC:'Dubai',
+      OMAA:'Abu Dhabi',AUH:'Abu Dhabi',
+      OTBD:'Doha',OTHH:'Doha',DOH:'Doha',
+      OERK:'Riyadh',OEDF:'Dammam',RUH:'Riyadh',DMM:'Dammam',
+      OJAM:'Amman',LLBG:'Tel Aviv',AMM:'Amman',TLV:'Tel Aviv',
+      VIDP:'Delhi',VABB:'Mumbai',VOCB:'Chennai',VOBL:'Bangalore',
+      DEL:'Delhi',BOM:'Mumbai',MAA:'Chennai',BLR:'Bangalore',
+      VOMM:'Chennai',VECC:'Kolkata',CCU:'Kolkata',
+      // Europe
+      EGLL:'London',EGKK:'London',EGSS:'London',EGLC:'London',
+      LHR:'London',LGW:'London',STN:'London',LCY:'London',LTN:'London',
+      LFPG:'Paris',LFPO:'Paris',CDG:'Paris',ORY:'Paris',
+      EHAM:'Amsterdam',AMS:'Amsterdam',
+      EDDF:'Frankfurt',FRA:'Frankfurt',
+      EDDM:'Munich',MUC:'Munich',
+      LEMD:'Madrid',MAD:'Madrid',
+      LEBL:'Barcelona',BCN:'Barcelona',
+      LIRF:'Rome',LIMC:'Milan',FCO:'Rome',MXP:'Milan',LIN:'Milan',
+      EGPH:'Edinburgh',EGPF:'Glasgow',EDI:'Edinburgh',GLA:'Glasgow',
+      EIDW:'Dublin',DUB:'Dublin',
+      EBBR:'Brussels',BRU:'Brussels',
+      EKCH:'Copenhagen',CPH:'Copenhagen',
+      ESSA:'Stockholm',ARN:'Stockholm',
+      ENGM:'Oslo',OSL:'Oslo',
+      EFHK:'Helsinki',HEL:'Helsinki',
+      LSZH:'Zurich',ZRH:'Zurich',
+      LSGG:'Geneva',GVA:'Geneva',
+      LOWW:'Vienna',VIE:'Vienna',
+      EPWA:'Warsaw',WAW:'Warsaw',
+      LKPR:'Prague',PRG:'Prague',
+      LHBP:'Budapest',BUD:'Budapest',
+      LGAV:'Athens',ATH:'Athens',
+      LTFM:'Istanbul',LTBA:'Istanbul',IST:'Istanbul',SAW:'Istanbul',
+      // Americas
+      KJFK:'New York',KLGA:'New York',KEWR:'New York',
+      JFK:'New York',LGA:'New York',EWR:'New York',
+      KLAX:'Los Angeles',LAX:'Los Angeles',
+      KSFO:'San Francisco',SFO:'San Francisco',
+      KORD:'Chicago',KMDW:'Chicago',ORD:'Chicago',MDW:'Chicago',
+      KBOS:'Boston',BOS:'Boston',
+      KMIA:'Miami',MIA:'Miami',
+      KATL:'Atlanta',ATL:'Atlanta',
+      KDFW:'Dallas',DFW:'Dallas',DAL:'Dallas',
+      KDEN:'Denver',DEN:'Denver',
+      KSEA:'Seattle',SEA:'Seattle',
+      KLAS:'Las Vegas',LAS:'Las Vegas',
+      KPHX:'Phoenix',PHX:'Phoenix',
+      CYYZ:'Toronto',CYVR:'Vancouver',CYUL:'Montreal',
+      YYZ:'Toronto',YVR:'Vancouver',YUL:'Montreal',
+      SBGR:'São Paulo',SBGL:'Rio de Janeiro',
+      GRU:'São Paulo',GIG:'Rio de Janeiro',
+      SAEZ:'Buenos Aires',EZE:'Buenos Aires',
+      SKBO:'Bogotá',BOG:'Bogotá',
+      SEQM:'Quito',UIO:'Quito',
+      // Africa
+      FAOR:'Johannesburg',FACT:'Cape Town',
+      JNB:'Johannesburg',CPT:'Cape Town',
+      HECA:'Cairo',CAI:'Cairo',
+      DNMM:'Lagos',LOS:'Lagos',
+      HAAB:'Addis Ababa',ADD:'Addis Ababa',
+      HSSS:'Khartoum',KRT:'Khartoum',
+      FMMI:'Antananarivo',TNR:'Antananarivo',
+    };
+
+    function airportName(code) {
+      if (!code) return null;
+      code = code.trim().toUpperCase();
+      return AIRPORT_DB[code] || code; // fall back to raw code if unknown
+    }
+
+    function formatRoute(f) {
+      // airplanes.live provides dep/arr as ICAO, orig_iata/dest_iata as IATA
+      const dep = f.dep || f.orig_iata || null;
+      const arr = f.arr || f.dest_iata || null;
+      if (!dep && !arr) return null;
+      const depName = dep ? airportName(dep) : '?';
+      const arrName = arr ? airportName(arr) : '?';
+      return depName + ' → ' + arrName;
+    }
+
     // ── Render ───────────────────────────────────────────────────────
     // Formats and displays all data for one aircraft from the API.
     // Key API fields: flight, r (reg), t (type), hex, lat, lon,
-    //                 alt_baro (ft), gs (kt), baro_rate (fpm), track (°), squawk, category
+    //                 alt_baro (ft), gs (kt), baro_rate (fpm), track (°), squawk, category,
+    //                 dep, arr (ICAO departure/arrival), orig_iata, dest_iata
 
     let prevTopHex = null; // used to detect when the #1 aircraft changes (triggers ping)
 
@@ -641,20 +789,23 @@
 
       document.getElementById('info-wrap').className = phase.cls || '';
 
+      const route     = formatRoute(f);
+      const routeHtml = route ? '<br>ROUTE&nbsp;&nbsp;&nbsp; ' + route : '';
+
       document.getElementById('info').innerHTML =
         'FLIGHT&nbsp;&nbsp; ' + callLink + '<br>' +
         'REG&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + reg + '<br>' +
         'TYPE&nbsp;&nbsp;&nbsp;&nbsp; ' + typeStr + '<br>' +
         'AIRLINE&nbsp; ' + airline + '<br>' +
-        'PHASE&nbsp;&nbsp;&nbsp; ' + phaseHtml;
+        'PHASE&nbsp;&nbsp;&nbsp; ' + phaseHtml +
+        routeHtml;
 
-      document.getElementById('main').innerHTML =
-        'ALT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + altStr + '<br>' +
-        'SPEED&nbsp;&nbsp;&nbsp; ' + spd + '<br>' +
-        'V/SPEED&nbsp; ' + vs + '<br>' +
-        'GND TRK&nbsp; ' + hdg + '<br>' +
-        'DIST LOC&nbsp; ' + distLoc.toFixed(1) + ' KM<br>' +
-        'SQUAWK&nbsp;&nbsp; ' + sqkStr;
+      document.getElementById('d-alt').textContent  = altStr;
+      document.getElementById('d-spd').textContent  = spd;
+      document.getElementById('d-vs').innerHTML     = vs;
+      document.getElementById('d-hdg').textContent  = hdg;
+      document.getElementById('d-dist').textContent = distLoc.toFixed(1) + ' KM';
+      document.getElementById('d-sqk').innerHTML    = sqkStr;
 
       document.getElementById('counter').textContent = ctr;
       updateAltBar(f.alt_baro);
@@ -775,18 +926,21 @@
       if (fetchController) fetchController.abort();
       fetchController = new AbortController();
       const signal = fetchController.signal;
-      document.getElementById('info').textContent  = 'FETCHING DATA...';
       document.getElementById('error').textContent = '';
+      document.getElementById('proxy-status').textContent = '';
+      document.getElementById('info-wrap').classList.add('fetching');
+      document.getElementById('fetch-dot').classList.add('active');
       try {
         // Try proxy first; fall back to airplanes.live directly if it fails
         let res;
         try {
           res = await fetch(buildUrl(PROXY_URL), { signal });
           if (!res.ok) throw new Error('proxy HTTP ' + res.status);
+          document.getElementById('proxy-status').textContent = '';
         } catch(proxyErr) {
           if (proxyErr.name === 'AbortError') throw proxyErr;
           console.warn('Proxy failed, falling back to airplanes.live:', proxyErr.message);
-          document.getElementById('error').textContent = 'PROXY UNAVAILABLE — USING DIRECT';
+          document.getElementById('proxy-status').textContent = '⚡ DIRECT';
           res = await fetch(buildUrl(DIRECT_URL), { signal });
           if (!res.ok) throw new Error('HTTP ' + res.status);
         }
@@ -803,7 +957,7 @@
         if (!ac.length) {
           clearAircraftMarker(); clearPhoto();
           document.getElementById('info').textContent    = 'NO AIRCRAFT ABOVE ' + locationName + '.';
-          document.getElementById('main').textContent    = '';
+          ['d-alt','d-spd','d-vs','d-hdg','d-dist','d-sqk'].forEach(id => document.getElementById(id).textContent = '---');
           document.getElementById('counter').textContent = '';
           document.getElementById('info-wrap').className = '';
           updateAltBar(null);
@@ -817,7 +971,9 @@
         document.getElementById('error').textContent = 'ERR: ' + e.message;
         document.getElementById('info').textContent  = '^ SEE ABOVE';
       } finally {
-        secs = 15; // always reset countdown after each fetch attempt
+        secs = 15;
+        document.getElementById('info-wrap').classList.remove('fetching');
+        document.getElementById('fetch-dot').classList.remove('active');
       }
     }
 
