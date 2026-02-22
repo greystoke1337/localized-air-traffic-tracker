@@ -167,12 +167,12 @@
   <div class="classic-layout">
 
     <!-- Title: location-display updated by JS on each location change -->
-    <p>OVERHEAD // <span id="location-display">RUSSELL LEA</span><br>LIVE AIRCRAFT TRACKER ✈ <span class="blink">█</span></p>
+    <p>OVERHEAD // <span id="location-display">---</span><br>LIVE AIRCRAFT TRACKER ✈ <span class="blink">█</span></p>
     <hr>
 
     <!-- Location input: any city, suburb, or address worldwide -->
     <div id="location-ctrl">
-      <input id="location-input" value="Russell Lea" placeholder="City, suburb, address...">
+      <input id="location-input" value="" placeholder="City, suburb, address...">
       <button onclick="setLocation()">SET LOC</button>
     </div>
 
@@ -242,8 +242,8 @@
     // We then filter precisely with haversineKm on the results.
     function apiRadiusNm() { return Math.ceil((geofenceKm / 1.852) * 4); }
 
-    let locationName = 'RUSSELL LEA';
-    let locationLat  = -33.8598, locationLon = 151.1369;
+    let locationName = '';
+    let locationLat  = 0, locationLon = 0;
 
     let flights = [], flightIndex = 0;
     let fetchController = null; // AbortController — cancels stale requests
@@ -507,11 +507,10 @@
     let map, acMarker, acLine, acVector, acArrowHead, geofenceCircle, locationMarker;
 
     function initMap() {
-      map = L.map('dm-map', { zoomControl: false }).setView([locationLat, locationLon], 11);
+      map = L.map('dm-map', { zoomControl: false }).setView([20, 0], 2); // world view until location is set
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap © Carto', maxZoom: 14
       }).addTo(map);
-      updateGeofenceCircle();
     }
 
     // Draws or repositions the location marker + geofence ring.
@@ -713,6 +712,7 @@
     // ── Auto-refresh timer ───────────────────────────────────────────
     let secs = 15;
     setInterval(() => {
+      if (!locationLat && !locationLon) return;
       secs--;
       document.getElementById('refresh-timer').textContent = 'REFRESH IN ' + secs + 'S';
       if (secs <= 0) fetchFlights();
@@ -765,7 +765,7 @@
       document.getElementById('error').textContent = '';
       try {
         const res = await fetch(
-          'https://api.airplanes.live/v2/point/' + locationLat + '/' + locationLon + '/' + apiRadiusNm(),
+          'http://192.168.86.24:3000/flights?lat=' + locationLat + '&lon=' + locationLon + '&radius=' + apiRadiusNm(),
           { signal }
         );
         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -864,7 +864,8 @@
 
     // ── Start ────────────────────────────────────────────────────────
     initMap();
-    fetchFlights();
+    if (locationLat !== 0 || locationLon !== 0) fetchFlights(); // only fetch if a location is set
+    else document.getElementById('info').textContent = 'ENTER A LOCATION TO BEGIN.';
 
   </script>
 </body>
