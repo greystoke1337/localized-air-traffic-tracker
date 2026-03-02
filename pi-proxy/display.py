@@ -124,7 +124,7 @@ def process_flights(raw):
             'route':    ac.get('route', ''),
         })
     processed.sort(key=lambda f: f['dist'])
-    return processed[:3]
+    return processed[:2]
 
 
 # ── Flights-today tracking ───────────────────────────────
@@ -245,13 +245,13 @@ def render_page_flights(flights, weather, peak, page):
 
     # Section header
     n = len(flights) if flights else 0
-    draw_text(f'FLIGHTS NEARBY ({n})', font_sm, DIM, 10, 42)
-    draw_text(f'TODAY: {len(seen_today)}', font_sm, GREEN, W - 10, 42, 'right')
+    draw_text(f'FLIGHTS NEARBY ({n})', font_sm, DIM, 10, 46)
+    draw_text(f'TODAY: {len(seen_today)}', font_sm, GREEN, W - 10, 46, 'right')
 
     # Flight rows
     if flights:
         for i, f in enumerate(flights):
-            y = 60 + i * 44
+            y = 68 + i * 58
             # Row 1: callsign, phase, distance
             draw_text(f['callsign'], font_md, AMBER, 10, y)
             phase_col = PHASE_COLORS.get(f['phase'], DIM)
@@ -260,45 +260,45 @@ def render_page_flights(flights, weather, peak, page):
             # Row 2: route, altitude
             route = f.get('route', '')
             if route:
-                draw_text(route, font_sm, DIM, 10, y + 22)
-            draw_text(format_alt(f['alt']), font_sm, DIM, W - 10, y + 22, 'right')
+                draw_text(route, font_sm, DIM, 10, y + 24)
+            draw_text(format_alt(f['alt']), font_sm, DIM, W - 10, y + 24, 'right')
             if i < len(flights) - 1:
-                pygame.draw.line(screen, (30, 35, 50), (10, y + 40), (W - 10, y + 40), 1)
+                pygame.draw.line(screen, (30, 35, 50), (10, y + 52), (W - 10, y + 52), 1)
     else:
-        draw_text('CLEAR SKIES', font_md, DIM, W // 2, 100, 'center')
+        draw_text('CLEAR SKIES', font_md, DIM, W // 2, 110, 'center')
 
     # Weather section
-    wx_y = 200
+    wx_y = 190
     pygame.draw.line(screen, DIM, (10, wx_y - 4), (W - 10, wx_y - 4), 1)
     draw_text('WEATHER', font_sm, DIM, 10, wx_y)
 
     if weather and 'temp' in weather:
         col_w = W // 3
         # Temperature
-        draw_text(f'{weather["temp"]:.1f}°C', font_md, AMBER, 10, wx_y + 18)
-        draw_text('TEMPERATURE', font_sm, DIM, 10, wx_y + 40)
+        draw_text(f'{weather["temp"]:.1f}°C', font_md, AMBER, 10, wx_y + 20)
+        draw_text('TEMPERATURE', font_sm, DIM, 10, wx_y + 44)
         # Condition
         cond = weather.get('condition', '---')
         if len(cond) > 14:
             cond = cond[:13] + '.'
-        draw_text(cond, font_md, AMBER, col_w + 10, wx_y + 18)
-        draw_text('CONDITIONS', font_sm, DIM, col_w + 10, wx_y + 40)
+        draw_text(cond, font_md, AMBER, col_w + 10, wx_y + 20)
+        draw_text('CONDITIONS', font_sm, DIM, col_w + 10, wx_y + 44)
         # Wind
         wind_spd = weather.get('wind_speed', 0)
         wind_dir = weather.get('wind_cardinal', '')
-        draw_text(f'{wind_spd:.0f} KM/H {wind_dir}', font_md, AMBER, col_w * 2 + 10, wx_y + 18)
-        draw_text('WIND', font_sm, DIM, col_w * 2 + 10, wx_y + 40)
+        draw_text(f'{wind_spd:.0f} KM/H {wind_dir}', font_md, AMBER, col_w * 2 + 10, wx_y + 20)
+        draw_text('WIND', font_sm, DIM, col_w * 2 + 10, wx_y + 44)
     else:
-        draw_text('LOADING...', font_sm, DIM, W // 2, wx_y + 24, 'center')
+        draw_text('LOADING...', font_sm, DIM, W // 2, wx_y + 28, 'center')
 
     # Mini histogram
-    draw_histogram(peak, 270)
+    draw_histogram(peak, 260)
     flush_to_fb()
 
 
 # ── Page 1: Stats + System Health ────────────────────────
 
-def render_page_dashboard(stats, peak, status, page):
+def render_page_dashboard(stats, status, page):
     screen.fill(BG)
     draw_title_bar(stats is not None, page)
 
@@ -308,7 +308,7 @@ def render_page_dashboard(stats, peak, status, page):
         return
 
     # Stats grid (2x3)
-    draw_text('PROXY STATS', font_sm, DIM, 10, 42)
+    draw_text('PROXY STATS', font_sm, DIM, 10, 46)
     if stats:
         items = [
             ('UPTIME',    stats.get('uptime', '-')),
@@ -321,13 +321,13 @@ def render_page_dashboard(stats, peak, status, page):
         col_w = W // 3
         for i, (label, value) in enumerate(items):
             cx = (i % 3) * col_w + col_w // 2
-            cy = 58 + (i // 3) * 42
+            cy = 66 + (i // 3) * 50
             draw_text(label, font_sm, DIM, cx, cy, 'center')
             err_row = label == 'ERRORS' and int(stats.get('errors', 0)) > 0
-            draw_text(value, font_md, RED if err_row else WHITE, cx, cy + 16, 'center')
+            draw_text(value, font_md, RED if err_row else WHITE, cx, cy + 18, 'center')
 
     # System health
-    health_y = 148
+    health_y = 172
     pygame.draw.line(screen, DIM, (10, health_y - 4), (W - 10, health_y - 4), 1)
     draw_text('SYSTEM HEALTH', font_sm, DIM, 10, health_y)
 
@@ -339,8 +339,8 @@ def render_page_dashboard(stats, peak, status, page):
             temp_col = GREEN if temp_val < 60 else (AMBER if temp_val < 75 else RED)
         except (ValueError, AttributeError):
             temp_col = DIM
-        draw_text('CPU TEMP', font_sm, DIM, 10, health_y + 18)
-        draw_text(str(temp_str), font_md, temp_col, 10, health_y + 34)
+        draw_text('CPU TEMP', font_sm, DIM, 10, health_y + 20)
+        draw_text(str(temp_str), font_md, temp_col, 10, health_y + 40)
 
         # RAM
         ram = status.get('ram', {})
@@ -348,26 +348,23 @@ def render_page_dashboard(stats, peak, status, page):
             total_mb = ram['total'] / (1024 * 1024)
             free_mb  = ram['free'] / (1024 * 1024)
             used_pct = int((1 - ram['free'] / ram['total']) * 100)
-            draw_text('RAM USAGE', font_sm, DIM, 250, health_y + 18)
-            draw_text(f'{used_pct}%  {total_mb - free_mb:.0f}/{total_mb:.0f} MB', font_md, WHITE, 250, health_y + 34)
+            draw_text('RAM USAGE', font_sm, DIM, 250, health_y + 20)
+            draw_text(f'{used_pct}%  {total_mb - free_mb:.0f}/{total_mb:.0f} MB', font_md, WHITE, 250, health_y + 40)
 
         # PM2 services
         pm2 = status.get('pm2', [])
         if pm2:
-            pm2_y = health_y + 50
+            pm2_y = health_y + 64
             draw_text('PM2 SERVICES', font_sm, DIM, 10, pm2_y)
             for i, svc in enumerate(pm2[:3]):
-                row_y = pm2_y + 16 + i * 16
+                row_y = pm2_y + 20 + i * 22
                 is_online = svc.get('status') == 'online'
-                pygame.draw.circle(screen, GREEN if is_online else RED, (14, row_y + 7), 4)
+                pygame.draw.circle(screen, GREEN if is_online else RED, (14, row_y + 8), 4)
                 draw_text(svc.get('name', '?'), font_sm, WHITE if is_online else DIM, 26, row_y)
                 draw_text(svc.get('status', '?').upper(), font_sm, GREEN if is_online else RED, 200, row_y)
                 restarts = svc.get('restarts', 0)
                 if restarts:
                     draw_text(f'R:{restarts}', font_sm, AMBER, 310, row_y)
-
-    # Mini histogram
-    draw_histogram(peak, 262)
     flush_to_fb()
 
 
@@ -401,6 +398,6 @@ while True:
     if current_page == 0:
         render_page_flights(processed_flights, weather_data, peak_data, current_page)
     else:
-        render_page_dashboard(stats_data, peak_data, status_data, current_page)
+        render_page_dashboard(stats_data, status_data, current_page)
 
     time.sleep(1)
