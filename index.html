@@ -1675,8 +1675,12 @@
     // ── Fetch flights ────────────────────────────────────────────────
     // Queries proxy first, falls back to airplanes.live directly if proxy is down.
     // Aborts any in-progress request first to prevent stale data overwrites.
-    const PROXY_URL  = 'https://api.overheadtracker.com/flights?lat={LAT}&lon={LON}&radius={R}';
-    const DIRECT_URL = 'https://api.airplanes.live/v2/point/{LAT}/{LON}/{R}';
+    const PROXY_URL   = 'https://api.overheadtracker.com/flights?lat={LAT}&lon={LON}&radius={R}';
+    const DIRECT_APIS = [
+      { name: 'adsb.lol',       url: 'https://api.adsb.lol/v2/point/{LAT}/{LON}/{R}' },
+      { name: 'adsb.fi',        url: 'https://opendata.adsb.fi/api/v3/lat/{LAT}/lon/{LON}/dist/{R}' },
+      { name: 'airplanes.live', url: 'https://api.airplanes.live/v2/point/{LAT}/{LON}/{R}' },
+    ];
 
     function buildUrl(template) {
       return template
@@ -1704,15 +1708,22 @@
           if (!res.ok) throw new Error('proxy HTTP ' + res.status);
           document.getElementById('proxy-status').textContent = '[OK] VIA PROXY';
         } catch(proxyErr) {
-          if (proxyErr.name === 'AbortError' && !signal.aborted) {
-            // Timeout hit — fall through to direct
-          } else if (signal.aborted) {
-            throw proxyErr; // manual abort, don't fall back
+          if (signal.aborted) throw proxyErr;
+          console.warn('Proxy failed, trying direct APIs:', proxyErr.message);
+          let directOk = false;
+          for (const api of DIRECT_APIS) {
+            try {
+              res = await fetch(buildUrl(api.url), { signal });
+              if (!res.ok) throw new Error(api.name + ' HTTP ' + res.status);
+              document.getElementById('proxy-status').textContent = '[!] DIRECT VIA ' + api.name.toUpperCase();
+              directOk = true;
+              break;
+            } catch (apiErr) {
+              if (signal.aborted) throw apiErr;
+              console.warn(api.name + ' failed:', apiErr.message);
+            }
           }
-          console.warn('Proxy failed, falling back to airplanes.live:', proxyErr.message);
-          document.getElementById('proxy-status').textContent = '[!] DIRECT (PROXY DOWN)';
-          res = await fetch(buildUrl(DIRECT_URL), { signal });
-          if (!res.ok) throw new Error('HTTP ' + res.status);
+          if (!directOk) throw new Error('All APIs failed');
         }
         const data = await res.json();
         let ac = (data.ac || []).filter(f =>

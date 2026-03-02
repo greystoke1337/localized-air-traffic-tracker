@@ -476,11 +476,28 @@ app.get('/flights', async (req, res) => {
     return res.json(hit.data);
   }
 
-  try {
-    const url      = `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!response.ok) throw new Error(`API returned ${response.status}`);
-    const data = await response.json();
+  const apis = [
+    { name: 'adsb.lol',        url: `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}` },
+    { name: 'adsb.fi',         url: `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}` },
+    { name: 'airplanes.live',  url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}` },
+  ];
+
+  let data = null;
+  let lastErr = null;
+  for (const api of apis) {
+    try {
+      const response = await fetch(api.url, { signal: AbortSignal.timeout(8000) });
+      if (!response.ok) throw new Error(`${api.name} returned ${response.status}`);
+      data = await response.json();
+      addLog({ type: 'MISS', client, key: key + ` (${api.name})` });
+      break;
+    } catch (e) {
+      lastErr = e;
+      addLog({ type: 'ERR', client, key, error: `${api.name}: ${e.message}` });
+    }
+  }
+
+  if (data) {
     const unrouted = (data.ac || []).filter(ac => ac.flight?.trim() && !ac.dep && !ac.arr);
     if (unrouted.length > 0) {
       const routes = await Promise.all(unrouted.map(ac => lookupRoute(ac.flight.trim())));
@@ -489,7 +506,6 @@ app.get('/flights', async (req, res) => {
         if (routes[i]?.arr) ac.arr = routes[i].arr;
       });
     }
-    // Pre-format route strings for ESP32 (and any other client)
     for (const ac of (data.ac || [])) {
       const dep = ac.dep || ac.orig_iata || null;
       const arr = ac.arr || ac.dest_iata || null;
@@ -497,13 +513,15 @@ app.get('/flights', async (req, res) => {
       if (routeStr) ac.route = routeStr;
     }
     cache.set(key, { data, timestamp: now });
-    addLog({ type: 'MISS', client, key });
-    res.json(data);
-  } catch (e) {
-    stats.errors++;
-    addLog({ type: 'ERR', client, key, error: e.message });
-    res.status(502).json({ error: e.message });
+    return res.json(data);
   }
+
+  stats.errors++;
+  if (hit) {
+    addLog({ type: 'HIT', client, key: key + ' (stale fallback)' });
+    return res.json(hit.data);
+  }
+  res.status(502).json({ error: lastErr?.message || 'All APIs failed' });
 });
 
 // ── Stats endpoint (used by display.py) ──────────────────────────────

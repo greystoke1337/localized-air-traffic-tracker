@@ -1,7 +1,7 @@
 // ─── Network: all HTTP fetching and JSON parsing ────────
 
-// ─── Root CA for api.airplanes.live (ISRG Root X1 / Let's Encrypt) ──
-static const char AIRPLANES_LIVE_CA[] PROGMEM = R"EOF(
+// ─── Root CA (ISRG Root X1 / Let's Encrypt) — shared by adsb.lol + airplanes.live ──
+static const char LETSENCRYPT_ROOT_CA[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
 TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
@@ -128,25 +128,39 @@ int fetchAndParseDirectAPI() {
     return -1;
   }
 
-  char url[160];
-  snprintf(url, sizeof(url),
+  int radius = apiRadiusNm();
+  const char* apiNames[] = { "adsb.lol", "airplanes.live" };
+  char urls[2][160];
+  snprintf(urls[0], sizeof(urls[0]),
+    "https://api.adsb.lol/v2/point/%.4f/%.4f/%d",
+    HOME_LAT, HOME_LON, radius);
+  snprintf(urls[1], sizeof(urls[1]),
     "https://api.airplanes.live/v2/point/%.4f/%.4f/%d",
-    HOME_LAT, HOME_LON, apiRadiusNm());
+    HOME_LAT, HOME_LON, radius);
 
-  WiFiClientSecure tlsClient;
-  tlsClient.setCACert(AIRPLANES_LIVE_CA);
-  tlsClient.setTimeout(DIRECT_API_TIMEOUT / 1000);
   HTTPClient http;
-  http.begin(tlsClient, url);
-  http.setTimeout(DIRECT_API_TIMEOUT);
-  int code = http.GET();
-  if (code != 200) {
+  WiFiClientSecure tlsClient;
+  tlsClient.setCACert(LETSENCRYPT_ROOT_CA);
+  tlsClient.setTimeout(DIRECT_API_TIMEOUT / 1000);
+  bool connected = false;
+  for (int i = 0; i < 2; i++) {
+    Serial.printf("[DIRECT] Trying %s...\n", apiNames[i]);
+    http.begin(tlsClient, urls[i]);
+    http.setTimeout(DIRECT_API_TIMEOUT);
+    int code = http.GET();
+    if (code == 200) {
+      Serial.printf("[DIRECT] %s OK\n", apiNames[i]);
+      connected = true;
+      break;
+    }
     http.end();
-    Serial.printf("Direct API failed (%d)\n", code);
+    Serial.printf("[DIRECT] %s failed (%d)\n", apiNames[i], code);
+  }
+  if (!connected) {
     directApiFailCount++;
     unsigned long backoffMs = min(120000UL, 15000UL * (1UL << min(directApiFailCount - 1, 3)));
     directApiNextRetryMs = millis() + backoffMs;
-    Serial.printf("[DIRECT] Backoff set to %lu ms (fail #%d)\n", backoffMs, directApiFailCount);
+    Serial.printf("[DIRECT] All APIs failed, backoff %lu ms (fail #%d)\n", backoffMs, directApiFailCount);
     return -1;
   }
   directApiFailCount = 0;
