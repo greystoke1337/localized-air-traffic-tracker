@@ -2,4 +2,5 @@ logs/
 .playwright-mcp/
 __pycache__/
 tft-preview-*.png
+.claude/settings.local.json
 tracker_live_fnk0103s/secrets.h
