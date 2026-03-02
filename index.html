@@ -694,6 +694,13 @@
       UAL:'UNITED AIRLINES',DAL:'DELTA AIR LINES',   ACA:'AIR CANADA',
       BAW:'BRITISH AIRWAYS',AFR:'AIR FRANCE',        DLH:'LUFTHANSA',
       HAL:'HAWAIIAN AIRLINES',
+      AIC:'AIR INDIA',     TGW:'SCOOT',           LAN:'LATAM',
+      CHH:'HAINAN AIRLINES',CXA:'XIAMEN AIR',     CEB:'CEBU PACIFIC',
+      VJC:'VIETJET',       CRK:'HONG KONG AIRLINES',TWB:'TWAY AIR',
+      ASA:'ALASKA AIRLINES',CSC:'SICHUAN AIRLINES',ACI:'AIRCALIN',
+      ALK:'SRILANKAN',     ANG:'AIR NIUGINI',     AMX:'AEROMEXICO',
+      CBJ:'CAPITAL AIRLINES',GCR:'TIANJIN AIRLINES',CAL:'CHINA AIRLINES',
+      KLM:'KLM',           MXD:'BATIK AIR',       SKP:'SKYTRANS',
       // Cargo carriers
       UPS:'UPS AIRLINES',  FDX:'FEDEX EXPRESS',  GTI:'ATLAS AIR',
       CLX:'CARGOLUX',      GEC:'LUFTHANSA CARGO', DHK:'DHL AIR',
@@ -701,6 +708,7 @@
       // Australian specialty / charter
       FDM:'RFDS',          FDQ:'RFDS QUEENSLAND', NJT:'NETJETS',
       PEL:'PEL-AIR',       CAV:'COBHAM AVIATION', HND:'HINTERLAND AVIATION',
+      FRE:'FLYPELICAN',    UTY:'ALLIANCE AIRLINES',
     };
     function airlineFromCallsign(cs) {
       if (!cs || cs === '---') return '---';
@@ -1118,14 +1126,32 @@
     // ── Airport database ─────────────────────────────────────────────
     // ICAO and IATA codes → city name. Covers major airports worldwide.
     const AIRPORT_DB = {
-      // Australia
+      // Australia — major
       YSSY:'Sydney',YSAY:'Sydney',YMLB:'Melbourne',YMML:'Melbourne',YBBN:'Brisbane',
       YPPH:'Perth',YPAD:'Adelaide',YSCB:'Canberra',YBCS:'Cairns',YBHM:'Hamilton Is',
       YBTL:'Townsville',YBAS:'Alice Springs',YBDG:'Bendigo',YDBY:'Derby',
-      YSNF:'Norfolk Is',YAGD:'Aganda',
+      YSNF:'Norfolk Is',YAGD:'Aganda',YMHB:'Hobart',YMLT:'Launceston',
       SYD:'Sydney',MEL:'Melbourne',BNE:'Brisbane',PER:'Perth',ADL:'Adelaide',
       CBR:'Canberra',CNS:'Cairns',OOL:'Gold Coast',TSV:'Townsville',DRW:'Darwin',
       HBA:'Hobart',LST:'Launceston',MKY:'Mackay',ROK:'Rockhampton',
+      // Australia — NSW regional (Sydney connections)
+      YWLM:'Newcastle',NTL:'Newcastle',
+      YBNA:'Ballina',BNK:'Ballina',
+      YCFS:'Coffs Harbour',CFS:'Coffs Harbour',
+      YPMQ:'Port Macquarie',PQQ:'Port Macquarie',
+      YSDU:'Dubbo',DBO:'Dubbo',
+      YSWG:'Wagga Wagga',WGA:'Wagga Wagga',
+      YSTW:'Tamworth',TMW:'Tamworth',
+      YARM:'Armidale',ARM:'Armidale',
+      YORG:'Orange',OAG:'Orange',
+      YMRY:'Moruya',MYA:'Moruya',
+      YMER:'Merimbula',MIM:'Merimbula',
+      YBHI:'Broken Hill',BHQ:'Broken Hill',
+      YLHI:'Lord Howe Is',LDH:'Lord Howe Is',
+      YGTH:'Griffith',GFF:'Griffith',
+      YLIS:'Lismore',LSY:'Lismore',
+      // Australia — other regional
+      YDPO:'Devonport',DPO:'Devonport',
       // Asia Pacific
       NZAA:'Auckland',NZCH:'Christchurch',NZWN:'Wellington',NZQN:'Queenstown',
       AKL:'Auckland',CHC:'Christchurch',WLG:'Wellington',ZQN:'Queenstown',
@@ -1138,7 +1164,11 @@
       VTBS:'Bangkok',VTBD:'Bangkok',BKK:'Bangkok',DMK:'Bangkok',
       WMKK:'Kuala Lumpur',KUL:'Kuala Lumpur',
       WADD:'Bali',WIII:'Jakarta',DPS:'Bali',CGK:'Jakarta',
-      RPLL:'Manila',MNL:'Manila',
+      RPLL:'Manila',MNL:'Manila',CEB:'Cebu',
+      NWWW:'Noumea',NOU:'Noumea',
+      AYPY:'Port Moresby',POM:'Port Moresby',
+      VCBI:'Colombo',CMB:'Colombo',
+      NFFN:'Nadi',NAN:'Nadi',
       VVTS:'Ho Chi Minh',VVNB:'Hanoi',SGN:'Ho Chi Minh',HAN:'Hanoi',
       ZBAA:'Beijing',ZGSZ:'Shenzhen',ZGGG:'Guangzhou',ZSPD:'Shanghai',
       ZSSS:'Shanghai',PEK:'Beijing',SZX:'Shenzhen',CAN:'Guangzhou',PVG:'Shanghai',SHA:'Shanghai',
@@ -1194,6 +1224,7 @@
       YYZ:'Toronto',YVR:'Vancouver',YUL:'Montreal',
       SBGR:'São Paulo',SBGL:'Rio de Janeiro',
       GRU:'São Paulo',GIG:'Rio de Janeiro',
+      SCEL:'Santiago',SCL:'Santiago',
       SAEZ:'Buenos Aires',EZE:'Buenos Aires',
       SKBO:'Bogotá',BOG:'Bogotá',
       SEQM:'Quito',UIO:'Quito',

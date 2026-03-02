@@ -78,7 +78,8 @@ bool     touchReady      = false;
 uint32_t lastTouchMs     = 0;
 
 // ─── Screen mode ──────────────────────────────────────
-ScreenMode currentScreen = SCREEN_FLIGHT;
+ScreenMode currentScreen  = SCREEN_NONE;
+ScreenMode previousScreen = SCREEN_NONE;
 
 // ─── Weather ──────────────────────────────────────────
 WeatherData wxData;

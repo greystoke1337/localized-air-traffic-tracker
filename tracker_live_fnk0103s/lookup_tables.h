@@ -13,6 +13,13 @@ const Airline AIRLINES[] = {
   {"NWL","NETWORK"},  {"FJI","FIJI"},       {"EVA","EVA AIR"},
   {"CCA","AIR CHINA"},{"CSN","CHINA STH"},  {"CES","CHINA EST"},
   {"HAL","HAWAIIAN"},
+  {"AIC","AIR INDIA"},{"TGW","SCOOT"},       {"LAN","LATAM"},
+  {"CHH","HAINAN"},    {"CXA","XIAMEN"},      {"CEB","CEBU PAC"},
+  {"VJC","VIETJET"},   {"CRK","HK AIRLINES"}, {"TWB","TWAY AIR"},
+  {"ASA","ALASKA"},    {"CSC","SICHUAN"},      {"ACI","AIRCALIN"},
+  {"ALK","SRILANKAN"}, {"ANG","AIR NIUGINI"}, {"CAL","CHINA AIR"},
+  {"KLM","KLM"},       {"MXD","BATIK AIR"},   {"UTY","ALLIANCE"},
+  {"AMX","AEROMEXICO"},{"FRE","FLYPELICAN"},
 };
 const int AIRLINE_COUNT = sizeof(AIRLINES) / sizeof(AIRLINES[0]);
 

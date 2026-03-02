@@ -44,6 +44,7 @@ extern uint32_t lastTouchMs;
 
 // ─── Screen ───────────────────────────────────────────
 extern ScreenMode currentScreen;
+extern ScreenMode previousScreen;
 
 // ─── Weather ──────────────────────────────────────────
 extern WeatherData wxData;
