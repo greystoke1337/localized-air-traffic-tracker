@@ -108,7 +108,7 @@ int fetchAndParseDirectAPI();
 int parsePayload(String& payload);
 int extractFlights(DynamicJsonDocument& doc);
 void fetchFlights();
-void fetchWeather();
+bool fetchWeather();
 
 // touch.ino
 void initTouch();

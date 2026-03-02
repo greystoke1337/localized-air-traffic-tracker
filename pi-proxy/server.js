@@ -620,6 +620,10 @@ app.get('/weather', async (req, res) => {
     cache.set(key, { data, timestamp: now });
     res.json(data);
   } catch (e) {
+    if (hit) {
+      addLog({ type: 'STALE', client: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?', key });
+      return res.json({ ...hit.data, stale: true });
+    }
     res.status(502).json({ error: e.message });
   }
 });

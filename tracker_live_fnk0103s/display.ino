@@ -282,13 +282,13 @@ void renderFlight(const Flight& f) {
 }
 
 void renderWeather() {
-  if (previousScreen != SCREEN_WEATHER) drawHeader();
+  bool fresh = (previousScreen != SCREEN_WEATHER);
+  if (fresh) { drawHeader(); tft.fillRect(0, CONTENT_Y, W, CONTENT_H, C_BG); }
   previousScreen = SCREEN_WEATHER;
 
   drawNavBar();
-  tft.fillRect(0, CONTENT_Y, W, CONTENT_H, C_BG);
 
-  // ── Clock ──
+  // ── Clock ── (always 5 chars — overwrite in place, no clear needed)
   time_t utcNow  = time(NULL);
   bool   ntpOk   = utcNow > 1000000000UL;
   time_t localNow = (ntpOk && wxReady && wxData.utc_offset_secs != 0)
@@ -313,6 +313,7 @@ void renderWeather() {
     snprintf(dateBuf, sizeof(dateBuf), "%s %d %s",
              dayNames[t->tm_wday], t->tm_mday, monNames[t->tm_mon]);
     int dateW = strlen(dateBuf) * 12;
+    if (!fresh) tft.fillRect(0, cy, W, 16, C_BG);
     tft.setTextSize(2);
     tft.setTextColor(C_DIM, C_BG);
     tft.setCursor((W - dateW) / 2, cy);
@@ -324,6 +325,7 @@ void renderWeather() {
   cy += 8;
 
   if (!wxReady) {
+    if (!fresh) tft.fillRect(0, cy, W, CONTENT_H - (cy - CONTENT_Y), C_BG);
     tft.setTextSize(1);
     tft.setTextColor(C_DIMMER, C_BG);
     tft.setCursor(15, cy);
@@ -340,6 +342,10 @@ void renderWeather() {
   tft.setCursor(15, cy);      tft.print("TEMPERATURE");
   tft.setCursor(W/2 + 15, cy); tft.print("FEELS LIKE");
   cy += 10;
+  if (!fresh) {
+    tft.fillRect(15, cy, W/2 - 20, 16, C_BG);
+    tft.fillRect(W/2 + 15, cy, W/2 - 20, 16, C_BG);
+  }
   tft.setTextSize(2);
   tft.setTextColor(C_AMBER, C_BG);
   snprintf(buf, sizeof(buf), "%.1f C", wxData.temp);
@@ -355,6 +361,7 @@ void renderWeather() {
   tft.setTextColor(C_DIM, C_BG);
   tft.setCursor(15, cy); tft.print("CONDITIONS");
   cy += 10;
+  if (!fresh) tft.fillRect(15, cy, W - 30, 16, C_BG);
   tft.setTextSize(2);
   tft.setTextColor(C_YELLOW, C_BG);
   tft.setCursor(15, cy); tft.print(wxData.condition);
@@ -368,6 +375,10 @@ void renderWeather() {
   tft.setCursor(15, cy);       tft.print("HUMIDITY");
   tft.setCursor(W/2 + 15, cy); tft.print("WIND");
   cy += 10;
+  if (!fresh) {
+    tft.fillRect(15, cy, W/2 - 20, 16, C_BG);
+    tft.fillRect(W/2 + 15, cy, W/2 - 20, 16, C_BG);
+  }
   tft.setTextSize(2);
   tft.setTextColor(C_AMBER, C_BG);
   snprintf(buf, sizeof(buf), "%d%%", wxData.humidity);
@@ -383,6 +394,7 @@ void renderWeather() {
   tft.setTextColor(C_DIM, C_BG);
   tft.setCursor(15, cy); tft.print("UV INDEX");
   cy += 10;
+  if (!fresh) tft.fillRect(15, cy, W - 30, 16, C_BG);
   uint16_t uvCol = wxData.uv_index < 3.0f ? C_GREEN :
                    wxData.uv_index < 6.0f ? C_YELLOW :
                    wxData.uv_index < 8.0f ? C_AMBER  : C_RED;

@@ -388,48 +388,59 @@ void fetchFlights() {
 }
 
 // ─── Fetch weather from Pi proxy (Open-Meteo) ─────────
-void fetchWeather() {
+bool fetchWeather() {
   esp_task_wdt_reset();
-  if (!wifiOk()) { Serial.println("[WX] WiFi not connected"); return; }
+  if (!wifiOk()) { Serial.println("[WX] WiFi not connected"); return false; }
   char url[160];
   snprintf(url, sizeof(url),
     "http://%s:%d/weather?lat=%.4f&lon=%.4f",
     PROXY_HOST, PROXY_PORT, HOME_LAT, HOME_LON);
-  WiFiClient tcp;
-  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 3000)) {
-    Serial.println("[WX] Connect failed");
-    return;
-  }
-  esp_task_wdt_reset();
-  HTTPClient http;
-  http.begin(tcp, url);
-  http.setTimeout(5000);
-  int code = http.GET();
-  esp_task_wdt_reset();
-  if (code != 200) {
-    Serial.printf("[WX] Fetch failed (%d)\n", code);
+
+  for (int attempt = 1; attempt <= 2; attempt++) {
+    if (attempt > 1) {
+      Serial.println("[WX] Retrying...");
+      delay(2000);
+      esp_task_wdt_reset();
+    }
+    WiFiClient tcp;
+    if (!tcp.connect(PROXY_HOST, PROXY_PORT, 3000)) {
+      Serial.printf("[WX] Connect failed (attempt %d/2)\n", attempt);
+      continue;
+    }
+    esp_task_wdt_reset();
+    HTTPClient http;
+    http.begin(tcp, url);
+    http.setTimeout(5000);
+    int code = http.GET();
+    esp_task_wdt_reset();
+    if (code != 200) {
+      Serial.printf("[WX] Fetch failed (%d) (attempt %d/2)\n", code, attempt);
+      http.end();
+      continue;
+    }
+    String body = http.getString();
     http.end();
-    return;
+    esp_task_wdt_reset();
+    StaticJsonDocument<512> doc;
+    if (deserializeJson(doc, body) != DeserializationError::Ok) {
+      Serial.printf("[WX] JSON parse error (attempt %d/2)\n", attempt);
+      continue;
+    }
+    wxData.temp            = doc["temp"]            | 0.0f;
+    wxData.feels_like      = doc["feels_like"]      | 0.0f;
+    wxData.humidity        = doc["humidity"]        | 0;
+    wxData.wind_speed      = doc["wind_speed"]      | 0.0f;
+    wxData.wind_dir        = doc["wind_dir"]        | 0;
+    wxData.uv_index        = doc["uv_index"]        | 0.0f;
+    wxData.utc_offset_secs = doc["utc_offset_secs"] | 0;
+    const char* cond = doc["condition"] | "---";
+    strlcpy(wxData.condition, cond, sizeof(wxData.condition));
+    const char* wc = doc["wind_cardinal"] | "?";
+    strlcpy(wxData.wind_cardinal, wc, sizeof(wxData.wind_cardinal));
+    wxReady = true;
+    Serial.printf("[WX] %.1f C  %s  UV %.1f\n", wxData.temp, wxData.condition, wxData.uv_index);
+    return true;
   }
-  String body = http.getString();
-  http.end();
-  esp_task_wdt_reset();
-  StaticJsonDocument<512> doc;
-  if (deserializeJson(doc, body) != DeserializationError::Ok) {
-    Serial.println("[WX] JSON parse error");
-    return;
-  }
-  wxData.temp            = doc["temp"]            | 0.0f;
-  wxData.feels_like      = doc["feels_like"]      | 0.0f;
-  wxData.humidity        = doc["humidity"]        | 0;
-  wxData.wind_speed      = doc["wind_speed"]      | 0.0f;
-  wxData.wind_dir        = doc["wind_dir"]        | 0;
-  wxData.uv_index        = doc["uv_index"]        | 0.0f;
-  wxData.utc_offset_secs = doc["utc_offset_secs"] | 0;
-  const char* cond = doc["condition"] | "---";
-  strlcpy(wxData.condition, cond, sizeof(wxData.condition));
-  const char* wc = doc["wind_cardinal"] | "?";
-  strlcpy(wxData.wind_cardinal, wc, sizeof(wxData.wind_cardinal));
-  wxReady = true;
-  Serial.printf("[WX] %.1f C  %s  UV %.1f\n", wxData.temp, wxData.condition, wxData.uv_index);
+  Serial.println("[WX] All attempts failed");
+  return false;
 }

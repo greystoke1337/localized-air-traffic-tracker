@@ -450,8 +450,8 @@ void loop() {
     }
 
     if (wxCountdown <= 0) {
-      fetchWeather();
-      wxCountdown = WX_REFRESH_SECS;
+      bool wxOk = fetchWeather();
+      wxCountdown = wxOk ? WX_REFRESH_SECS : 60;
       if (currentScreen == SCREEN_WEATHER) renderWeather();
     }
   }
