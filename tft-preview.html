@@ -95,6 +95,40 @@
     color: #7b2800;
     line-height: 1.6;
   }
+  .scenario-btn {
+    background: #181008;
+    color: #ffa200;
+    border: 1px solid #3a2000;
+    padding: 4px 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    flex: 1;
+  }
+  .scenario-btn:hover { background: #3a2000; }
+  .scenario-btn.active { background: #ffa200; color: #0a0a08; }
+  .net-row { display: flex; gap: 4px; flex-wrap: wrap; }
+  .net-btn {
+    background: #181008;
+    color: #7b2800;
+    border: 1px solid #3a2000;
+    padding: 3px 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .net-btn.ok { color: #00FF00; border-color: #004400; }
+  .net-btn.fail { color: #FF0000; border-color: #440000; }
+  .net-btn.active-src { background: #3a2000; }
+  #net-path {
+    margin-top: 4px;
+    padding: 4px 6px;
+    background: #0d0800;
+    border: 1px solid #3a2000;
+    font-size: 10px;
+    color: #7b2800;
+    font-family: 'Courier New', monospace;
+  }
 </style>
 </head>
 <body>
@@ -104,6 +138,31 @@
 </div>
 
 <div id="controls">
+  <h2>SCENARIOS</h2>
+  <div class="ctl-row">
+    <select id="ctl-scenario" style="flex:1; background:#181008; color:#ffa200; border:1px solid #3a2000; padding:4px 6px; font-family:'Courier New',monospace; font-size:13px;">
+      <option value="custom">Custom (manual controls)</option>
+      <option value="normal">Normal commercial flight</option>
+      <option value="emergency-7700">Emergency 7700 (MAYDAY)</option>
+      <option value="emergency-7600">Emergency 7600 (NORDO)</option>
+      <option value="emergency-7500">Emergency 7500 (HIJACK)</option>
+      <option value="missing-data">Missing data (no callsign/reg)</option>
+      <option value="boundary-alt">Boundary altitude (500 ft)</option>
+      <option value="max-values">Max values (extreme telemetry)</option>
+      <option value="overhead">Directly overhead (close + low)</option>
+      <option value="landing">Landing approach</option>
+    </select>
+  </div>
+
+  <h2>NETWORK SIM</h2>
+  <div class="net-row">
+    <button class="net-btn ok active-src" id="net-proxy" onclick="setNetSrc('proxy')">PROXY OK</button>
+    <button class="net-btn ok" id="net-direct" onclick="setNetSrc('direct')">DIRECT OK</button>
+    <button class="net-btn" id="net-cache" onclick="setNetSrc('cache')">CACHE ONLY</button>
+    <button class="net-btn fail" id="net-none" onclick="setNetSrc('none')">ALL DOWN</button>
+  </div>
+  <div id="net-path">PATH: proxy → OK (200) → 3.2 KB</div>
+
   <h2>FLIGHT DATA</h2>
 
   <div class="ctl-row">
@@ -639,10 +698,124 @@ function render() {
   renderFlight(f, index, count);
 }
 
+// ─── Scenario presets ──────────────────────────────────
+const SCENARIOS = {
+  'normal': {
+    callsign: 'QFA401', reg: 'VH-OQA', type: 'A380', phase: '2', squawk: '1200',
+    route: 'YSSY,YMML', alt: 35000, speed: 460, vs: 0, dist: 8.5, count: 3, index: 1
+  },
+  'emergency-7700': {
+    callsign: 'QFA32', reg: 'VH-OQA', type: 'A380', phase: '5', squawk: '7700',
+    route: 'WSSS,YSSY', alt: 4000, speed: 220, vs: -1200, dist: 3.2, count: 1, index: 1
+  },
+  'emergency-7600': {
+    callsign: 'VOZ100', reg: 'VH-YIB', type: 'B738', phase: '3', squawk: '7600',
+    route: 'YBBN,YSSY', alt: 8000, speed: 300, vs: -100, dist: 6.0, count: 1, index: 1
+  },
+  'emergency-7500': {
+    callsign: 'UAE417', reg: 'A6-EON', type: 'B77W', phase: '2', squawk: '7500',
+    route: 'OMDB,YSSY', alt: 25000, speed: 490, vs: 0, dist: 15.0, count: 1, index: 1
+  },
+  'missing-data': {
+    callsign: '', reg: '', type: 'ZZZZ', phase: '7', squawk: '1200',
+    route: ',', alt: 12000, speed: 0, vs: 0, dist: 5.0, count: 1, index: 1
+  },
+  'boundary-alt': {
+    callsign: 'JST442', reg: 'VH-VKD', type: 'A320', phase: '0', squawk: '2100',
+    route: 'YSSY,YBBN', alt: 500, speed: 150, vs: 500, dist: 1.0, count: 1, index: 1
+  },
+  'max-values': {
+    callsign: 'TEST99MAX', reg: 'N99999', type: 'B748', phase: '2', squawk: '4321',
+    route: 'KJFK,YSSY', alt: 45000, speed: 600, vs: -3000, dist: 50.0, count: 10, index: 5
+  },
+  'overhead': {
+    callsign: 'QFA1', reg: 'VH-OQB', type: 'B789', phase: '6', squawk: '3421',
+    route: 'YSSY,YMML', alt: 5000, speed: 250, vs: -200, dist: 0.5, count: 2, index: 1
+  },
+  'landing': {
+    callsign: 'VOZ812', reg: 'VH-YIA', type: 'B738', phase: '5', squawk: '4512',
+    route: 'YBBN,YSSY', alt: 1500, speed: 140, vs: -800, dist: 4.0, count: 3, index: 1
+  }
+};
+
+function applyScenario(name) {
+  const s = SCENARIOS[name];
+  if (!s) return;
+  document.getElementById('ctl-callsign').value = s.callsign;
+  document.getElementById('ctl-reg').value = s.reg;
+  document.getElementById('ctl-type').value = s.type;
+  document.getElementById('ctl-phase').value = s.phase;
+  document.getElementById('ctl-squawk').value = s.squawk;
+  document.getElementById('ctl-route').value = s.route;
+  document.getElementById('ctl-alt').value = s.alt;
+  document.getElementById('ctl-speed').value = s.speed;
+  document.getElementById('ctl-vs').value = s.vs;
+  document.getElementById('ctl-dist').value = s.dist;
+  document.getElementById('ctl-count').value = s.count;
+  document.getElementById('ctl-index').value = s.index;
+  render();
+}
+
+document.getElementById('ctl-scenario').addEventListener('change', function() {
+  if (this.value !== 'custom') applyScenario(this.value);
+});
+
+// ─── Network simulation ──────────────────────────────
+let currentNetSrc = 'proxy';
+
+function setNetSrc(src) {
+  currentNetSrc = src;
+  document.querySelectorAll('.net-btn').forEach(b => b.classList.remove('active-src'));
+  document.getElementById('net-' + src).classList.add('active-src');
+
+  const pathEl = document.getElementById('net-path');
+  const srcMap = {
+    'proxy':  'PATH: proxy → OK (200) → 3.2 KB',
+    'direct': 'PATH: proxy → FAIL → direct API → OK (200) → 12.8 KB',
+    'cache':  'PATH: proxy → FAIL → direct → FAIL → SD cache → OK',
+    'none':   'PATH: proxy → FAIL → direct → FAIL → cache → EMPTY → NO DATA'
+  };
+  pathEl.textContent = srcMap[src] || '';
+
+  // Update status bar source label
+  render();
+}
+
+// ─── Override drawStatusBar to reflect network sim ────
+const _origDrawStatusBar = drawStatusBar;
+drawStatusBar = function(flightIndex, flightCount) {
+  const y = H - FOOT_H;
+  tft.fillRect(0, y, W, FOOT_H, C_BG);
+  tft.drawFastHLine(0, y, W, C_DIMMER);
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setTextSize(1);
+  const srcLabels = { proxy: 'PROXY', direct: 'DIRECT', cache: 'CACHE', none: 'NONE' };
+  const src = srcLabels[currentNetSrc] || 'PROXY';
+  if (currentNetSrc === 'none') {
+    tft.setCursor(6, y + 6);
+    tft.print('  NO DATA — ALL SOURCES FAILED');
+  } else {
+    const buf = '  AC ' + (flightIndex+1) + '/' + flightCount + '   SRC:' + src + '   NEXT:15s   H:142000';
+    tft.setCursor(6, y + 6);
+    tft.print(buf);
+  }
+};
+
 // Attach listeners
 document.querySelectorAll('#controls select, #controls input').forEach(el => {
-  el.addEventListener('change', render);
-  el.addEventListener('input', render);
+  el.addEventListener('change', function() {
+    // Switch to custom when user manually edits controls
+    if (this.id !== 'ctl-scenario') {
+      document.getElementById('ctl-scenario').value = 'custom';
+    }
+    render();
+  });
+  el.addEventListener('input', function() {
+    if (this.id !== 'ctl-scenario') {
+      document.getElementById('ctl-scenario').value = 'custom';
+    }
+    render();
+  });
 });
 
 // Initial render

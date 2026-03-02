@@ -1,0 +1,28 @@
+{
+  "ac": [
+    {
+      "flight": "INSIDE  ",
+      "r": "VH-INS",
+      "t": "B738",
+      "lat": -33.8500,
+      "lon": 151.2200,
+      "alt_baro": 10000,
+      "gs": 300.0,
+      "baro_rate": 0,
+      "track": 180,
+      "squawk": "3500"
+    },
+    {
+      "flight": "OUTSIDE ",
+      "r": "VH-OUT",
+      "t": "A320",
+      "lat": -34.2000,
+      "lon": 151.5000,
+      "alt_baro": 10000,
+      "gs": 300.0,
+      "baro_rate": 0,
+      "track": 270,
+      "squawk": "3501"
+    }
+  ]
+}

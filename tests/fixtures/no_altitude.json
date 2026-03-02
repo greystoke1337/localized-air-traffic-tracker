@@ -1,0 +1,27 @@
+{
+  "ac": [
+    {
+      "flight": "QFA999  ",
+      "r": "VH-AAA",
+      "t": "B738",
+      "lat": -33.8600,
+      "lon": 151.2100,
+      "alt_baro": 0,
+      "gs": 150.0,
+      "baro_rate": 0,
+      "track": 90,
+      "squawk": "1200"
+    },
+    {
+      "flight": "VOZ888  ",
+      "r": "VH-BBB",
+      "t": "A320",
+      "lat": -33.8700,
+      "lon": 151.2000,
+      "gs": 5.0,
+      "baro_rate": 0,
+      "track": 0,
+      "squawk": "1200"
+    }
+  ]
+}

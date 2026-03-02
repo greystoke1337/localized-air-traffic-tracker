@@ -1,0 +1,29 @@
+{
+  "ac": [
+    {
+      "flight": "QFA32   ",
+      "r": "VH-OQA",
+      "t": "A380",
+      "lat": -33.8600,
+      "lon": 151.2100,
+      "alt_baro": 4000,
+      "gs": 220.0,
+      "baro_rate": -1200,
+      "track": 340,
+      "squawk": "7700",
+      "route": "SIN > SYD"
+    },
+    {
+      "flight": "VOZ100  ",
+      "r": "VH-YIB",
+      "t": "B738",
+      "lat": -33.8800,
+      "lon": 151.1900,
+      "alt_baro": 8000,
+      "gs": 300.0,
+      "baro_rate": -100,
+      "track": 180,
+      "squawk": "7600"
+    }
+  ]
+}
