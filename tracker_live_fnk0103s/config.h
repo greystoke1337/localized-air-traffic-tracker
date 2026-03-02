@@ -30,6 +30,16 @@
 #define C_ORANGE  0xFC60   // descending (aligned with web app #ff8844)
 #define C_GOLD    0xFE68   // approach   (aligned with web app #ffaa00)
 
+// ─── Airline brand colours (RGB565) ─────────────────
+#define AL_RED     0xF904   // #FF2222  Qantas, JAL, British
+#define AL_ROSE    0xFA31   // #FF4488  Virgin, Qatar, Malaysia
+#define AL_ORANGE  0xFBA0   // #FF7700  Jetstar, Air India
+#define AL_GOLD    0xFE80   // #FFD000  Emirates, Singapore, Lufthansa
+#define AL_GREEN   0x26E8   // #22DD44  Rex, Cathay, Eva Air
+#define AL_TEAL    0x0677   // #00CCBB  Air NZ, Fiji
+#define AL_SKY     0x455F   // #44AAFF  Korean, ANA, KLM, United
+#define AL_VIOLET  0xA33F   // #AA66FF  Thai, Hawaiian
+
 // ─── Touch ────────────────────────────────────────────
 #define TOUCH_DEBOUNCE_MS  350
 

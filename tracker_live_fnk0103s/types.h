@@ -46,7 +46,7 @@ struct WeatherData {
 };
 
 // ─── Airline lookup ───────────────────────────────────
-struct Airline { const char* prefix; const char* name; };
+struct Airline { const char* prefix; const char* name; uint16_t color; };
 
 // ─── Aircraft type lookup ─────────────────────────────
 struct AircraftType { const char* code; const char* name; };

@@ -13,7 +13,7 @@ Live: [overheadtracker.com](https://www.overheadtracker.com/)
 - Live ADS-B data via [airplanes.live](https://airplanes.live), routed through a self-hosted proxy — no API key needed
 - 15-second auto-refresh with manual override
 - Flight phase detection: LANDING, TAKEOFF, APPROACH, DESCENDING, CLIMBING, OVERHEAD (ESP32 adds CRUISING and UNKNOWN)
-- Airline name from ICAO callsign prefix (passenger, cargo, and specialty operators including RFDS, Cobham, NetJets); full aircraft type names (B789 → B787-9, A20N → A320neo, etc.)
+- Airline name from ICAO callsign prefix (46 airlines, colour-coded by brand — QANTAS red, CATHAY green, EMIRATES gold, etc.); full aircraft type names (B789 → B787-9, A20N → A320neo, etc.)
 - Emergency squawk highlighting — 7700 / 7600 / 7500 shown in red with a warning
 - Leaflet map with geofence circle, aircraft dot, and speed-scaled heading vector
 - Aircraft photo from [Planespotters.net](https://planespotters.net) by registration
@@ -49,7 +49,7 @@ Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST
 
 **Hardware:** Freenove FNK0103S, optional 3D-printed enclosure (STL/STEP in [`tracker_live_fnk0103s/enclosure/`](tracker_live_fnk0103s/enclosure/))
 
-**What it shows:** Header bar, nav bar with touch buttons (WX / GEO / CFG), flight card (callsign, airline, aircraft type, route), and a 4-column dashboard: PHASE | ALT (with vertical rate) | SPEED | DIST. Cycles through overhead flights every 8 seconds. Each of the 8 flight phases (TAKEOFF, CLIMBING, CRUISING, DESCEND, APPROACH, LANDING, OVERHEAD, UNKNOWN) has its own colour in the dashboard.
+**What it shows:** Header bar, nav bar with touch buttons (WX / GEO / CFG), flight card (callsign, airline name colour-coded by brand, aircraft type, route), and a 4-column dashboard: PHASE | ALT (with vertical rate) | SPEED | DIST. Cycles through overhead flights every 8 seconds. Each of the 8 flight phases (TAKEOFF, CLIMBING, CRUISING, DESCEND, APPROACH, LANDING, OVERHEAD, UNKNOWN) has its own colour in the dashboard.
 
 **Nav bar controls:**
 

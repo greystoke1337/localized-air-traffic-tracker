@@ -181,6 +181,7 @@
       <option value="B789" selected>B787-9</option>
       <option value="A380">A380</option>
       <option value="B77W">B777-300ER</option>
+      <option value="B748">B747-8</option>
       <option value="DH8D">Dash 8-400</option>
       <option value="C208">Cessna Caravan</option>
       <option value="ZZZZ">UNKNOWN</option>
@@ -203,6 +204,7 @@
     <label>Squawk</label>
     <select id="ctl-squawk">
       <option value="1200" selected>1200 (Normal)</option>
+      <option value="2100">2100 (VFR)</option>
       <option value="7700">7700 (MAYDAY)</option>
       <option value="7600">7600 (NORDO)</option>
       <option value="7500">7500 (HIJACK)</option>
@@ -215,6 +217,9 @@
       <option value="YSSY,YPPH">Sydney > Perth</option>
       <option value="VVTS,NZCH">Ho Chi Minh > Christchurch</option>
       <option value="KJFK,EGLL">New York > London</option>
+      <option value="WSSS,YSSY">Singapore > Sydney</option>
+      <option value="YBBN,YSSY">Brisbane > Sydney</option>
+      <option value="OMDB,YSSY">Dubai > Sydney</option>
       <option value="YSSY,">Sydney > ???</option>
       <option value=",">No route data</option>
     </select>
@@ -323,13 +328,30 @@ const tft = {
 
 // ─── Lookup tables (ported from firmware) ──────────────
 const AIRLINES = {
-  QFA:'QANTAS', VOZ:'VIRGIN', JST:'JETSTAR', RXA:'REX',
-  UAE:'EMIRATES', ETD:'ETIHAD', QTR:'QATAR', SIA:'SINGAPORE',
-  ANZ:'AIR NZ', CPA:'CATHAY', MAS:'MALAYSIA', THA:'THAI',
-  KAL:'KOREAN', JAL:'JAL', ANA:'ANA', AAL:'AMERICAN',
-  UAL:'UNITED', BAW:'BRITISH', DAL:'DELTA', AFR:'AIR FRANCE',
-  DLH:'LUFTHANSA', NWL:'NETWORK', FJI:'FIJI', EVA:'EVA AIR',
-  CCA:'AIR CHINA', CSN:'CHINA STH', CES:'CHINA EST', HAL:'HAWAIIAN'
+  QFA:{name:'QANTAS',color:'#FF2222'},       VOZ:{name:'VIRGIN',color:'#FF4488'},
+  JST:{name:'JETSTAR',color:'#FF7700'},      RXA:{name:'REX',color:'#22DD44'},
+  UAE:{name:'EMIRATES',color:'#FFD000'},      ETD:{name:'ETIHAD',color:'#FFD000'},
+  QTR:{name:'QATAR',color:'#FF4488'},        SIA:{name:'SINGAPORE',color:'#FFD000'},
+  ANZ:{name:'AIR NZ',color:'#00CCBB'},       CPA:{name:'CATHAY',color:'#22DD44'},
+  MAS:{name:'MALAYSIA',color:'#FF4488'},     THA:{name:'THAI',color:'#AA66FF'},
+  KAL:{name:'KOREAN',color:'#44AAFF'},       JAL:{name:'JAL',color:'#FF2222'},
+  ANA:{name:'ANA',color:'#44AAFF'},          AAL:{name:'AMERICAN',color:'#44AAFF'},
+  UAL:{name:'UNITED',color:'#44AAFF'},       BAW:{name:'BRITISH',color:'#FF2222'},
+  DAL:{name:'DELTA',color:'#44AAFF'},        AFR:{name:'AIR FRANCE',color:'#44AAFF'},
+  DLH:{name:'LUFTHANSA',color:'#FFD000'},    NWL:{name:'NETWORK',color:'#FFA200'},
+  FJI:{name:'FIJI',color:'#00CCBB'},         EVA:{name:'EVA AIR',color:'#22DD44'},
+  CCA:{name:'AIR CHINA',color:'#FF2222'},    CSN:{name:'CHINA STH',color:'#44AAFF'},
+  CES:{name:'CHINA EST',color:'#44AAFF'},    HAL:{name:'HAWAIIAN',color:'#AA66FF'},
+  AIC:{name:'AIR INDIA',color:'#FF7700'},    TGW:{name:'SCOOT',color:'#FFD000'},
+  LAN:{name:'LATAM',color:'#44AAFF'},        CHH:{name:'HAINAN',color:'#FF2222'},
+  CXA:{name:'XIAMEN',color:'#44AAFF'},       CEB:{name:'CEBU PAC',color:'#FFD000'},
+  VJC:{name:'VIETJET',color:'#FF2222'},      CRK:{name:'HK AIRLINES',color:'#FF4488'},
+  TWB:{name:'TWAY AIR',color:'#FF4488'},     ASA:{name:'ALASKA',color:'#44AAFF'},
+  CSC:{name:'SICHUAN',color:'#44AAFF'},      ACI:{name:'AIRCALIN',color:'#44AAFF'},
+  ALK:{name:'SRILANKAN',color:'#22DD44'},    ANG:{name:'AIR NIUGINI',color:'#00CCBB'},
+  CAL:{name:'CHINA AIR',color:'#FF4488'},    KLM:{name:'KLM',color:'#44AAFF'},
+  MXD:{name:'BATIK AIR',color:'#FF2222'},    UTY:{name:'ALLIANCE',color:'#00CCBB'},
+  AMX:{name:'AEROMEXICO',color:'#44AAFF'},   FRE:{name:'FLYPELICAN',color:'#FFA200'},
 };
 
 const AIRCRAFT_TYPES = {
@@ -370,9 +392,9 @@ const AIRPORTS = {
 };
 
 function getAirline(cs) {
-  if (!cs) return '';
+  if (!cs) return null;
   const prefix = cs.substring(0, 3);
-  return AIRLINES[prefix] || '';
+  return AIRLINES[prefix] || null;
 }
 
 function getAircraftTypeName(code) {
@@ -423,7 +445,7 @@ function drawNavBar(flightIndex, flightCount) {
   tft.drawFastHLine(0, NAV_Y, W, C_DIMMER);
 
   // Flight index indicator
-  if (flightCount > 0) {
+  if (flightCount > 1) {
     const navBuf = '< ' + (flightIndex + 1) + '/' + flightCount + ' >';
     tft.setTextSize(2);
     tft.setTextColor(C_DIM, C_BG);
@@ -433,7 +455,7 @@ function drawNavBar(flightIndex, flightCount) {
 
   // WX button
   tft.fillRect(WX_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, C_DIMMER);
-  tft.setTextColor(C_DIM, C_DIMMER);
+  tft.setTextColor(C_AMBER, C_DIMMER);
   tft.setTextSize(2);
   tft.setCursor(WX_BTN_X1 + (NAV_BTN_W - 24) / 2, NAV_Y + 10);
   tft.print('WX');
@@ -442,13 +464,13 @@ function drawNavBar(flightIndex, flightCount) {
   const geoLabel = '10KM';
   const geoW = geoLabel.length * 12;
   tft.fillRect(GEO_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, C_DIMMER);
-  tft.setTextColor(C_DIM, C_DIMMER);
+  tft.setTextColor(C_AMBER, C_DIMMER);
   tft.setCursor(GEO_BTN_X1 + (NAV_BTN_W - geoW) / 2, NAV_Y + 10);
   tft.print(geoLabel);
 
   // CFG button
   tft.fillRect(CFG_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, C_DIMMER);
-  tft.setTextColor(C_DIM, C_DIMMER);
+  tft.setTextColor(C_AMBER, C_DIMMER);
   const cfgLabel = 'CFG';
   const cfgW = cfgLabel.length * 12;
   tft.setCursor(CFG_BTN_X1 + (NAV_BTN_W - cfgW) / 2, NAV_Y + 10);
@@ -508,9 +530,9 @@ function renderFlight(f, flightIndex, flightCount) {
   if (!hasEmergency) {
     const al = getAirline(f.callsign);
     tft.setTextSize(2);
-    tft.setTextColor(al ? C_AMBER : C_DIM, C_BG);
+    tft.setTextColor(al ? al.color : C_DIM, C_BG);
     tft.setCursor(x, y);
-    tft.print(al || 'UNKNOWN AIRLINE');
+    tft.print(al ? al.name : 'UNKNOWN AIRLINE');
     y += 20;                               // FIXED: was 30
   } else {
     y += 8;

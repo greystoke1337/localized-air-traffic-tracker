@@ -52,7 +52,7 @@ FlightRadar24 and similar apps show the whole world — you have to go find your
 |---|---|
 | **Location** | Worldwide search, persisted in `localStorage`, shareable via `?location=` URL param |
 | **Filtering** | Geofence radius slider (2–20 km), altitude floor slider (200–5,000 ft) |
-| **Flight data** | Callsign, airline name (from ICAO prefix), full aircraft type name, altitude (FL or QNH ft), ground speed, heading, vertical rate |
+| **Flight data** | Callsign, airline name colour-coded by brand (from ICAO prefix, 46 airlines across 8 brand colours), full aircraft type name, altitude (FL or QNH ft), ground speed, heading, vertical rate |
 | **Flight phase** | TAKING OFF / CLIMBING / DESCENDING / APPROACH / LANDING / OVERHEAD — 6 phases derived from altitude + vertical speed (ESP32 adds CRUISING and UNKNOWN for 8 total) |
 | **Map** | Leaflet with dark CartoDB tiles, geofence circle, aircraft dot, dashed line to location, speed-scaled heading vector with chevron |
 | **Photo** | Aircraft registration photo from Planespotters.net, with halftone overlay |
@@ -65,7 +65,7 @@ FlightRadar24 and similar apps show the whole world — you have to go find your
 | Category | Features |
 |---|---|
 | **Config** | Captive portal on first boot — set Wi-Fi SSID/password and location; geocodes via Nominatim and stores to NVS |
-| **Display** | Structured layout: header, nav bar, flight card, 4-column dashboard (PHASE / ALT+v/rate / SPEED / DIST), footer. 480×320 TFT at 15s refresh / 8s cycle. Route display (departure > arrival) with city names from built-in airport lookup table. 8 flight phases (TAKEOFF / CLIMBING / CRUISING / DESCEND / APPROACH / LANDING / OVERHEAD / UNKNOWN), each with a distinct color applied to the phase dashboard column. Emergency squawk banners (7700/7600/7500) trigger a flashing red alert with compact layout. |
+| **Display** | Structured layout: header, nav bar, flight card, 4-column dashboard (PHASE / ALT+v/rate / SPEED / DIST), footer. 480×320 TFT at 15s refresh / 8s cycle. Airline names colour-coded by brand (8 colours: red, rose, orange, gold, green, teal, sky blue, violet). Route display (departure > arrival) with city names from built-in airport lookup table. 8 flight phases (TAKEOFF / CLIMBING / CRUISING / DESCEND / APPROACH / LANDING / OVERHEAD / UNKNOWN), each with a distinct color applied to the phase dashboard column. Emergency squawk banners (7700/7600/7500) trigger a flashing red alert with compact layout. |
 | **Touch** | Nav bar with three touch buttons: WX (weather screen), GEO (cycles geofence: 5 km / 10 km / 20 km), CFG (opens captive portal) |
 | **Weather** | Temperature, humidity, wind speed/direction, conditions — accessed via WX button; data from Open-Meteo via Pi proxy, refreshed every 15 minutes |
 | **Preview** | `tft-preview.html` — browser-based canvas simulator that mirrors firmware rendering; verify layout changes before flashing |

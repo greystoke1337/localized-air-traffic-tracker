@@ -142,11 +142,11 @@ void renderFlight(const Flight& f) {
   y += csSize * 8;
   if (!hasEmergency) {
     if (!full) tft.fillRect(x, y, W - x, 20, C_BG);
-    const char* al = getAirline(f.callsign);
+    const Airline* al = getAirline(f.callsign);
     tft.setTextSize(2);
-    tft.setTextColor(al[0] ? C_AMBER : C_DIM, C_BG);
+    tft.setTextColor(al ? al->color : C_DIM, C_BG);
     tft.setCursor(x, y);
-    tft.print(al[0] ? al : "UNKNOWN AIRLINE");
+    tft.print(al ? al->name : "UNKNOWN AIRLINE");
     y += 20;
   } else {
     y += 8;

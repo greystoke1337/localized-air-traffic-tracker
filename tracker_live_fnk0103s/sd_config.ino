@@ -73,11 +73,12 @@ void logFlight(const Flight& f) {
   }
 
   char row[128];
+  const Airline* al = getAirline(f.callsign);
   snprintf(row, sizeof(row), "%s,%s,%s,%s,%s,%s,%.1f",
     f.callsign,
     f.reg,
     f.type,
-    getAirline(f.callsign),
+    al ? al->name : "",
     f.route[0] ? f.route : "",
     statusLabel(f.status),
     f.dist

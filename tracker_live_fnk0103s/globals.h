@@ -82,7 +82,7 @@ extern unsigned long lastDiagMs;
 bool wifiOk();
 void logTs(const char* tag, const char* fmt, ...);
 bool alreadyLogged(const char* cs);
-const char* getAirline(const char* cs);
+const Airline* getAirline(const char* cs);
 const char* getAircraftTypeName(const char* code);
 FlightStatus deriveStatus(int alt, int vs, float dist);
 const char* statusLabel(FlightStatus s);

@@ -22,10 +22,10 @@ bool alreadyLogged(const char* cs) {
   return false;
 }
 
-const char* getAirline(const char* cs) {
+const Airline* getAirline(const char* cs) {
   for (int i = 0; i < AIRLINE_COUNT; i++)
-    if (strncmp(cs, AIRLINES[i].prefix, 3) == 0) return AIRLINES[i].name;
-  return "";
+    if (strncmp(cs, AIRLINES[i].prefix, 3) == 0) return &AIRLINES[i];
+  return nullptr;
 }
 
 const char* getAircraftTypeName(const char* code) {
