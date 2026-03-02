@@ -101,14 +101,11 @@ void renderMessage(const char* line1, const char* line2) {
 }
 
 void renderFlight(const Flight& f) {
-  bool full = (previousScreen != SCREEN_FLIGHT);
+  if (previousScreen != SCREEN_FLIGHT) drawHeader();
   previousScreen = SCREEN_FLIGHT;
 
-  if (full) {
-    drawHeader();
-    drawNavBar();
-    tft.fillRect(0, CONTENT_Y, W, CONTENT_H, C_BG);
-  }
+  drawNavBar();
+  tft.fillRect(0, CONTENT_Y, W, CONTENT_H, C_BG);
 
   // Emergency squawk banner
   bool hasEmergency = strcmp(f.squawk,"7700")==0 || strcmp(f.squawk,"7600")==0 || strcmp(f.squawk,"7500")==0;
@@ -124,8 +121,6 @@ void renderFlight(const Flight& f) {
     tft.setCursor((W - lblW) / 2, CONTENT_Y + 4);
     tft.print(emergLabel);
     emergOffset = 24;
-  } else if (!full) {
-    tft.fillRect(0, CONTENT_Y, W, 24, C_BG);
   }
 
   int x = 15;
@@ -133,7 +128,6 @@ void renderFlight(const Flight& f) {
 
   // 1. PRIMARY IDENTITY
   int csSize = hasEmergency ? 3 : 4;
-  if (!full) tft.fillRect(x, y, W - x, csSize * 8, C_BG);
   tft.setTextSize(csSize);
   tft.setTextColor(C_AMBER, C_BG);
   tft.setCursor(x, y);
@@ -141,7 +135,6 @@ void renderFlight(const Flight& f) {
 
   y += csSize * 8;
   if (!hasEmergency) {
-    if (!full) tft.fillRect(x, y, W - x, 20, C_BG);
     const Airline* al = getAirline(f.callsign);
     tft.setTextSize(2);
     tft.setTextColor(al ? al->color : C_DIM, C_BG);
@@ -162,7 +155,6 @@ void renderFlight(const Flight& f) {
   tft.setCursor(W/2 + 20, y);
   tft.print("REGISTRATION");
   y += 10;
-  if (!full) tft.fillRect(x, y, W - x, 16, C_BG);
   tft.setTextSize(2);
   tft.setTextColor(C_CYAN, C_BG);
   tft.setCursor(x, y);
@@ -180,7 +172,6 @@ void renderFlight(const Flight& f) {
   tft.setCursor(x, y);
   tft.print("ROUTE");
   y += 10;
-  if (!full) tft.fillRect(x, y, W - x, 16, C_BG);
   if (f.route[0]) {
     tft.setTextSize(2);
     tft.setTextColor(C_YELLOW, C_BG);
@@ -195,7 +186,6 @@ void renderFlight(const Flight& f) {
 
   // 4. DASHBOARD: PHASE | ALT | SPEED | DIST
   int dashY = H - FOOT_H - 75;
-  if (!full) tft.fillRect(0, dashY, W, 75, C_BG);
   tft.drawFastHLine(0, dashY, W, C_DIM);
 
   // Phase Block (0-120)
@@ -292,14 +282,11 @@ void renderFlight(const Flight& f) {
 }
 
 void renderWeather() {
-  bool full = (previousScreen != SCREEN_WEATHER);
+  if (previousScreen != SCREEN_WEATHER) drawHeader();
   previousScreen = SCREEN_WEATHER;
 
-  if (full) {
-    drawHeader();
-    drawNavBar();
-    tft.fillRect(0, CONTENT_Y, W, CONTENT_H, C_BG);
-  }
+  drawNavBar();
+  tft.fillRect(0, CONTENT_Y, W, CONTENT_H, C_BG);
 
   // ── Clock ──
   time_t utcNow  = time(NULL);
@@ -320,7 +307,6 @@ void renderWeather() {
 
   cy += 52;
   if (ntpOk) {
-    if (!full) tft.fillRect(0, cy, W, 16, C_BG);
     const char* dayNames[] = {"SUN","MON","TUE","WED","THU","FRI","SAT"};
     const char* monNames[] = {"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"};
     char dateBuf[20];
@@ -354,7 +340,6 @@ void renderWeather() {
   tft.setCursor(15, cy);      tft.print("TEMPERATURE");
   tft.setCursor(W/2 + 15, cy); tft.print("FEELS LIKE");
   cy += 10;
-  if (!full) tft.fillRect(15, cy, W - 30, 16, C_BG);
   tft.setTextSize(2);
   tft.setTextColor(C_AMBER, C_BG);
   snprintf(buf, sizeof(buf), "%.1f C", wxData.temp);
@@ -370,7 +355,6 @@ void renderWeather() {
   tft.setTextColor(C_DIM, C_BG);
   tft.setCursor(15, cy); tft.print("CONDITIONS");
   cy += 10;
-  if (!full) tft.fillRect(15, cy, W - 30, 16, C_BG);
   tft.setTextSize(2);
   tft.setTextColor(C_YELLOW, C_BG);
   tft.setCursor(15, cy); tft.print(wxData.condition);
@@ -384,12 +368,10 @@ void renderWeather() {
   tft.setCursor(15, cy);       tft.print("HUMIDITY");
   tft.setCursor(W/2 + 15, cy); tft.print("WIND");
   cy += 10;
-  if (!full) tft.fillRect(15, cy, W - 30, 16, C_BG);
   tft.setTextSize(2);
   tft.setTextColor(C_AMBER, C_BG);
   snprintf(buf, sizeof(buf), "%d%%", wxData.humidity);
   tft.setCursor(15, cy); tft.print(buf);
-  tft.setTextColor(C_AMBER, C_BG);
   snprintf(buf, sizeof(buf), "%.0f KM/H %s", wxData.wind_speed, wxData.wind_cardinal);
   tft.setCursor(W/2 + 15, cy); tft.print(buf);
   cy += 20;
@@ -401,7 +383,6 @@ void renderWeather() {
   tft.setTextColor(C_DIM, C_BG);
   tft.setCursor(15, cy); tft.print("UV INDEX");
   cy += 10;
-  if (!full) tft.fillRect(15, cy, W - 30, 16, C_BG);
   uint16_t uvCol = wxData.uv_index < 3.0f ? C_GREEN :
                    wxData.uv_index < 6.0f ? C_YELLOW :
                    wxData.uv_index < 8.0f ? C_AMBER  : C_RED;

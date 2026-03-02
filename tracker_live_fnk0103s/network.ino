@@ -65,6 +65,7 @@ String fetchFromProxy() {
     Serial.printf("[PROXY] Connect failed (%lu ms)\n", millis() - t0);
     return "";
   }
+  esp_task_wdt_reset();
   char url[160];
   snprintf(url, sizeof(url),
     "http://%s:%d/flights?lat=%.4f&lon=%.4f&radius=%d",
@@ -73,9 +74,11 @@ String fetchFromProxy() {
   http.begin(tcp, url);
   http.setTimeout(5000);
   int code = http.GET();
+  esp_task_wdt_reset();
   if (code == 200) {
     String p = http.getString();
     http.end();
+    esp_task_wdt_reset();
     Serial.printf("[PROXY] OK %d bytes (%lu ms)\n", p.length(), millis() - t0);
     return p;
   }
@@ -397,10 +400,12 @@ void fetchWeather() {
     Serial.println("[WX] Connect failed");
     return;
   }
+  esp_task_wdt_reset();
   HTTPClient http;
   http.begin(tcp, url);
   http.setTimeout(5000);
   int code = http.GET();
+  esp_task_wdt_reset();
   if (code != 200) {
     Serial.printf("[WX] Fetch failed (%d)\n", code);
     http.end();
@@ -408,6 +413,7 @@ void fetchWeather() {
   }
   String body = http.getString();
   http.end();
+  esp_task_wdt_reset();
   StaticJsonDocument<512> doc;
   if (deserializeJson(doc, body) != DeserializationError::Ok) {
     Serial.println("[WX] JSON parse error");

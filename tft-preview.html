@@ -151,6 +151,10 @@
       <option value="max-values">Max values (extreme telemetry)</option>
       <option value="overhead">Directly overhead (close + low)</option>
       <option value="landing">Landing approach</option>
+      <option value="clear-skies">Clear skies (0 flights)</option>
+      <option value="weather-sunny">Weather: sunny day</option>
+      <option value="weather-storm">Weather: stormy</option>
+      <option value="weather-loading">Weather: loading...</option>
     </select>
   </div>
 
@@ -162,6 +166,15 @@
     <button class="net-btn fail" id="net-none" onclick="setNetSrc('none')">ALL DOWN</button>
   </div>
   <div id="net-path">PATH: proxy → OK (200) → 3.2 KB</div>
+
+  <h2>SCREEN</h2>
+  <div class="ctl-row">
+    <label>Mode</label>
+    <select id="ctl-screen">
+      <option value="flight" selected>Flight</option>
+      <option value="weather">Weather</option>
+    </select>
+  </div>
 
   <h2>FLIGHT DATA</h2>
 
@@ -252,13 +265,68 @@
 
   <div class="ctl-row">
     <label>Flights</label>
-    <input type="range" id="ctl-count" min="1" max="10" step="1" value="3">
+    <input type="range" id="ctl-count" min="0" max="10" step="1" value="3">
     <span class="val" id="val-count">3</span>
   </div>
   <div class="ctl-row">
     <label>Flight #</label>
     <input type="range" id="ctl-index" min="1" max="10" step="1" value="1">
     <span class="val" id="val-index">1</span>
+  </div>
+
+  <h2>WEATHER DATA</h2>
+
+  <div class="ctl-row">
+    <label>Temperature</label>
+    <input type="range" id="ctl-temp" min="-10" max="45" step="0.5" value="22.5">
+    <span class="val" id="val-temp">22.5 C</span>
+  </div>
+  <div class="ctl-row">
+    <label>Feels Like</label>
+    <input type="range" id="ctl-feels" min="-15" max="50" step="0.5" value="21.0">
+    <span class="val" id="val-feels">21.0 C</span>
+  </div>
+  <div class="ctl-row">
+    <label>Condition</label>
+    <select id="ctl-condition">
+      <option value="CLEAR SKY" selected>CLEAR SKY</option>
+      <option value="FEW CLOUDS">FEW CLOUDS</option>
+      <option value="SCATTERED CLOUDS">SCATTERED CLOUDS</option>
+      <option value="OVERCAST">OVERCAST</option>
+      <option value="LIGHT RAIN">LIGHT RAIN</option>
+      <option value="HEAVY RAIN">HEAVY RAIN</option>
+      <option value="THUNDERSTORM">THUNDERSTORM</option>
+      <option value="FOG">FOG</option>
+      <option value="SNOW">SNOW</option>
+    </select>
+  </div>
+  <div class="ctl-row">
+    <label>Humidity</label>
+    <input type="range" id="ctl-humidity" min="0" max="100" step="1" value="55">
+    <span class="val" id="val-humidity">55%</span>
+  </div>
+  <div class="ctl-row">
+    <label>Wind Speed</label>
+    <input type="range" id="ctl-wind-speed" min="0" max="120" step="1" value="15">
+    <span class="val" id="val-wind-speed">15 KM/H</span>
+  </div>
+  <div class="ctl-row">
+    <label>Wind Dir</label>
+    <select id="ctl-wind-dir">
+      <option value="N">N</option>
+      <option value="NE">NE</option>
+      <option value="E">E</option>
+      <option value="SE" selected>SE</option>
+      <option value="S">S</option>
+      <option value="SW">SW</option>
+      <option value="W">W</option>
+      <option value="NW">NW</option>
+    </select>
+  </div>
+  <div class="ctl-row">
+    <label>UV Index</label>
+    <input type="range" id="ctl-uv" min="0" max="12" step="0.1" value="5.2">
+    <span class="val" id="val-uv">5.2</span>
   </div>
 
   <div id="info">
@@ -421,7 +489,7 @@ function formatAlt(alt) {
 }
 
 const STATUS_LABELS = ['TAKEOFF','CLIMBING','CRUISING','DESCEND','APPROACH','LANDING','OVERHEAD','UNKNOWN'];
-const STATUS_COLORS = [C_GREEN, C_GREEN, C_AMBER, C_ORANGE, C_GOLD, C_RED, C_CYAN, C_DIM];
+const STATUS_COLORS = [C_GREEN, C_CYAN, C_AMBER, C_ORANGE, C_GOLD, C_RED, C_YELLOW, C_DIM];
 
 function statusLabel(s) { return STATUS_LABELS[s] || 'UNKNOWN'; }
 function statusColor(s) { return STATUS_COLORS[s] || C_DIM; }
@@ -440,12 +508,14 @@ function drawHeader() {
   tft.print(loc);
 }
 
+let currentScreenMode = 'flight';
+
 function drawNavBar(flightIndex, flightCount) {
   tft.fillRect(0, NAV_Y, W, NAV_H, C_BG);
   tft.drawFastHLine(0, NAV_Y, W, C_DIMMER);
 
   // Flight index indicator
-  if (flightCount > 1) {
+  if (currentScreenMode === 'flight' && flightCount > 1) {
     const navBuf = '< ' + (flightIndex + 1) + '/' + flightCount + ' >';
     tft.setTextSize(2);
     tft.setTextColor(C_DIM, C_BG);
@@ -453,9 +523,11 @@ function drawNavBar(flightIndex, flightCount) {
     tft.print(navBuf);
   }
 
-  // WX button
-  tft.fillRect(WX_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, C_DIMMER);
-  tft.setTextColor(C_AMBER, C_DIMMER);
+  // WX button (highlighted when on weather screen)
+  const wxBg = currentScreenMode === 'weather' ? C_CYAN : C_DIMMER;
+  const wxFg = currentScreenMode === 'weather' ? C_BG   : C_AMBER;
+  tft.fillRect(WX_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, wxBg);
+  tft.setTextColor(wxFg, wxBg);
   tft.setTextSize(2);
   tft.setCursor(WX_BTN_X1 + (NAV_BTN_W - 24) / 2, NAV_Y + 10);
   tft.print('WX');
@@ -681,6 +753,124 @@ function renderFlight(f, flightIndex, flightCount) {
   // ctx.strokeRect(0, dashY, W, 75);
 }
 
+function renderWeather(wx) {
+  tft.fillRect(0, 0, W, H, C_BG);
+  drawHeader();
+  drawNavBar(0, 0);
+  tft.fillRect(0, CONTENT_Y, W, H - HDR_H - NAV_H - FOOT_H, C_BG);
+
+  // Clock
+  let cy = CONTENT_Y + 12;
+  const now = new Date();
+  const timeBuf = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  tft.setTextSize(6);
+  tft.setTextColor(C_AMBER, C_BG);
+  tft.setCursor(Math.floor((W - 180) / 2), cy);
+  tft.print(timeBuf);
+
+  cy += 52;
+  const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const mons = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const dateBuf = days[now.getDay()] + ' ' + now.getDate() + ' ' + mons[now.getMonth()];
+  const dateW = dateBuf.length * 12;
+  tft.setTextSize(2);
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setCursor(Math.floor((W - dateW) / 2), cy);
+  tft.print(dateBuf);
+  cy += 22;
+
+  tft.drawFastHLine(10, cy, W - 20, C_DIMMER);
+  cy += 8;
+
+  if (!wx.ready) {
+    tft.setTextSize(1);
+    tft.setTextColor(C_DIMMER, C_BG);
+    tft.setCursor(15, cy);
+    tft.print('WEATHER LOADING...');
+    drawStatusBar(0, 0);
+    return;
+  }
+
+  // Row 1: Temperature | Feels Like
+  tft.setTextSize(1);
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setCursor(15, cy);       tft.print('TEMPERATURE');
+  tft.setCursor(W/2 + 15, cy); tft.print('FEELS LIKE');
+  cy += 10;
+  tft.setTextSize(2);
+  tft.setTextColor(C_AMBER, C_BG);
+  tft.setCursor(15, cy);       tft.print(wx.temp.toFixed(1) + ' C');
+  tft.setCursor(W/2 + 15, cy); tft.print(wx.feels_like.toFixed(1) + ' C');
+  cy += 20;
+
+  tft.drawFastHLine(10, cy, W - 20, C_DIMMER); cy += 6;
+
+  // Row 2: Condition
+  tft.setTextSize(1);
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setCursor(15, cy); tft.print('CONDITIONS');
+  cy += 10;
+  tft.setTextSize(2);
+  tft.setTextColor(C_YELLOW, C_BG);
+  tft.setCursor(15, cy); tft.print(wx.condition);
+  cy += 20;
+
+  tft.drawFastHLine(10, cy, W - 20, C_DIMMER); cy += 6;
+
+  // Row 3: Humidity | Wind
+  tft.setTextSize(1);
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setCursor(15, cy);       tft.print('HUMIDITY');
+  tft.setCursor(W/2 + 15, cy); tft.print('WIND');
+  cy += 10;
+  tft.setTextSize(2);
+  tft.setTextColor(C_AMBER, C_BG);
+  tft.setCursor(15, cy);       tft.print(wx.humidity + '%');
+  tft.setCursor(W/2 + 15, cy); tft.print(wx.wind_speed + ' KM/H ' + wx.wind_cardinal);
+  cy += 20;
+
+  tft.drawFastHLine(10, cy, W - 20, C_DIMMER); cy += 6;
+
+  // Row 4: UV Index
+  tft.setTextSize(1);
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setCursor(15, cy); tft.print('UV INDEX');
+  cy += 10;
+  const uvCol = wx.uv_index < 3.0 ? C_GREEN :
+                wx.uv_index < 6.0 ? C_YELLOW :
+                wx.uv_index < 8.0 ? C_AMBER  : C_RED;
+  tft.setTextSize(2);
+  tft.setTextColor(uvCol, C_BG);
+  tft.setCursor(15, cy); tft.print(wx.uv_index.toFixed(1));
+
+  drawStatusBar(0, 0);
+}
+
+function renderClearSkies() {
+  tft.fillRect(0, 0, W, H, C_BG);
+  drawHeader();
+  drawNavBar(0, 0);
+  tft.fillRect(0, CONTENT_Y, W, H - HDR_H - NAV_H - FOOT_H, C_BG);
+
+  tft.setTextColor(C_AMBER, C_BG);
+  tft.setTextSize(2);
+  tft.setCursor(16, Math.floor(H/2) - 16);
+  tft.print('CLEAR SKIES');
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setTextSize(1);
+  tft.setCursor(16, Math.floor(H/2) + 12);
+  tft.print('No aircraft in geofence');
+
+  // Clear skies status bar
+  const y = H - FOOT_H;
+  tft.fillRect(0, y, W, FOOT_H, C_BG);
+  tft.drawFastHLine(0, y, W, C_DIMMER);
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setTextSize(1);
+  tft.setCursor(6, y + 6);
+  tft.print('  CLEAR SKIES   SRC:PROXY   NEXT:15s   H:142000');
+}
+
 // ─── Controls wiring ───────────────────────────────────
 
 function readControls() {
@@ -690,13 +880,20 @@ function readControls() {
   const vs = parseInt(document.getElementById('ctl-vs').value);
   const dist = parseFloat(document.getElementById('ctl-dist').value);
 
-  // Update value labels
+  // Update flight value labels
   document.getElementById('val-alt').textContent = formatAlt(alt);
   document.getElementById('val-speed').textContent = speed + ' KT';
   document.getElementById('val-vs').textContent = (vs > 0 ? '+' : '') + vs + ' FPM';
   document.getElementById('val-dist').textContent = dist.toFixed(1) + ' KM';
   document.getElementById('val-count').textContent = document.getElementById('ctl-count').value;
   document.getElementById('val-index').textContent = document.getElementById('ctl-index').value;
+
+  // Update weather value labels
+  document.getElementById('val-temp').textContent = parseFloat(document.getElementById('ctl-temp').value).toFixed(1) + ' C';
+  document.getElementById('val-feels').textContent = parseFloat(document.getElementById('ctl-feels').value).toFixed(1) + ' C';
+  document.getElementById('val-humidity').textContent = document.getElementById('ctl-humidity').value + '%';
+  document.getElementById('val-wind-speed').textContent = document.getElementById('ctl-wind-speed').value + ' KM/H';
+  document.getElementById('val-uv').textContent = parseFloat(document.getElementById('ctl-uv').value).toFixed(1);
 
   return {
     callsign: document.getElementById('ctl-callsign').value.toUpperCase(),
@@ -713,11 +910,34 @@ function readControls() {
   };
 }
 
+function readWeatherControls() {
+  return {
+    ready: true,
+    temp: parseFloat(document.getElementById('ctl-temp').value),
+    feels_like: parseFloat(document.getElementById('ctl-feels').value),
+    condition: document.getElementById('ctl-condition').value,
+    humidity: parseInt(document.getElementById('ctl-humidity').value),
+    wind_speed: parseInt(document.getElementById('ctl-wind-speed').value),
+    wind_cardinal: document.getElementById('ctl-wind-dir').value,
+    uv_index: parseFloat(document.getElementById('ctl-uv').value)
+  };
+}
+
 function render() {
-  const f = readControls();
+  currentScreenMode = document.getElementById('ctl-screen').value;
   const count = parseInt(document.getElementById('ctl-count').value);
-  const index = parseInt(document.getElementById('ctl-index').value) - 1;
-  renderFlight(f, index, count);
+
+  if (currentScreenMode === 'weather') {
+    const wx = readWeatherControls();
+    renderWeather(wx);
+  } else if (count === 0) {
+    readControls();
+    renderClearSkies();
+  } else {
+    const f = readControls();
+    const index = parseInt(document.getElementById('ctl-index').value) - 1;
+    renderFlight(f, index, count);
+  }
 }
 
 // ─── Scenario presets ──────────────────────────────────
@@ -757,24 +977,62 @@ const SCENARIOS = {
   'landing': {
     callsign: 'VOZ812', reg: 'VH-YIA', type: 'B738', phase: '5', squawk: '4512',
     route: 'YBBN,YSSY', alt: 1500, speed: 140, vs: -800, dist: 4.0, count: 3, index: 1
+  },
+  'clear-skies': {
+    callsign: '', reg: '', type: 'B738', phase: '2', squawk: '1200',
+    route: ',', alt: 0, speed: 0, vs: 0, dist: 0, count: 0, index: 1,
+    screen: 'flight'
+  },
+  'weather-sunny': {
+    screen: 'weather',
+    wx: { temp: 26.5, feels_like: 28.0, condition: 'CLEAR SKY', humidity: 45, wind_speed: 12, wind_dir: 'NE', uv: 8.5 }
+  },
+  'weather-storm': {
+    screen: 'weather',
+    wx: { temp: 14.0, feels_like: 10.5, condition: 'THUNDERSTORM', humidity: 92, wind_speed: 65, wind_dir: 'SW', uv: 0.5 }
+  },
+  'weather-loading': {
+    screen: 'weather',
+    wx: { ready: false }
   }
 };
 
 function applyScenario(name) {
   const s = SCENARIOS[name];
   if (!s) return;
-  document.getElementById('ctl-callsign').value = s.callsign;
-  document.getElementById('ctl-reg').value = s.reg;
-  document.getElementById('ctl-type').value = s.type;
-  document.getElementById('ctl-phase').value = s.phase;
-  document.getElementById('ctl-squawk').value = s.squawk;
-  document.getElementById('ctl-route').value = s.route;
-  document.getElementById('ctl-alt').value = s.alt;
-  document.getElementById('ctl-speed').value = s.speed;
-  document.getElementById('ctl-vs').value = s.vs;
-  document.getElementById('ctl-dist').value = s.dist;
-  document.getElementById('ctl-count').value = s.count;
-  document.getElementById('ctl-index').value = s.index;
+
+  if (s.screen === 'weather') {
+    document.getElementById('ctl-screen').value = 'weather';
+    if (s.wx && !s.wx.ready && s.wx.ready !== undefined) {
+      // weather-loading: just render with ready=false
+      currentScreenMode = 'weather';
+      renderWeather({ ready: false });
+      return;
+    }
+    if (s.wx) {
+      document.getElementById('ctl-temp').value = s.wx.temp;
+      document.getElementById('ctl-feels').value = s.wx.feels_like;
+      document.getElementById('ctl-condition').value = s.wx.condition;
+      document.getElementById('ctl-humidity').value = s.wx.humidity;
+      document.getElementById('ctl-wind-speed').value = s.wx.wind_speed;
+      document.getElementById('ctl-wind-dir').value = s.wx.wind_dir;
+      document.getElementById('ctl-uv').value = s.wx.uv;
+    }
+  } else {
+    document.getElementById('ctl-screen').value = s.screen || 'flight';
+    document.getElementById('ctl-callsign').value = s.callsign;
+    document.getElementById('ctl-reg').value = s.reg;
+    document.getElementById('ctl-type').value = s.type;
+    document.getElementById('ctl-phase').value = s.phase;
+    document.getElementById('ctl-squawk').value = s.squawk;
+    document.getElementById('ctl-route').value = s.route;
+    document.getElementById('ctl-alt').value = s.alt;
+    document.getElementById('ctl-speed').value = s.speed;
+    document.getElementById('ctl-vs').value = s.vs;
+    document.getElementById('ctl-dist').value = s.dist;
+    document.getElementById('ctl-count').value = s.count;
+    document.getElementById('ctl-index').value = s.index;
+  }
   render();
 }
 
@@ -826,16 +1084,13 @@ drawStatusBar = function(flightIndex, flightCount) {
 // Attach listeners
 document.querySelectorAll('#controls select, #controls input').forEach(el => {
   el.addEventListener('change', function() {
-    // Switch to custom when user manually edits controls
-    if (this.id !== 'ctl-scenario') {
-      document.getElementById('ctl-scenario').value = 'custom';
-    }
+    if (this.id === 'ctl-scenario') return;
+    document.getElementById('ctl-scenario').value = 'custom';
     render();
   });
   el.addEventListener('input', function() {
-    if (this.id !== 'ctl-scenario') {
-      document.getElementById('ctl-scenario').value = 'custom';
-    }
+    if (this.id === 'ctl-scenario') return;
+    document.getElementById('ctl-scenario').value = 'custom';
     render();
   });
 });

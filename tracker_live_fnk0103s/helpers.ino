@@ -64,12 +64,12 @@ const char* statusLabel(FlightStatus s) {
 uint16_t statusColor(FlightStatus s) {
   switch (s) {
     case STATUS_TAKING_OFF:  return C_GREEN;
-    case STATUS_CLIMBING:    return C_GREEN;
+    case STATUS_CLIMBING:    return C_CYAN;
     case STATUS_CRUISING:    return C_AMBER;
     case STATUS_DESCENDING:  return C_ORANGE;
     case STATUS_APPROACH:    return C_GOLD;
     case STATUS_LANDING:     return C_RED;
-    case STATUS_OVERHEAD:    return C_AMBER;
+    case STATUS_OVERHEAD:    return C_YELLOW;
     default:                 return C_DIM;
   }
 }

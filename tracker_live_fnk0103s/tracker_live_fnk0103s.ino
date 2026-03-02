@@ -247,8 +247,12 @@ void setup() {
   }
 
   // Hardware watchdog: reboot if loop() stalls for > 30 s
+  // Arduino framework pre-initializes TWDT (5 s default), so reconfigure it
   const esp_task_wdt_config_t wdt_cfg = { .timeout_ms = 30000, .idle_core_mask = 0, .trigger_panic = true };
-  esp_task_wdt_init(&wdt_cfg);
+  esp_err_t wdtErr = esp_task_wdt_init(&wdt_cfg);
+  if (wdtErr == ESP_ERR_INVALID_STATE) {
+    esp_task_wdt_reconfigure(&wdt_cfg);
+  }
   esp_task_wdt_add(NULL);
 
   if (WiFi.status() != WL_CONNECTED) {

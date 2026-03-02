@@ -13,6 +13,9 @@
 #   ./build.sh ota           → compile + OTA upload (overhead-tracker.local)
 #   ./build.sh validate      → compile with all warnings + safety checks
 #   ./build.sh test          → run desktop logic tests (no hardware needed)
+#   ./build.sh log           → capture serial output for 20 min (default)
+#   ./build.sh log 5         → capture for 5 minutes
+#   ./build.sh log 20 COM5   → capture on specific port
 #   ./build.sh safe          → test + validate (full pre-push check)
 #   OVERHEAD_TRACKER_IP=x.x.x.x ./build.sh ota  → OTA to specific IP
 #
@@ -319,6 +322,57 @@ run_test() {
   info "All tests PASSED"
 }
 
+# ── Serial log capture ────────────────────────────────────────────────────────
+run_log() {
+  local minutes="${2:-20}"
+  local port
+  port=$(resolve_port "${3:-}")
+  mkdir -p logs
+  local logfile="logs/esp32-$(date +%Y-%m-%d-%H%M%S).log"
+  info "LOG CAPTURE → $port @ ${BAUD} baud  ($minutes min → $logfile)"
+  /c/python314/python.exe -u -c "
+import serial, sys, time, os
+
+port, baud, minutes = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+logfile = sys.argv[4]
+duration = minutes * 60
+
+ser = serial.Serial(port, baud, timeout=1)
+time.sleep(0.1)
+ser.reset_input_buffer()
+
+start = time.time()
+deadline = start + duration
+line_count = 0
+
+print(f'Capturing to {logfile} for {minutes} min... (Ctrl-C to stop early)')
+
+with open(logfile, 'w', encoding='utf-8') as f:
+    try:
+        while time.time() < deadline:
+            raw = ser.readline()
+            if not raw:
+                continue
+            line = raw.decode('utf-8', errors='replace').rstrip()
+            elapsed = time.time() - start
+            ts = f'[{elapsed:8.3f}]'
+            stamped = f'{ts} {line}'
+            f.write(stamped + '\n')
+            f.flush()
+            print(stamped)
+            line_count += 1
+    except KeyboardInterrupt:
+        pass
+
+elapsed = time.time() - start
+ser.close()
+print(f'\n--- Capture complete ---')
+print(f'Lines: {line_count}')
+print(f'Duration: {elapsed:.0f}s ({elapsed/60:.1f} min)')
+print(f'File: {logfile}')
+" "$port" "$BAUD" "$minutes" "$logfile"
+}
+
 # ── Safe (test + validate — full pre-push check) ─────────────────────────────
 run_safe() {
   info "SAFE — full pre-push validation"
@@ -337,6 +391,7 @@ case "$CMD" in
   ota)              run_ota ;;
   monitor)          run_monitor "$@" ;;
   send)             run_send    "$@" ;;
+  log)              run_log     "$@" ;;
   validate)         run_validate ;;
   test)             run_test ;;
   safe)             run_safe ;;

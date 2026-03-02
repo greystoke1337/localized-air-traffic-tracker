@@ -321,13 +321,13 @@ def render_page_dashboard(stats, peak, status, page):
         col_w = W // 3
         for i, (label, value) in enumerate(items):
             cx = (i % 3) * col_w + col_w // 2
-            cy = 58 + (i // 3) * 48
+            cy = 58 + (i // 3) * 42
             draw_text(label, font_sm, DIM, cx, cy, 'center')
             err_row = label == 'ERRORS' and int(stats.get('errors', 0)) > 0
             draw_text(value, font_md, RED if err_row else WHITE, cx, cy + 16, 'center')
 
     # System health
-    health_y = 164
+    health_y = 148
     pygame.draw.line(screen, DIM, (10, health_y - 4), (W - 10, health_y - 4), 1)
     draw_text('SYSTEM HEALTH', font_sm, DIM, 10, health_y)
 
@@ -354,10 +354,10 @@ def render_page_dashboard(stats, peak, status, page):
         # PM2 services
         pm2 = status.get('pm2', [])
         if pm2:
-            pm2_y = health_y + 60
+            pm2_y = health_y + 50
             draw_text('PM2 SERVICES', font_sm, DIM, 10, pm2_y)
             for i, svc in enumerate(pm2[:3]):
-                row_y = pm2_y + 18 + i * 18
+                row_y = pm2_y + 16 + i * 16
                 is_online = svc.get('status') == 'online'
                 pygame.draw.circle(screen, GREEN if is_online else RED, (14, row_y + 7), 4)
                 draw_text(svc.get('name', '?'), font_sm, WHITE if is_online else DIM, 26, row_y)
@@ -367,7 +367,7 @@ def render_page_dashboard(stats, peak, status, page):
                     draw_text(f'R:{restarts}', font_sm, AMBER, 310, row_y)
 
     # Mini histogram
-    draw_histogram(peak, 270)
+    draw_histogram(peak, 262)
     flush_to_fb()
 
 
