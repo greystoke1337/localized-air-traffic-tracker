@@ -8,6 +8,8 @@
 #   ./build.sh upload COM5   → upload last build to a specific port
 #   ./build.sh monitor       → open serial monitor on auto-detected port
 #   ./build.sh monitor COM5  → open serial monitor on specific port
+#   ./build.sh send <cmd>    → send debug command to ESP32, print JSON response
+#   ./build.sh send <cmd> COM5 → send to specific port
 #   ./build.sh ota           → compile + OTA upload (overhead-tracker.local)
 #   ./build.sh validate      → compile with all warnings + safety checks
 #   ./build.sh test          → run desktop logic tests (no hardware needed)
@@ -148,6 +150,48 @@ run_monitor() {
     $(config_flag) \
     --port        "$port" \
     --config      "baudrate=$BAUD"
+}
+
+# ── Send serial command ───────────────────────────────────────────────────────
+run_send() {
+  local cmd="${2:?Usage: build.sh send <command> [port]}"
+  local port
+  port=$(resolve_port "${3:-}")
+  info "SEND '$cmd' → $port"
+  /c/python314/python.exe -u -c "
+import serial, sys, time
+
+port, cmd, timeout = sys.argv[1], sys.argv[2], 10
+
+ser = serial.Serial(port, 115200, timeout=1)
+time.sleep(0.1)
+ser.reset_input_buffer()
+ser.write((cmd + '\n').encode())
+ser.flush()
+
+deadline = time.time() + timeout
+capturing = False
+lines = []
+
+while time.time() < deadline:
+    raw = ser.readline()
+    if not raw:
+        continue
+    line = raw.decode('utf-8', errors='replace').strip()
+    if line == '>>>CMD_START<<<':
+        capturing = True
+        continue
+    if line == '>>>CMD_END<<<':
+        print('\n'.join(lines))
+        ser.close()
+        sys.exit(0)
+    if capturing:
+        lines.append(line)
+
+ser.close()
+print('ERROR: timeout waiting for response', file=sys.stderr)
+sys.exit(1)
+" "$port" "$cmd"
 }
 
 # ── Validate (compile with warnings + safety checks) ─────────────────────────
@@ -292,6 +336,7 @@ case "$CMD" in
   upload)           run_upload  "$@" ;;
   ota)              run_ota ;;
   monitor)          run_monitor "$@" ;;
+  send)             run_send    "$@" ;;
   validate)         run_validate ;;
   test)             run_test ;;
   safe)             run_safe ;;

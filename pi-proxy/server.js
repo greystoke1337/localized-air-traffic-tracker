@@ -1,5 +1,14 @@
+const dns = require('dns'); dns.setDefaultResultOrder('ipv4first');
+const https = require('https');
+const http  = require('http');
+const ipv4Agent     = new https.Agent({ family: 4 });
+const ipv4HttpAgent = new http.Agent({ family: 4 });
 const express = require('express');
-const fetch   = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
+const _fetch  = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
+const fetch   = (url, opts = {}) => {
+  if (!opts.agent) opts.agent = url.startsWith('https') ? ipv4Agent : ipv4HttpAgent;
+  return _fetch(url, opts);
+};
 const os      = require('os');
 const fs      = require('fs');
 const { execSync } = require('child_process');

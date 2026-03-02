@@ -12,7 +12,7 @@ Live: [overheadtracker.com](https://www.overheadtracker.com/)
 - Settings persist across sessions; share any location via `?location=` URL param
 - Live ADS-B data via [airplanes.live](https://airplanes.live), routed through a self-hosted proxy — no API key needed
 - 15-second auto-refresh with manual override
-- Flight phase detection: LANDING, TAKING OFF, APPROACH, DESCENDING, CLIMBING, OVERHEAD (ESP32 adds CRUISING and UNKNOWN)
+- Flight phase detection: LANDING, TAKEOFF, APPROACH, DESCENDING, CLIMBING, OVERHEAD (ESP32 adds CRUISING and UNKNOWN)
 - Airline name from ICAO callsign prefix (passenger, cargo, and specialty operators including RFDS, Cobham, NetJets); full aircraft type names (B789 → B787-9, A20N → A320neo, etc.)
 - Emergency squawk highlighting — 7700 / 7600 / 7500 shown in red with a warning
 - Leaflet map with geofence circle, aircraft dot, and speed-scaled heading vector
@@ -49,12 +49,12 @@ Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST
 
 **Hardware:** Freenove FNK0103S, optional 3D-printed enclosure (STL/STEP in [`tracker_live_fnk0103s/enclosure/`](tracker_live_fnk0103s/enclosure/))
 
-**What it shows:** Header bar, nav bar with touch buttons (WX / GEO / CFG), flight card (callsign, airline, aircraft type, route), and a 4-column dashboard: PHASE | ALT (with vertical rate) | SPEED | DIST. Cycles through overhead flights every 8 seconds. Each of the 8 flight phases (TAKING OFF, CLIMBING, CRUISING, DESCENDING, APPROACH, LANDING, OVERHEAD, UNKNOWN) has its own colour in the dashboard.
+**What it shows:** Header bar, nav bar with touch buttons (WX / GEO / CFG), flight card (callsign, airline, aircraft type, route), and a 4-column dashboard: PHASE | ALT (with vertical rate) | SPEED | DIST. Cycles through overhead flights every 8 seconds. Each of the 8 flight phases (TAKEOFF, CLIMBING, CRUISING, DESCEND, APPROACH, LANDING, OVERHEAD, UNKNOWN) has its own colour in the dashboard.
 
 **Nav bar controls:**
 
 - **WX** — weather screen showing temperature, humidity, wind, and conditions
-- **GEO** — cycles geofence radius: 5 km / 10 km / 50 km
+- **GEO** — cycles geofence radius: 5 km / 10 km / 20 km
 - **CFG** — launches the captive portal for Wi-Fi and location configuration
 
 **Route display:** departure and arrival with airport city names from a built-in lookup table.
@@ -63,20 +63,18 @@ Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST
 
 **Libraries** (Arduino Library Manager): `TFT_eSPI` (Freenove version), `ArduinoJson`, `ArduinoOTA`, `SD`
 
-Edit the top of [`tracker_live_fnk0103s/tracker_live_fnk0103s.ino`](tracker_live_fnk0103s/tracker_live_fnk0103s.ino) before flashing:
-
-```cpp
-const char* WIFI_SSID = "your-network";
-const char* WIFI_PASS = "your-password";
-const char* PROXY_HOST = "192.168.x.x";  // IP of your local proxy
-```
+**Before flashing:** Copy `secrets.h.example` to `secrets.h` and set your default WiFi credentials. On first boot, the captive portal lets you configure WiFi and location (stored in NVS). `PROXY_HOST` in `tracker_live_fnk0103s.ino` must be hardcoded to your Pi's local IP — it has no NVS/SD fallback.
 
 ```bash
-./build.sh            # compile + upload via USB
-./build.sh compile    # compile only
-./build.sh upload     # upload last build via USB
-./build.sh ota        # compile + upload over Wi-Fi (OTA)
-./build.sh monitor    # serial monitor
+./build.sh                  # compile + auto-detect port + upload via USB
+./build.sh compile          # compile only
+./build.sh upload           # upload last build via USB
+./build.sh ota              # compile + upload over Wi-Fi (OTA)
+./build.sh monitor          # serial monitor
+./build.sh send <cmd>       # send debug command, print JSON response
+./build.sh validate         # compile with all warnings + safety checks
+./build.sh test             # run desktop logic tests (no hardware needed)
+./build.sh safe             # test + validate (full pre-push check)
 ```
 
 **Over-the-air updates:** after the first USB flash, the device advertises itself as `overhead-tracker.local` on the local network via mDNS. Run `./build.sh ota` (or press **Ctrl+Shift+B** in VS Code) to compile and upload wirelessly. The TFT displays a green progress bar during the update.

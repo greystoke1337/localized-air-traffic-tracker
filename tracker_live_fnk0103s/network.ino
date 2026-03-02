@@ -367,6 +367,7 @@ void fetchFlights() {
 
   for (int i = 0; i < flightCount; i++) logFlight(flights[i]);
   if (flightCount == 0) {
+    Serial.println("[CLEAR] Drawing clear skies");
     tft.fillRect(0, CONTENT_Y, W, CONTENT_H, C_BG);
     tft.setTextSize(3);
     tft.setTextColor(C_AMBER, C_BG);
@@ -378,10 +379,15 @@ void fetchFlights() {
     int subW = 20 * 6;
     tft.setCursor((W - subW) / 2, CONTENT_Y + CONTENT_H / 2 + 8);
     tft.print("NO AIRCRAFT IN RANGE");
+    Serial.println("[CLEAR] Status bar");
     drawStatusBar();
+    Serial.println("[CLEAR] Delay 2.5s");
+    esp_task_wdt_reset();
     delay(2500);
+    Serial.println("[CLEAR] Switching to weather");
     currentScreen = SCREEN_WEATHER;
     renderWeather();
+    Serial.println("[CLEAR] Done");
   } else {
     currentScreen = SCREEN_FLIGHT;
     renderFlight(flights[0]);

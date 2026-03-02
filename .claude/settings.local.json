@@ -5,10 +5,13 @@
       "Read(//c/Users/maxim/.claude/**)",
       "mcp__plugin_playwright_playwright__browser_take_screenshot",
       "Read(//c/Users/maxim/.arduinoIDE/**)",
-      "Read(//c/Users/maxim/OneDrive/Documents/Arduino/libraries/ArduinoJson/**)"
+      "Read(//c/Users/maxim/OneDrive/Documents/Arduino/libraries/ArduinoJson/**)",
+      "Read(//c/Users/maxim/.ssh/**)",
+      "WebFetch(domain:api.overheadtracker.com)"
     ],
     "additionalDirectories": [
-      "c:\\Users\\maxim\\.claude\\projects\\c--Users-maxim-localized-air-traffic-tracker\\memory"
+      "c:\\Users\\maxim\\.claude\\projects\\c--Users-maxim-localized-air-traffic-tracker\\memory",
+      "C:\\Users\\maxim\\.ssh"
     ]
   }
 }

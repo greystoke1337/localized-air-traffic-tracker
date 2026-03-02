@@ -27,7 +27,7 @@ FlightRadar24 and similar apps show the whole world — you have to go find your
 └─────────────────────┘     ◀──────────┘ cached (10s TTL)
 ```
 
-**Web app (`index.html`)** — single HTML file, no build step, no framework. Deployed to GitHub Pages at `overheadtracker.com` on push to `main`.
+**Web app (`index.html`)** — single HTML file, no build step, no framework. Deployed to GitHub Pages at `overheadtracker.com` on push to `master`.
 
 **Raspberry Pi proxy (`server.js`)** — Node.js/Express on a Pi 3B+ at `192.168.x.x:3000`. Caches airplanes.live responses for 10 seconds so multiple clients can refresh at 15-second intervals without hitting rate limits. Exposed publicly via Cloudflare Tunnel. Managed by PM2.
 
@@ -65,11 +65,12 @@ FlightRadar24 and similar apps show the whole world — you have to go find your
 | Category | Features |
 |---|---|
 | **Config** | Captive portal on first boot — set Wi-Fi SSID/password and location; geocodes via Nominatim and stores to NVS |
-| **Display** | Structured layout: header, nav bar, flight card, 4-column dashboard (PHASE / ALT+v/rate / SPEED / DIST), footer. 480×320 TFT at 15s refresh / 8s cycle. Route display (departure > arrival) with city names from built-in airport lookup table. 8 flight phases (TAKING OFF / CLIMBING / CRUISING / DESCENDING / APPROACH / LANDING / OVERHEAD / UNKNOWN), each with a distinct color applied to the phase dashboard column. Emergency squawk banners (7700/7600/7500) trigger a flashing red alert with compact layout. |
-| **Touch** | Nav bar with three touch buttons: WX (weather screen), GEO (cycles geofence: 5 km / 10 km / 50 km), CFG (opens captive portal) |
+| **Display** | Structured layout: header, nav bar, flight card, 4-column dashboard (PHASE / ALT+v/rate / SPEED / DIST), footer. 480×320 TFT at 15s refresh / 8s cycle. Route display (departure > arrival) with city names from built-in airport lookup table. 8 flight phases (TAKEOFF / CLIMBING / CRUISING / DESCEND / APPROACH / LANDING / OVERHEAD / UNKNOWN), each with a distinct color applied to the phase dashboard column. Emergency squawk banners (7700/7600/7500) trigger a flashing red alert with compact layout. |
+| **Touch** | Nav bar with three touch buttons: WX (weather screen), GEO (cycles geofence: 5 km / 10 km / 20 km), CFG (opens captive portal) |
 | **Weather** | Temperature, humidity, wind speed/direction, conditions — accessed via WX button; data from Open-Meteo via Pi proxy, refreshed every 15 minutes |
 | **Preview** | `tft-preview.html` — browser-based canvas simulator that mirrors firmware rendering; verify layout changes before flashing |
 | **Resilience** | 3 s TCP connect timeout on proxy; falls back proxy → direct API → SD card cache (`cache.json`). WDT-safe boot — no crash if Pi is offline. Global JSON document (16 KB, allocated once) prevents heap fragmentation. Periodic heap monitoring on serial. Timestamped diagnostic logging. |
+| **Debug** | Serial debug console (`serial_cmd.ino`) with 9 commands: `help`, `heap`, `state`, `wifi`, `config`, `diag`, `fetch`, `weather`, `restart`. Send via `./build.sh send <cmd>`. |
 
 ---
 
@@ -82,11 +83,12 @@ FlightRadar24 and similar apps show the whole world — you have to go find your
 | Planespotters.net | Aircraft registration photos | None |
 | CartoDB / OpenStreetMap | Map tiles | None |
 | Cloudflare Tunnel | Public HTTPS ingress to Pi | Tunnel token |
+| Open-Meteo | Weather data (via Pi proxy) | None |
 
 ---
 
 ## Deployment
 
-- **Web app** — `git push` to `main`; GitHub Pages auto-deploys within ~60 seconds
+- **Web app** — `git push` to `master`; GitHub Pages auto-deploys within ~60 seconds
 - **Proxy** — SSH to `pi@piproxy.local`, edit `/home/pi/proxy/server.js`, `pm2 restart proxy`
-- **ESP32** — `./build.sh` (compiles with `arduino-cli` and uploads). Preview layout changes by opening `tft-preview.html` in a browser before flashing.
+- **ESP32** — `./build.sh` (compiles with `arduino-cli` and uploads). Preview layout changes by opening `tft-preview.html` in a browser before flashing. Debug with `./build.sh send <cmd>`. Pre-push check with `./build.sh safe`.

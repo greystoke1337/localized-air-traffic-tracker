@@ -20,6 +20,7 @@
     touch.ino                  — touch calibration + input handling
     wifi_setup.ino             — WiFi config, captive portal, geocoding
     sd_config.ino              — SD card config, cache, flight logging
+    serial_cmd.ino             — serial debug console (command-line diagnostics)
 */
 
 #include <TFT_eSPI.h>
@@ -394,6 +395,7 @@ void loop() {
   esp_task_wdt_reset();
   unsigned long now = millis();
   ArduinoOTA.handle();
+  if (Serial.available()) checkSerialCmd();
 
   // ── Touch polling ──
   if (touchReady) {

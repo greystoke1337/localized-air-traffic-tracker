@@ -62,6 +62,10 @@ void drawStatusBar() {
   char buf[80];
   if (isFetching) {
     snprintf(buf, sizeof(buf), "  SCANNING AIRSPACE...");
+  } else if (flightCount == 0) {
+    const char* src = dataSource==2 ? "CACHE" : dataSource==1 ? "DIRECT" : "PROXY";
+    snprintf(buf, sizeof(buf), "  CLEAR SKIES   SRC:%s   NEXT:%ds   H:%d",
+             src, countdown, ESP.getFreeHeap());
   } else if (dataSource == 2 && cacheTimestamp > 0) {
     time_t now = time(NULL);
     long ageSec = (now > cacheTimestamp) ? (long)(now - cacheTimestamp) : 0;

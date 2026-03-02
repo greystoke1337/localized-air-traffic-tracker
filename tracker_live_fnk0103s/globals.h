@@ -120,6 +120,9 @@ void saveGeoIndex();
 bool geocodeLocation(const char* query);
 void startCaptivePortal();
 
+// serial_cmd.ino
+void checkSerialCmd();
+
 // sd_config.ino
 void loadConfig();
 void writeCache(const String& payload);
