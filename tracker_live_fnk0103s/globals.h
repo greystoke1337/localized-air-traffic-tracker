@@ -75,7 +75,6 @@ extern int  loggedCount;
 
 // ─── Diagnostics ──────────────────────────────────────
 extern unsigned long lastDiagMs;
-extern int           wdtResetCount;
 
 // ─── Forward declarations ─────────────────────────────
 // helpers.ino

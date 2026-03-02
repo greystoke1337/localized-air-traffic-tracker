@@ -182,7 +182,7 @@ void test_normal_response() {
   EXPECT(n >= 0);
 
   TEST("finds expected number of flights");
-  EXPECT(n >= 2 && n <= 5);
+  EXPECT(n == 4);
 
   TEST("first flight (closest) has valid callsign");
   EXPECT(n > 0 && newFlights[0].callsign[0] != '\0');

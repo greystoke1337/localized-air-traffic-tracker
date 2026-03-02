@@ -110,7 +110,6 @@ int  loggedCount = 0;
 
 // ─── Diagnostics ──────────────────────────────────────
 unsigned long lastDiagMs   = 0;
-int           wdtResetCount = 0;
 
 // ─── Setup ────────────────────────────────────────────
 void setup() {

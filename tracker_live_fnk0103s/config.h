@@ -1,8 +1,5 @@
 #pragma once
 
-// ─── Debug level (0=quiet, 1=normal, 2=verbose) ───────
-#define DEBUG_LEVEL 1
-
 // ─── SD pin ───────────────────────────────────────────
 #define SD_CS 5
 
