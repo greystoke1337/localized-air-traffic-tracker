@@ -3,8 +3,8 @@
 bool loadTouchCal() {
   Preferences p;
   p.begin("tracker", true);
-  if (!p.isKey("tcal")) { p.end(); return false; }
-  p.getBytes("tcal", touchCalData, sizeof(touchCalData));
+  if (!p.isKey("tcal2")) { p.end(); return false; }
+  p.getBytes("tcal2", touchCalData, sizeof(touchCalData));
   p.end();
   return true;
 }
@@ -12,13 +12,13 @@ bool loadTouchCal() {
 void saveTouchCal() {
   Preferences p;
   p.begin("tracker", false);
-  p.putBytes("tcal", touchCalData, sizeof(touchCalData));
+  p.putBytes("tcal2", touchCalData, sizeof(touchCalData));
   p.end();
 }
 
 void initTouch() {
   if (loadTouchCal()) {
-    tft.setTouch(touchCalData);
+    tft.setTouchCalibrate(touchCalData);
     touchReady = true;
     Serial.println("Touch cal loaded.");
     return;

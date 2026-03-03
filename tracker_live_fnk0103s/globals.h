@@ -1,5 +1,5 @@
 #pragma once
-#include <TFT_eSPI.h>
+#include "lgfx_config.h"
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <WebServer.h>
@@ -8,7 +8,7 @@
 #include "types.h"
 
 // ─── Hardware ─────────────────────────────────────────
-extern TFT_eSPI   tft;
+extern LGFX       tft;
 extern WebServer  setupServer;
 extern DNSServer  dnsServer;
 
@@ -38,7 +38,7 @@ extern int         geoIndex;
 extern bool sdAvailable;
 
 // ─── Touch ────────────────────────────────────────────
-extern uint16_t touchCalData[5];
+extern uint16_t touchCalData[8];
 extern bool     touchReady;
 extern uint32_t lastTouchMs;
 
