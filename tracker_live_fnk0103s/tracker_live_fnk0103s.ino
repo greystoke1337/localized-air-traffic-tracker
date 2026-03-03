@@ -110,6 +110,10 @@ unsigned long directApiNextRetryMs = 0;
 char loggedCallsigns[MAX_LOGGED][12];
 int  loggedCount = 0;
 
+// ─── Unknown tracking ────────────────────────────────
+char loggedUnknowns[MAX_UNKNOWNS][6];
+int  loggedUnknownCount = 0;
+
 // ─── Diagnostics ──────────────────────────────────────
 unsigned long lastDiagMs   = 0;
 

@@ -57,4 +57,5 @@
 #define DIRECT_API_TIMEOUT   8000   // reduced from 12 s (WDT is 30 s)
 
 // ─── Session log ──────────────────────────────────────
-#define MAX_LOGGED 200
+#define MAX_LOGGED   200
+#define MAX_UNKNOWNS 80

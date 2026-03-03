@@ -41,7 +41,7 @@ int parsePayload(String& payload) {
   JsonObject af = filter["ac"].createNestedObject();
   af["flight"] = af["r"] = af["t"] = af["lat"] = af["lon"] =
   af["alt_baro"] = af["gs"] = af["baro_rate"] = af["track"] =
-  af["squawk"] = af["route"] = true;
+  af["squawk"] = af["route"] = af["dep"] = af["arr"] = true;
   g_jsonDoc.clear();
   Serial.printf("[MEM] Before JSON parse: %d free\n", ESP.getFreeHeap());
   DeserializationError err = deserializeJson(g_jsonDoc, &payload[0], payload.length(), DeserializationOption::Filter(filter));
@@ -196,6 +196,8 @@ int fetchAndParseDirectAPI() {
     strlcpy(f.reg,    ac_reg,    sizeof(f.reg));
     strlcpy(f.type,   ac_type,   sizeof(f.type));
     strlcpy(f.squawk, ac_squawk[0] ? ac_squawk : "----", sizeof(f.squawk));
+    strlcpy(f.dep, ac_dep, sizeof(f.dep));
+    strlcpy(f.arr, ac_arr, sizeof(f.arr));
     if (ac_dep[0] || ac_arr[0]) {
       snprintf(f.route, sizeof(f.route), "%s > %s",
                ac_dep[0] ? ac_dep : "?", ac_arr[0] ? ac_arr : "?");
@@ -300,6 +302,8 @@ int extractFlights(DynamicJsonDocument& doc) {
     strlcpy(f.type,   a["t"]      | "",     sizeof(f.type));
     strlcpy(f.squawk, a["squawk"] | "----", sizeof(f.squawk));
     strlcpy(f.route,  a["route"]  | "",     sizeof(f.route));
+    strlcpy(f.dep,    a["dep"]    | "",     sizeof(f.dep));
+    strlcpy(f.arr,    a["arr"]    | "",     sizeof(f.arr));
     f.lat   = lat;
     f.lon = lon; f.alt = alt;
     f.speed = (int)(a["gs"]      | 0.0f);

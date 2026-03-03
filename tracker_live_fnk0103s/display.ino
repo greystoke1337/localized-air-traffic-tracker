@@ -86,6 +86,7 @@ void drawStatusBar() {
 
 void renderMessage(const char* line1, const char* line2) {
   tft.fillScreen(C_BG);
+  previousScreen = SCREEN_NONE;
   drawHeader();
   drawNavBar();
   tft.setTextColor(C_AMBER, C_BG);
@@ -265,7 +266,7 @@ void renderFlight(const Flight& f) {
   tft.setCursor(372, dashY + 8);
   tft.print("DISTANCE");
   tft.setTextSize(2);
-  tft.setTextColor(C_AMBER, C_BG);
+  tft.setTextColor(distanceColor(f.dist, GEOFENCE_KM), C_BG);
   tft.setCursor(372, dashY + 24);
   if (f.dist > 0) {
     char distBuf[16];

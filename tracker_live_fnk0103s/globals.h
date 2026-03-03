@@ -74,6 +74,10 @@ extern unsigned long directApiNextRetryMs;
 extern char loggedCallsigns[MAX_LOGGED][12];
 extern int  loggedCount;
 
+// ─── Unknown tracking ────────────────────────────────
+extern char loggedUnknowns[MAX_UNKNOWNS][6];
+extern int  loggedUnknownCount;
+
 // ─── Diagnostics ──────────────────────────────────────
 extern unsigned long lastDiagMs;
 
@@ -87,6 +91,7 @@ const char* getAircraftTypeName(const char* code);
 FlightStatus deriveStatus(int alt, int vs, float dist);
 const char* statusLabel(FlightStatus s);
 uint16_t statusColor(FlightStatus s);
+uint16_t distanceColor(float dist_km, float max_km);
 float haversineKm(float lat1, float lon1, float lat2, float lon2);
 int apiRadiusNm();
 void formatAlt(int alt, char* buf, int len);
@@ -129,3 +134,4 @@ void loadConfig();
 void writeCache(const String& payload);
 String readCache();
 void logFlight(const Flight& f);
+void logUnknown(const char* type, const char* code, const char* context);
