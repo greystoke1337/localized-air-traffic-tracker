@@ -26,6 +26,8 @@ struct Flight {
   int          track;
   float        dist;
   char         squawk[6];
+  char         dep[6];
+  char         arr[6];
   FlightStatus status;
 };
 

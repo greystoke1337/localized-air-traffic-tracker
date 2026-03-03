@@ -24,7 +24,7 @@
 set -e
 
 SKETCH="tracker_live_fnk0103s/tracker_live_fnk0103s.ino"
-FQBN="esp32:esp32:esp32"
+FQBN="esp32:esp32:esp32:PartitionScheme=min_spiffs"
 BUILD_DIR="/tmp/overhead-tracker-build"
 BAUD=115200
 OTA_HOST="${OVERHEAD_TRACKER_IP:-overhead-tracker.local}"
@@ -243,7 +243,7 @@ run_validate() {
     local size
     size=$(wc -c < "$BIN_FILE" | tr -d ' ')
     local size_kb=$((size / 1024))
-    local max_kb=1310  # ~1.28 MB usable on ESP32 with default partition
+    local max_kb=1920  # ~1.9 MB usable on ESP32 with min_spiffs partition
     local pct=$((size_kb * 100 / max_kb))
     if [ $pct -gt 90 ]; then
       fail "Binary size: ${size_kb} KB / ${max_kb} KB (${pct}%) — CLOSE TO LIMIT"

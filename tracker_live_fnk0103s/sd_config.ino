@@ -90,4 +90,31 @@ void logFlight(const Flight& f) {
     strlcpy(loggedCallsigns[loggedCount++], f.callsign, 12);
   }
   Serial.printf("Logged: %s\n", f.callsign);
+
+  if (!al) {
+    char prefix[4] = {0};
+    strncpy(prefix, f.callsign, 3);
+    logUnknown("AIRLINE", prefix, f.callsign);
+  }
+  if (f.dep[0]) logUnknown("AIRPORT", f.dep, f.callsign);
+  if (f.arr[0]) logUnknown("AIRPORT", f.arr, f.callsign);
+}
+
+void logUnknown(const char* type, const char* code, const char* context) {
+  if (!sdAvailable || !code || !code[0]) return;
+  for (int i = 0; i < loggedUnknownCount; i++)
+    if (strcmp(loggedUnknowns[i], code) == 0) return;
+
+  bool isNew = !SD.exists("/unknowns.csv");
+  File f = SD.open("/unknowns.csv", FILE_APPEND);
+  if (!f) return;
+  if (isNew) f.println("type,code,context,millis");
+  char row[80];
+  snprintf(row, sizeof(row), "%s,%s,%s,%lu", type, code, context, millis());
+  f.println(row);
+  f.close();
+
+  if (loggedUnknownCount < MAX_UNKNOWNS)
+    strlcpy(loggedUnknowns[loggedUnknownCount++], code, 6);
+  logTs("UNKN", "%s: %s (%s)", type, code, context);
 }

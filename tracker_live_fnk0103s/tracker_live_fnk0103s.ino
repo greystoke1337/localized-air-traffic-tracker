@@ -3,7 +3,7 @@
   FNK0103S — 4.0" 480x320 ST7796 (landscape)
 
   Libraries needed:
-    - TFT_eSPI (Freenove pre-configured version)
+    - LovyanGFX (display + touch driver)
     - ArduinoJson (install via Library Manager)
     - SD (built into Arduino ESP32 core — no install needed)
     - ArduinoOTA (built into Arduino ESP32 core — no install needed)
@@ -23,7 +23,7 @@
     serial_cmd.ino             — serial debug console (command-line diagnostics)
 */
 
-#include <TFT_eSPI.h>
+#include "lgfx_config.h"
 #include <SPI.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -43,7 +43,7 @@
 #include "globals.h"
 
 // ─── Hardware instances ───────────────────────────────
-TFT_eSPI   tft = TFT_eSPI();
+LGFX       tft;
 WebServer  setupServer(80);
 DNSServer  dnsServer;
 
@@ -73,7 +73,7 @@ const int   GEO_COUNT     = 3;
 int         geoIndex      = 1;
 
 // ─── Touch ────────────────────────────────────────────
-uint16_t touchCalData[5] = {0};
+uint16_t touchCalData[8] = {0};
 bool     touchReady      = false;
 uint32_t lastTouchMs     = 0;
 
@@ -109,6 +109,10 @@ unsigned long directApiNextRetryMs = 0;
 // ─── Session log ──────────────────────────────────────
 char loggedCallsigns[MAX_LOGGED][12];
 int  loggedCount = 0;
+
+// ─── Unknown tracking ────────────────────────────────
+char loggedUnknowns[MAX_UNKNOWNS][6];
+int  loggedUnknownCount = 0;
 
 // ─── Diagnostics ──────────────────────────────────────
 unsigned long lastDiagMs   = 0;
@@ -235,7 +239,7 @@ void setup() {
       tft.print("Restarting...");
     });
     ArduinoOTA.onError([](ota_error_t error) {
-      tft.setTextColor(TFT_RED, C_BG);
+      tft.setTextColor(C_RED, C_BG);
       tft.setTextSize(2);
       tft.setCursor(120, 250);
       tft.printf("OTA Error [%u]", error);

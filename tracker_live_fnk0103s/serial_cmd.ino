@@ -7,7 +7,7 @@ void checkSerialCmd() {
   Serial.println(">>>CMD_START<<<");
 
   if (input == "help") {
-    Serial.println("{\"cmd\":\"help\",\"commands\":[\"help\",\"heap\",\"state\",\"wifi\",\"config\",\"diag\",\"fetch\",\"weather\",\"restart\"]}");
+    Serial.println("{\"cmd\":\"help\",\"commands\":[\"help\",\"heap\",\"state\",\"wifi\",\"config\",\"diag\",\"fetch\",\"weather\",\"unknowns\",\"restart\"]}");
 
   } else if (input == "heap") {
     uint32_t free = ESP.getFreeHeap();
@@ -79,6 +79,18 @@ void checkSerialCmd() {
                   "\"condition\":\"%s\",\"heap\":%u}\n",
       wxReady ? "true" : "false",
       wxData.temp, wxData.condition, ESP.getFreeHeap());
+
+  } else if (input == "unknowns") {
+    if (!sdAvailable) {
+      Serial.println("{\"cmd\":\"unknowns\",\"ok\":false,\"error\":\"no SD\"}");
+    } else {
+      Serial.printf("{\"cmd\":\"unknowns\",\"count\":%d}\n", loggedUnknownCount);
+      File f = SD.open("/unknowns.csv", FILE_READ);
+      if (f) {
+        while (f.available()) Serial.println(f.readStringUntil('\n'));
+        f.close();
+      }
+    }
 
   } else if (input == "restart") {
     Serial.println("{\"cmd\":\"restart\",\"ok\":true}");

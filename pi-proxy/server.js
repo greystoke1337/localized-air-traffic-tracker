@@ -20,6 +20,7 @@ const ROUTE_CACHE_MS   = 30 * 60 * 1000;
 const ROUTE_CACHE_FILE = __dirname + '/route-cache.json';
 
 const cache      = new Map();
+const inFlight   = new Map();  // key → Promise (dedup concurrent upstream fetches)
 const routeCache = new Map();  // callsign -> { dep, arr, timestamp }
 
 // ICAO and IATA codes → city name (same DB as web app)
@@ -476,52 +477,59 @@ app.get('/flights', async (req, res) => {
     return res.json(hit.data);
   }
 
-  const apis = [
-    { name: 'adsb.lol',        url: `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}` },
-    { name: 'adsb.fi',         url: `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}` },
-    { name: 'airplanes.live',  url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}` },
-  ];
-
-  let data = null;
-  let lastErr = null;
-  for (const api of apis) {
-    try {
-      const response = await fetch(api.url, { signal: AbortSignal.timeout(8000) });
-      if (!response.ok) throw new Error(`${api.name} returned ${response.status}`);
-      data = await response.json();
-      addLog({ type: 'MISS', client, key: key + ` (${api.name})` });
-      break;
-    } catch (e) {
-      lastErr = e;
-      addLog({ type: 'ERR', client, key, error: `${api.name}: ${e.message}` });
-    }
+  if (!inFlight.has(key)) {
+    const promise = (async () => {
+      const apis = [
+        { name: 'adsb.lol',        url: `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}` },
+        { name: 'adsb.fi',         url: `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}` },
+        { name: 'airplanes.live',  url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}` },
+      ];
+      let data = null, lastErr = null;
+      for (const api of apis) {
+        try {
+          const response = await fetch(api.url, { signal: AbortSignal.timeout(8000) });
+          if (!response.ok) throw new Error(`${api.name} returned ${response.status}`);
+          data = await response.json();
+          addLog({ type: 'MISS', client, key: key + ` (${api.name})` });
+          break;
+        } catch (e) {
+          lastErr = e;
+          addLog({ type: 'ERR', client, key, error: `${api.name}: ${e.message}` });
+        }
+      }
+      if (!data) throw lastErr || new Error('All APIs failed');
+      const unrouted = (data.ac || []).filter(ac => ac.flight?.trim() && !ac.dep && !ac.arr);
+      if (unrouted.length > 0) {
+        const routes = await Promise.all(unrouted.map(ac => lookupRoute(ac.flight.trim())));
+        unrouted.forEach((ac, i) => {
+          if (routes[i]?.dep) ac.dep = routes[i].dep;
+          if (routes[i]?.arr) ac.arr = routes[i].arr;
+        });
+      }
+      for (const ac of (data.ac || [])) {
+        const dep = ac.dep || ac.orig_iata || null;
+        const arr = ac.arr || ac.dest_iata || null;
+        const routeStr = formatRouteString(dep, arr);
+        if (routeStr) ac.route = routeStr;
+      }
+      cache.set(key, { data, timestamp: Date.now() });
+      return data;
+    })();
+    inFlight.set(key, promise);
+    promise.finally(() => inFlight.delete(key));
   }
 
-  if (data) {
-    const unrouted = (data.ac || []).filter(ac => ac.flight?.trim() && !ac.dep && !ac.arr);
-    if (unrouted.length > 0) {
-      const routes = await Promise.all(unrouted.map(ac => lookupRoute(ac.flight.trim())));
-      unrouted.forEach((ac, i) => {
-        if (routes[i]?.dep) ac.dep = routes[i].dep;
-        if (routes[i]?.arr) ac.arr = routes[i].arr;
-      });
-    }
-    for (const ac of (data.ac || [])) {
-      const dep = ac.dep || ac.orig_iata || null;
-      const arr = ac.arr || ac.dest_iata || null;
-      const routeStr = formatRouteString(dep, arr);
-      if (routeStr) ac.route = routeStr;
-    }
-    cache.set(key, { data, timestamp: now });
+  try {
+    const data = await inFlight.get(key);
     return res.json(data);
+  } catch (e) {
+    stats.errors++;
+    if (hit) {
+      addLog({ type: 'HIT', client, key: key + ' (stale fallback)' });
+      return res.json(hit.data);
+    }
+    res.status(502).json({ error: e.message });
   }
-
-  stats.errors++;
-  if (hit) {
-    addLog({ type: 'HIT', client, key: key + ' (stale fallback)' });
-    return res.json(hit.data);
-  }
-  res.status(502).json({ error: lastErr?.message || 'All APIs failed' });
 });
 
 // ── Stats endpoint (used by display.py) ──────────────────────────────
@@ -597,31 +605,42 @@ app.get('/weather', async (req, res) => {
     return res.json(hit.data);
   }
 
+  const client = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
+
+  if (!inFlight.has(key)) {
+    const promise = (async () => {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+        `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,` +
+        `wind_speed_10m,wind_direction_10m,uv_index&wind_speed_unit=kmh&timezone=auto`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!response.ok) throw new Error(`Open-Meteo returned ${response.status}`);
+      const raw = await response.json();
+      const c = raw.current;
+      const data = {
+        temp:            c.temperature_2m,
+        feels_like:      c.apparent_temperature,
+        humidity:        c.relative_humidity_2m,
+        weather_code:    c.weather_code,
+        condition:       WMO_CODES[c.weather_code] || 'Unknown',
+        wind_speed:      c.wind_speed_10m,
+        wind_dir:        c.wind_direction_10m,
+        wind_cardinal:   windCardinal(c.wind_direction_10m),
+        uv_index:        c.uv_index,
+        utc_offset_secs: raw.utc_offset_seconds,
+      };
+      cache.set(key, { data, timestamp: Date.now() });
+      return data;
+    })();
+    inFlight.set(key, promise);
+    promise.finally(() => inFlight.delete(key));
+  }
+
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-      `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,` +
-      `wind_speed_10m,wind_direction_10m,uv_index&wind_speed_unit=kmh&timezone=auto`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!response.ok) throw new Error(`Open-Meteo returned ${response.status}`);
-    const raw = await response.json();
-    const c = raw.current;
-    const data = {
-      temp:            c.temperature_2m,
-      feels_like:      c.apparent_temperature,
-      humidity:        c.relative_humidity_2m,
-      weather_code:    c.weather_code,
-      condition:       WMO_CODES[c.weather_code] || 'Unknown',
-      wind_speed:      c.wind_speed_10m,
-      wind_dir:        c.wind_direction_10m,
-      wind_cardinal:   windCardinal(c.wind_direction_10m),
-      uv_index:        c.uv_index,
-      utc_offset_secs: raw.utc_offset_seconds,
-    };
-    cache.set(key, { data, timestamp: now });
+    const data = await inFlight.get(key);
     res.json(data);
   } catch (e) {
     if (hit) {
-      addLog({ type: 'STALE', client: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?', key });
+      addLog({ type: 'STALE', client, key });
       return res.json({ ...hit.data, stale: true });
     }
     res.status(502).json({ error: e.message });

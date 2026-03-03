@@ -74,6 +74,16 @@ uint16_t statusColor(FlightStatus s) {
   }
 }
 
+uint16_t distanceColor(float dist_km, float max_km) {
+  float t = dist_km / max_km;
+  if (t < 0.0f) t = 0.0f;
+  if (t > 1.0f) t = 1.0f;
+  uint8_t r = (uint8_t)(t * 100.0f);
+  uint8_t g = (uint8_t)(255.0f - t * 55.0f);
+  uint8_t b = (uint8_t)(t * 255.0f);
+  return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+}
+
 float haversineKm(float lat1, float lon1, float lat2, float lon2) {
   const float R = 6371.0f;
   float dLat = (lat2 - lat1) * M_PI / 180.0f;
