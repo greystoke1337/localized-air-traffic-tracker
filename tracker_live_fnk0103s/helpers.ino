@@ -55,31 +55,20 @@ FlightStatus deriveStatus(int alt, int vs, float dist) {
   return STATUS_CRUISING;
 }
 
-const char* statusLabel(FlightStatus s) {
-  switch (s) {
-    case STATUS_TAKING_OFF:  return "TAKEOFF";
-    case STATUS_CLIMBING:    return "CLIMBING";
-    case STATUS_CRUISING:    return "CRUISING";
-    case STATUS_DESCENDING:  return "DESCEND";
-    case STATUS_APPROACH:    return "APPROACH";
-    case STATUS_LANDING:     return "LANDING";
-    case STATUS_OVERHEAD:    return "OVERHEAD";
-    default:                 return "UNKNOWN";
-  }
-}
+struct StatusInfo { const char* label; uint16_t color; };
+static const StatusInfo STATUS_TABLE[] = {
+  [STATUS_UNKNOWN]    = { "UNKNOWN",  C_DIM    },
+  [STATUS_TAKING_OFF] = { "TAKEOFF",  C_GREEN  },
+  [STATUS_CLIMBING]   = { "CLIMBING", C_CYAN   },
+  [STATUS_CRUISING]   = { "CRUISING", C_AMBER  },
+  [STATUS_DESCENDING] = { "DESCEND",  C_ORANGE },
+  [STATUS_APPROACH]   = { "APPROACH", C_GOLD   },
+  [STATUS_LANDING]    = { "LANDING",  C_RED    },
+  [STATUS_OVERHEAD]   = { "OVERHEAD", C_YELLOW },
+};
 
-uint16_t statusColor(FlightStatus s) {
-  switch (s) {
-    case STATUS_TAKING_OFF:  return C_GREEN;
-    case STATUS_CLIMBING:    return C_CYAN;
-    case STATUS_CRUISING:    return C_AMBER;
-    case STATUS_DESCENDING:  return C_ORANGE;
-    case STATUS_APPROACH:    return C_GOLD;
-    case STATUS_LANDING:     return C_RED;
-    case STATUS_OVERHEAD:    return C_YELLOW;
-    default:                 return C_DIM;
-  }
-}
+const char* statusLabel(FlightStatus s) { return STATUS_TABLE[s].label; }
+uint16_t    statusColor(FlightStatus s) { return STATUS_TABLE[s].color; }
 
 uint16_t distanceColor(float dist_km, float max_km) {
   float t = dist_km / max_km;
@@ -110,9 +99,24 @@ void formatAlt(int alt, char* buf, int len) {
   else                   snprintf(buf, len, "%d FT", alt);
 }
 
+void toUpperStr(char* s) {
+  for (int i = 0; s[i]; i++) s[i] = toupper(s[i]);
+}
+
+const char* dataSourceLabel() {
+  return dataSource == 2 ? "cache" : dataSource == 1 ? "direct" : "proxy";
+}
+
+void sortFlightsByDist(Flight* f, int count) {
+  for (int i = 0; i < count-1; i++)
+    for (int j = 0; j < count-i-1; j++)
+      if (f[j].dist > f[j+1].dist)
+        { Flight tmp = f[j]; f[j] = f[j+1]; f[j+1] = tmp; }
+}
+
 // ─── Diagnostics: single-line JSON status ─────────────
 void diagReport() {
-  const char* src = dataSource == 2 ? "cache" : dataSource == 1 ? "direct" : "proxy";
+  const char* src = dataSourceLabel();
   Serial.printf("{\"heap\":%d,\"maxblk\":%d,\"wifi\":%d,\"rssi\":%d,\"src\":\"%s\","
                 "\"flights\":%d,\"uptime\":%lu,\"frag\":%d}\n",
     ESP.getFreeHeap(),

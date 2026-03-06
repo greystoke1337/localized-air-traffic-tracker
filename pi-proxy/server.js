@@ -14,6 +14,7 @@ const fs      = require('fs');
 const path    = require('path');
 const { execSync } = require('child_process');
 const nodemailer = require('nodemailer');
+const rateLimit  = require('express-rate-limit');
 
 const app      = express();
 const PORT     = 3000;
@@ -416,14 +417,69 @@ function formatUptime(secs) {
   return (d ? d + 'd ' : '') + (h ? h + 'h ' : '') + (m ? m + 'm ' : '') + s + 's';
 }
 
+// ── Security helpers ─────────────────────────────────────────────────
+function validateCoord(lat, lon, radius) {
+  const la = parseFloat(lat), lo = parseFloat(lon);
+  if (isNaN(la) || la < -90 || la > 90) return 'invalid lat';
+  if (isNaN(lo) || lo < -180 || lo > 180) return 'invalid lon';
+  if (radius !== undefined) {
+    const r = parseFloat(radius);
+    if (isNaN(r) || r < 1 || r > 500) return 'invalid radius';
+  }
+  return null;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function requireAdmin(req, res) {
+  const token = process.env.ADMIN_TOKEN;
+  if (!token) return false; // no token configured = open (backwards compat)
+  const auth = req.headers.authorization;
+  if (auth !== `Bearer ${token}`) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return true; // blocked
+  }
+  return false; // allowed
+}
+
+// ── Rate limiting ────────────────────────────────────────────────────
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.ip,
+}));
+
 // ── CORS ─────────────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = [
+  'https://overheadtracker.com',
+  'https://greystoke1337.github.io',
+];
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.get('origin');
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    // Allow non-browser requests (ESP32, curl, display.py)
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  res.header('X-Frame-Options', 'DENY');
+  res.header('X-Content-Type-Options', 'nosniff');
+  res.header('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
 
 // ── Toggle endpoint ───────────────────────────────────────────────────
 app.post('/proxy/toggle', (req, res) => {
+  if (requireAdmin(req, res)) return;
   proxyEnabled = !proxyEnabled;
   addLog({ type: 'SYS', client: req.headers['x-forwarded-for'] || req.socket.remoteAddress, key: 'proxy ' + (proxyEnabled ? 'ENABLED' : 'DISABLED') });
   res.json({ enabled: proxyEnabled });
@@ -641,6 +697,8 @@ app.get('/flights', async (req, res) => {
     addLog({ type: 'ERR', client, error: 'missing params' });
     return res.status(400).json({ error: 'lat, lon, radius required' });
   }
+  const coordErr = validateCoord(lat, lon, radius);
+  if (coordErr) return res.status(400).json({ error: coordErr });
 
   const key = `${lat},${lon},${radius}`;
   const now  = Date.now();
@@ -708,7 +766,7 @@ app.get('/flights', async (req, res) => {
       addLog({ type: 'HIT', client, key: key + ' (stale fallback)' });
       return res.json(hit.data);
     }
-    res.status(502).json({ error: e.message });
+    res.status(502).json({ error: 'Flight data temporarily unavailable' });
   }
 });
 
@@ -775,6 +833,8 @@ function windCardinal(deg) {
 app.get('/weather', async (req, res) => {
   const { lat, lon } = req.query;
   if (!lat || !lon) return res.status(400).json({ error: 'lat and lon required' });
+  const coordErr = validateCoord(lat, lon);
+  if (coordErr) return res.status(400).json({ error: coordErr });
 
   const key = `weather:${lat},${lon}`;
   const now = Date.now();
@@ -823,7 +883,7 @@ app.get('/weather', async (req, res) => {
       addLog({ type: 'STALE', client, key });
       return res.json({ ...hit.data, stale: true });
     }
-    res.status(502).json({ error: e.message });
+    res.status(502).json({ error: 'Weather data temporarily unavailable' });
   }
 });
 
@@ -852,31 +912,17 @@ function generateReport(ds) {
   const flights = Object.values(data.flights);
   const total = flights.length;
 
-  // Top airlines
-  const airlineCounts = {};
-  for (const f of flights) {
-    const prefix = airlinePrefix(f.callsign);
-    const name = AIRLINE_NAMES[prefix] || prefix;
-    airlineCounts[name] = (airlineCounts[name] || 0) + 1;
+  function tally(extractor, limit = 8) {
+    const counts = {};
+    for (const f of flights) {
+      const k = extractor(f);
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit);
   }
-  const topAirlines = Object.entries(airlineCounts)
-    .sort((a, b) => b[1] - a[1]).slice(0, 8);
-
-  // Top aircraft types
-  const typeCounts = {};
-  for (const f of flights) {
-    if (f.type) typeCounts[f.type] = (typeCounts[f.type] || 0) + 1;
-  }
-  const topTypes = Object.entries(typeCounts)
-    .sort((a, b) => b[1] - a[1]).slice(0, 8);
-
-  // Top routes
-  const routeCounts = {};
-  for (const f of flights) {
-    if (f.route) routeCounts[f.route] = (routeCounts[f.route] || 0) + 1;
-  }
-  const topRoutes = Object.entries(routeCounts)
-    .sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const topAirlines = tally(f => { const p = airlinePrefix(f.callsign); return AIRLINE_NAMES[p] || p; });
+  const topTypes    = tally(f => f.type);
+  const topRoutes   = tally(f => f.route);
 
   // Trends
   const yesterday = loadDayData(prevDateStr(ds, 1));
@@ -952,10 +998,10 @@ function renderReportHTML(report) {
     const alt = f.minAlt != null ? `${Math.round(f.minAlt)}` : '—';
     const dist = f.minDist != null ? `${f.minDist.toFixed(1)}` : '—';
     return `<tr style="border-bottom:1px solid rgba(255,166,0,0.1)">
-      <td style="padding:4px 8px">${f.callsign}</td>
-      <td style="padding:4px 8px;opacity:0.7">${f.operator || '—'}</td>
-      <td style="padding:4px 8px;opacity:0.7">${f.type || '—'}</td>
-      <td style="padding:4px 8px;opacity:0.7">${f.route || '—'}</td>
+      <td style="padding:4px 8px">${escapeHtml(f.callsign)}</td>
+      <td style="padding:4px 8px;opacity:0.7">${escapeHtml(f.operator || '—')}</td>
+      <td style="padding:4px 8px;opacity:0.7">${escapeHtml(f.type || '—')}</td>
+      <td style="padding:4px 8px;opacity:0.7">${escapeHtml(f.route || '—')}</td>
       <td style="padding:4px 8px;opacity:0.7">${time}</td>
       <td style="padding:4px 8px;opacity:0.7">${alt} ft</td>
       <td style="padding:4px 8px;opacity:0.7">${dist} km</td>
@@ -963,7 +1009,7 @@ function renderReportHTML(report) {
   }).join('');
 
   const rankRows = (items, label) => items.map(([name, count]) =>
-    `<tr><td style="padding:3px 8px">${name}</td><td style="padding:3px 8px;text-align:right">${count}</td></tr>`
+    `<tr><td style="padding:3px 8px">${escapeHtml(name)}</td><td style="padding:3px 8px;text-align:right">${count}</td></tr>`
   ).join('');
 
   return `
@@ -1095,6 +1141,7 @@ app.get('/report', (req, res) => {
 
 // ── /report/send — manual trigger for testing ─────────────────────────
 app.post('/report/send', async (req, res) => {
+  if (requireAdmin(req, res)) return;
   const ds = req.query.date || todayDate;
   await sendDailyEmail(ds);
   res.json({ ok: true, date: ds });

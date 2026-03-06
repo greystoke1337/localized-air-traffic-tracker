@@ -19,7 +19,7 @@ void checkSerialCmd() {
 
   } else if (input == "state") {
     const char* scr = currentScreen == SCREEN_WEATHER ? "weather" : "flight";
-    const char* src = dataSource == 2 ? "cache" : dataSource == 1 ? "direct" : "proxy";
+    const char* src = dataSourceLabel();
     Serial.printf("{\"cmd\":\"state\",\"screen\":\"%s\",\"flights\":%d,\"flight_idx\":%d,"
                   "\"countdown\":%d,\"wx_countdown\":%d,\"data_src\":\"%s\","
                   "\"fetching\":%s,\"using_cache\":%s,\"sd\":%s,\"wx_ready\":%s,"
@@ -53,7 +53,7 @@ void checkSerialCmd() {
       PROXY_HOST, PROXY_PORT, REFRESH_SECS, CYCLE_SECS);
 
   } else if (input == "diag") {
-    const char* src = dataSource == 2 ? "cache" : dataSource == 1 ? "direct" : "proxy";
+    const char* src = dataSourceLabel();
     Serial.printf("{\"cmd\":\"diag\",\"heap\":%d,\"maxblk\":%d,\"wifi\":%d,\"rssi\":%d,"
                   "\"src\":\"%s\",\"flights\":%d,\"uptime\":%lu,\"frag\":%d}\n",
       ESP.getFreeHeap(), ESP.getMaxAllocHeap(),
@@ -67,7 +67,7 @@ void checkSerialCmd() {
     } else {
       fetchFlights();
       countdown = REFRESH_SECS;
-      const char* src = dataSource == 2 ? "cache" : dataSource == 1 ? "direct" : "proxy";
+      const char* src = dataSourceLabel();
       Serial.printf("{\"cmd\":\"fetch\",\"ok\":true,\"flights\":%d,\"source\":\"%s\",\"heap\":%u}\n",
         flightCount, src, ESP.getFreeHeap());
     }

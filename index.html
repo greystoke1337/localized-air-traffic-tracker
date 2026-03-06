@@ -814,7 +814,6 @@
 
 
     // ── Emergency squawk alert ───────────────────────────────────────
-    const EMERG_LABELS = { '7700':'⚠ MAYDAY', '7600':'⚠ NORDO', '7500':'⚠ HIJACK' };
     let emergencyDismissed = new Set(); // squawks the user has dismissed this session
 
     function playEmergencyAlarm() {
@@ -836,7 +835,7 @@
     function checkEmergencySquawks() {
       const emergFlights = flights.filter(f => {
         const sqk = f.squawk || '';
-        return EMERG_LABELS[sqk] && !emergencyDismissed.has(f.hex + sqk);
+        return EMERG_SQUAWKS[sqk] && !emergencyDismissed.has(f.hex + sqk);
       });
 
       const banner = document.getElementById('emerg-banner');
@@ -848,8 +847,7 @@
       // Build banner text — list all emergency flights
       const lines = emergFlights.map(f => {
         const call  = (f.flight || '???').trim().toUpperCase();
-        const label = EMERG_LABELS[f.squawk];
-        return label + ' — ' + call + ' (' + f.squawk + ')';
+        return '⚠ ' + EMERG_SQUAWKS[f.squawk] + ' — ' + call + ' (' + f.squawk + ')';
       });
       banner.innerHTML = lines.join('<br>') + '<br><span style="font-size:0.65rem;opacity:0.6;">TAP TO DISMISS</span>';
       banner.classList.add('visible');
@@ -859,7 +857,7 @@
     function dismissEmergency() {
       // Mark all currently showing emergency flights as dismissed
       flights.forEach(f => {
-        if (EMERG_LABELS[f.squawk || '']) emergencyDismissed.add(f.hex + f.squawk);
+        if (EMERG_SQUAWKS[f.squawk || '']) emergencyDismissed.add(f.hex + f.squawk);
       });
       document.getElementById('emerg-banner').classList.remove('visible');
     }

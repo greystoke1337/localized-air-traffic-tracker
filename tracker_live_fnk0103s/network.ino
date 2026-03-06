@@ -207,9 +207,9 @@ int fetchAndParseDirectAPI() {
     f.lat=ac_lat; f.lon=ac_lon; f.alt=ac_alt;
     f.speed=ac_speed; f.vs=ac_vs; f.track=ac_track; f.dist=dist;
     f.status = deriveStatus(ac_alt, ac_vs, dist);
-    for (int i=0;f.callsign[i];i++) f.callsign[i]=toupper(f.callsign[i]);
-    for (int i=0;f.reg[i];i++)      f.reg[i]=toupper(f.reg[i]);
-    for (int i=0;f.type[i];i++)     f.type[i]=toupper(f.type[i]);
+    toUpperStr(f.callsign);
+    toUpperStr(f.reg);
+    toUpperStr(f.type);
     newCount++;
   };
   auto applyKV = [&]() {
@@ -272,12 +272,7 @@ int fetchAndParseDirectAPI() {
 
   http.end();
   Serial.printf("[MEM] Direct scan done: %d free, found %d\n", ESP.getFreeHeap(), newCount);
-
-  for (int i = 0; i < newCount-1; i++)
-    for (int j = 0; j < newCount-i-1; j++)
-      if (newFlights[j].dist > newFlights[j+1].dist)
-        { Flight tmp=newFlights[j]; newFlights[j]=newFlights[j+1]; newFlights[j+1]=tmp; }
-
+  sortFlightsByDist(newFlights, newCount);
   return newCount;
 }
 
@@ -312,17 +307,13 @@ int extractFlights(DynamicJsonDocument& doc) {
     f.dist  = dist;
     f.status = deriveStatus(alt, f.vs, dist);
 
-    for (int i = 0; f.callsign[i]; i++) f.callsign[i] = toupper(f.callsign[i]);
-    for (int i = 0; f.reg[i]; i++)      f.reg[i]      = toupper(f.reg[i]);
-    for (int i = 0; f.type[i]; i++)     f.type[i]     = toupper(f.type[i]);
+    toUpperStr(f.callsign);
+    toUpperStr(f.reg);
+    toUpperStr(f.type);
     newCount++;
   }
 
-  for (int i = 0; i < newCount-1; i++)
-    for (int j = 0; j < newCount-i-1; j++)
-      if (newFlights[j].dist > newFlights[j+1].dist)
-        { Flight tmp = newFlights[j]; newFlights[j] = newFlights[j+1]; newFlights[j+1] = tmp; }
-
+  sortFlightsByDist(newFlights, newCount);
   return newCount;
 }
 
