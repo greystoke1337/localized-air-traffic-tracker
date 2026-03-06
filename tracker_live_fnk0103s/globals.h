@@ -88,6 +88,7 @@ void logTs(const char* tag, const char* fmt, ...);
 bool alreadyLogged(const char* cs);
 const Airline* getAirline(const char* cs);
 const char* getAircraftTypeName(const char* code);
+const char* getAircraftCategory(const char* code);
 FlightStatus deriveStatus(int alt, int vs, float dist);
 const char* statusLabel(FlightStatus s);
 uint16_t statusColor(FlightStatus s);

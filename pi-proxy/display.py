@@ -55,6 +55,7 @@ PHASE_COLORS = {
 }
 
 PAGE_COUNT = 2
+FETCH_FAILED = 'FETCH_FAILED'
 
 # ── Pygame init ──────────────────────────────────────────
 pygame.init()
@@ -152,9 +153,18 @@ def fetch_all():
     for name, url in [('stats', STATS_URL), ('peak', PEAK_URL),
                        ('flights', FLIGHTS_URL), ('status', STATUS_URL)]:
         try:
-            results[name] = requests.get(url, timeout=3).json()
+            timeout = 12 if name == 'flights' else 3
+            resp = requests.get(url, timeout=timeout)
+            if name == 'flights' and resp.status_code != 200:
+                results[name] = FETCH_FAILED
+                continue
+            body = resp.json()
+            if name == 'flights' and 'error' in body:
+                results[name] = FETCH_FAILED
+                continue
+            results[name] = body
         except Exception:
-            results[name] = None
+            results[name] = FETCH_FAILED if name == 'flights' else None
     return results.get('stats'), results.get('peak'), results.get('flights'), results.get('status')
 
 
@@ -233,39 +243,39 @@ def draw_histogram(peak, y_top):
 
 # ── Page 0: Flights + Weather ────────────────────────────
 
-def render_page_flights(flights, weather, peak, page):
+def render_page_flights(flights, weather, peak, page, flights_ok=True):
     screen.fill(BG)
-    healthy = flights is not None or weather is not None
+    healthy = flights_ok or weather is not None
     draw_title_bar(healthy, page)
 
-    if not healthy:
-        draw_text('-- proxy unreachable --', font_md, RED, W // 2, H // 2, 'center')
-        flush_to_fb()
-        return
-
-    # Section header
-    n = len(flights) if flights else 0
-    draw_text(f'FLIGHTS NEARBY ({n})', font_sm, DIM, 10, 46)
-    draw_text(f'TODAY: {len(seen_today)}', font_sm, GREEN, W - 10, 46, 'right')
-
-    # Flight rows
-    if flights:
-        for i, f in enumerate(flights):
-            y = 68 + i * 58
-            # Row 1: callsign, phase, distance
-            draw_text(f['callsign'], font_md, AMBER, 10, y)
-            phase_col = PHASE_COLORS.get(f['phase'], DIM)
-            draw_text(f['phase'], font_md, phase_col, 220, y)
-            draw_text(f'{f["dist"]:.1f} KM', font_md, WHITE, W - 10, y, 'right')
-            # Row 2: route, altitude
-            route = f.get('route', '')
-            if route:
-                draw_text(route, font_sm, DIM, 10, y + 24)
-            draw_text(format_alt(f['alt']), font_sm, DIM, W - 10, y + 24, 'right')
-            if i < len(flights) - 1:
-                pygame.draw.line(screen, (30, 35, 50), (10, y + 52), (W - 10, y + 52), 1)
+    if not flights_ok and not flights:
+        draw_text('-- DATA UNAVAILABLE --', font_md, RED, W // 2, 100, 'center')
+        draw_text('flight fetch failed', font_sm, DIM, W // 2, 128, 'center')
     else:
-        draw_text('CLEAR SKIES', font_md, DIM, W // 2, 110, 'center')
+        # Section header
+        n = len(flights) if flights else 0
+        header = f'FLIGHTS NEARBY ({n})'
+        if not flights_ok:
+            header += '  [STALE]'
+        draw_text(header, font_sm, AMBER if not flights_ok else DIM, 10, 46)
+        draw_text(f'TODAY: {len(seen_today)}', font_sm, GREEN, W - 10, 46, 'right')
+
+        # Flight rows
+        if flights:
+            for i, f in enumerate(flights):
+                y = 68 + i * 58
+                draw_text(f['callsign'], font_md, AMBER, 10, y)
+                phase_col = PHASE_COLORS.get(f['phase'], DIM)
+                draw_text(f['phase'], font_md, phase_col, 220, y)
+                draw_text(f'{f["dist"]:.1f} KM', font_md, WHITE, W - 10, y, 'right')
+                route = f.get('route', '')
+                if route:
+                    draw_text(route, font_sm, DIM, 10, y + 24)
+                draw_text(format_alt(f['alt']), font_sm, DIM, W - 10, y + 24, 'right')
+                if i < len(flights) - 1:
+                    pygame.draw.line(screen, (30, 35, 50), (10, y + 52), (W - 10, y + 52), 1)
+        else:
+            draw_text('CLEAR SKIES', font_md, DIM, W // 2, 110, 'center')
 
     # Weather section
     wx_y = 190
@@ -373,6 +383,7 @@ def render_page_dashboard(stats, status, page):
 stats_data, peak_data, flights_raw, status_data = None, None, None, None
 weather_data      = None
 processed_flights = []
+flights_ok        = True
 current_page      = 0
 last_page_switch  = time.time()
 last_fetch        = 0
@@ -383,12 +394,18 @@ while True:
 
     if now - last_fetch >= REFRESH:
         stats_data, peak_data, flights_raw, status_data = fetch_all()
-        processed_flights = process_flights(flights_raw)
-        track_flights_today(processed_flights)
+        if flights_raw is FETCH_FAILED:
+            flights_ok = False
+        else:
+            processed_flights = process_flights(flights_raw)
+            track_flights_today(processed_flights)
+            flights_ok = True
         last_fetch = now
 
     if now - last_wx_fetch >= WEATHER_REFRESH:
-        weather_data = fetch_weather()
+        wx = fetch_weather()
+        if wx is not None:
+            weather_data = wx
         last_wx_fetch = now
 
     if now - last_page_switch >= PAGE_ROTATE_SEC:
@@ -396,7 +413,7 @@ while True:
         last_page_switch = now
 
     if current_page == 0:
-        render_page_flights(processed_flights, weather_data, peak_data, current_page)
+        render_page_flights(processed_flights, weather_data, peak_data, current_page, flights_ok)
     else:
         render_page_dashboard(stats_data, status_data, current_page)
 

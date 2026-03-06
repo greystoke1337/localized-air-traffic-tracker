@@ -35,6 +35,13 @@ const char* getAircraftTypeName(const char* code) {
   return code;
 }
 
+const char* getAircraftCategory(const char* code) {
+  if (!code || !code[0]) return nullptr;
+  for (int i = 0; i < AIRCRAFT_TYPE_COUNT; i++)
+    if (strcmp(AIRCRAFT_TYPES[i].code, code) == 0) return AIRCRAFT_TYPES[i].cat;
+  return nullptr;
+}
+
 FlightStatus deriveStatus(int alt, int vs, float dist) {
   if (alt <= 0) return STATUS_UNKNOWN;
   if (dist < 2.0f && alt < 8000) return STATUS_OVERHEAD;

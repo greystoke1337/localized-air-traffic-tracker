@@ -72,7 +72,7 @@ String fetchFromProxy() {
     PROXY_HOST, PROXY_PORT, HOME_LAT, HOME_LON, apiRadiusNm());
   HTTPClient http;
   http.begin(tcp, url);
-  http.setTimeout(5000);
+  http.setTimeout(12000);
   int code = http.GET();
   esp_task_wdt_reset();
   if (code == 200) {

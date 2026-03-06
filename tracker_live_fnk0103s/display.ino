@@ -150,9 +150,11 @@ void renderFlight(const Flight& f) {
   tft.drawFastHLine(10, y, W - 20, C_DIMMER);
   y += 8;
   tft.setTextSize(1);
-  tft.setTextColor(C_DIM, C_BG);
+  const char* acCat = getAircraftCategory(f.type);
+  tft.setTextColor(acCat ? C_AMBER : C_DIM, C_BG);
   tft.setCursor(x, y);
-  tft.print("AIRCRAFT TYPE");
+  tft.print(acCat ? acCat : "AIRCRAFT TYPE");
+  tft.setTextColor(C_DIM, C_BG);
   tft.setCursor(W/2 + 20, y);
   tft.print("REGISTRATION");
   y += 10;

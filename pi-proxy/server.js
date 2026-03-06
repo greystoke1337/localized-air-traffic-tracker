@@ -516,7 +516,7 @@ app.get('/flights', async (req, res) => {
       return data;
     })();
     inFlight.set(key, promise);
-    promise.finally(() => inFlight.delete(key));
+    promise.finally(() => inFlight.delete(key)).catch(() => {});
   }
 
   try {
@@ -632,7 +632,7 @@ app.get('/weather', async (req, res) => {
       return data;
     })();
     inFlight.set(key, promise);
-    promise.finally(() => inFlight.delete(key));
+    promise.finally(() => inFlight.delete(key)).catch(() => {});
   }
 
   try {
