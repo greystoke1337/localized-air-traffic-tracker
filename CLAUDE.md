@@ -136,4 +136,4 @@ Use these sub-agents for domain-specific tasks:
 |-------|------|-------------|
 | Backend Specialist | `.claude/agents/backend-specialist.md` | Pi proxy, ESP32 firmware, Cloudflare Tunnel, API integrations |
 | Technical Writer | `.claude/agents/technical-writer.md` | README, PI_PROXY_SETUP.md, inline comments, documentation |
-| UX Designer | `.claude/agents/ux-designer.md` | UI layout, CRT aesthetic, accessibility, mobile responsiveness |
+| UI/UX Designer | `.claude/agents/ux-designer.md` | UI implementation, layout, CRT aesthetic, accessibility, mobile responsiveness, TFT display UI |
