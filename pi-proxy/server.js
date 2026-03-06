@@ -11,7 +11,9 @@ const fetch   = (url, opts = {}) => {
 };
 const os      = require('os');
 const fs      = require('fs');
+const path    = require('path');
 const { execSync } = require('child_process');
+const nodemailer = require('nodemailer');
 
 const app      = express();
 const PORT     = 3000;
@@ -22,6 +24,162 @@ const ROUTE_CACHE_FILE = __dirname + '/route-cache.json';
 const cache      = new Map();
 const inFlight   = new Map();  // key → Promise (dedup concurrent upstream fetches)
 const routeCache = new Map();  // callsign -> { dep, arr, timestamp }
+
+// ── .env loader ──────────────────────────────────────────────────────
+try {
+  const envFile = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+  for (const line of envFile.split('\n')) {
+    const m = line.match(/^\s*([^#=]+?)\s*=\s*(.*?)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
+} catch { /* no .env file */ }
+
+// ── Report config ────────────────────────────────────────────────────
+const REPORTS_DIR = path.join(__dirname, 'reports');
+const HOME_LAT   = parseFloat(process.env.HOME_LAT || '-33.8530');
+const HOME_LON   = parseFloat(process.env.HOME_LON || '151.1410');
+const TZ         = 'Australia/Sydney';
+fs.mkdirSync(REPORTS_DIR, { recursive: true });
+
+// ── Haversine (km) ───────────────────────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ── Airline ICAO prefix → name ───────────────────────────────────────
+const AIRLINE_NAMES = {
+  QFA:'Qantas',QLK:'QantasLink',VOZ:'Virgin Australia',JST:'Jetstar',
+  RXA:'Rex',UAE:'Emirates',ETD:'Etihad',QTR:'Qatar Airways',SIA:'Singapore Airlines',
+  ANZ:'Air New Zealand',CPA:'Cathay Pacific',MAS:'Malaysia Airlines',THA:'Thai Airways',
+  KAL:'Korean Air',JAL:'JAL',ANA:'ANA',AAL:'American Airlines',UAL:'United Airlines',
+  BAW:'British Airways',DAL:'Delta',AFR:'Air France',DLH:'Lufthansa',
+  FJI:'Fiji Airways',EVA:'EVA Air',CCA:'Air China',CSN:'China Southern',CES:'China Eastern',
+  HAL:'Hawaiian Airlines',AIC:'Air India',TGW:'Scoot',LAN:'LATAM',
+  CHH:'Hainan Airlines',CXA:'Xiamen Air',CEB:'Cebu Pacific',
+  VJC:'VietJet',ASA:'Alaska Airlines',KLM:'KLM',ANG:'Air Niugini',
+  CAL:'China Airlines',ALK:'SriLankan',NWL:'Network Aviation',UTY:'Alliance Airlines',
+  FRE:'FlyPelican',MXD:'Batik Air',ACI:'Aircalin',
+};
+
+function airlineName(callsign) {
+  if (!callsign) return null;
+  const prefix = callsign.replace(/[0-9]/g, '').substring(0, 3).toUpperCase();
+  return AIRLINE_NAMES[prefix] || prefix;
+}
+
+function airlinePrefix(callsign) {
+  if (!callsign) return '???';
+  return callsign.replace(/[0-9]/g, '').substring(0, 3).toUpperCase();
+}
+
+// ── Daily flight log ─────────────────────────────────────────────────
+let todayFlights = {};
+let todayHourly  = new Array(24).fill(0);
+let todayDate    = '';
+let emailSentToday = false;
+let lastSaveTime   = 0;
+
+function aestNow() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: TZ }));
+}
+
+function dateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function todayFilePath(ds) {
+  return path.join(REPORTS_DIR, `flights-${ds}.json`);
+}
+
+function logFlights(acArray) {
+  const now  = aestNow();
+  const ds   = dateStr(now);
+  const hour = now.getHours();
+  const iso  = new Date().toISOString();
+
+  if (ds !== todayDate) {
+    if (todayDate) saveTodayLog(todayDate);
+    todayFlights = {};
+    todayHourly  = new Array(24).fill(0);
+    todayDate    = ds;
+    emailSentToday = false;
+    loadTodayLog(ds);
+  }
+
+  for (const ac of acArray) {
+    const cs = (ac.flight || '').trim();
+    if (!cs) continue;
+
+    const dist = (ac.lat != null && ac.lon != null)
+      ? haversine(HOME_LAT, HOME_LON, ac.lat, ac.lon)
+      : null;
+
+    if (todayFlights[cs]) {
+      const f = todayFlights[cs];
+      f.lastSeen = iso;
+      if (ac.alt_baro != null && ac.alt_baro !== 'ground') {
+        f.minAlt = Math.min(f.minAlt ?? Infinity, ac.alt_baro);
+        f.maxAlt = Math.max(f.maxAlt ?? 0, ac.alt_baro);
+      }
+      if (dist != null) f.minDist = Math.min(f.minDist ?? Infinity, dist);
+      if (ac.gs != null) f.maxGs = Math.max(f.maxGs ?? 0, ac.gs);
+    } else {
+      todayHourly[hour]++;
+      todayFlights[cs] = {
+        callsign: cs,
+        type:     ac.t || ac.desc || null,
+        reg:      ac.r || null,
+        operator: ac.ownOp || airlineName(cs),
+        dep:      ac.dep || null,
+        arr:      ac.arr || null,
+        route:    ac.route || null,
+        firstSeen: iso,
+        lastSeen:  iso,
+        minAlt:   (ac.alt_baro != null && ac.alt_baro !== 'ground') ? ac.alt_baro : null,
+        maxAlt:   (ac.alt_baro != null && ac.alt_baro !== 'ground') ? ac.alt_baro : null,
+        minDist:  dist,
+        maxGs:    ac.gs || null,
+      };
+    }
+  }
+}
+
+function buildSummary() {
+  const total = Object.keys(todayFlights).length;
+  const peakIdx = todayHourly.indexOf(Math.max(...todayHourly));
+  return {
+    totalUnique:   total,
+    peakHour:      peakIdx,
+    peakHourCount: todayHourly[peakIdx] || 0,
+    hourly:        [...todayHourly],
+  };
+}
+
+function saveTodayLog(ds) {
+  ds = ds || todayDate;
+  if (!ds) return;
+  const data = { date: ds, summary: buildSummary(), flights: todayFlights };
+  fs.writeFile(todayFilePath(ds), JSON.stringify(data, null, 2), () => {});
+}
+
+function loadTodayLog(ds) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(todayFilePath(ds), 'utf8'));
+    todayFlights = raw.flights || {};
+    todayHourly  = raw.summary?.hourly || new Array(24).fill(0);
+    console.log(`Loaded ${Object.keys(todayFlights).length} flights from ${ds}`);
+  } catch { /* no file yet */ }
+}
+
+// Initialize today's state on startup
+todayDate = dateStr(aestNow());
+loadTodayLog(todayDate);
 
 // ICAO and IATA codes → city name (same DB as web app)
 const AIRPORT_DB = {
@@ -342,6 +500,7 @@ app.get('/', (req, res) => {
 
   <button id="toggle-btn" onclick="toggleProxy()">⬤ PROXY ON</button>
   <span id="proxy-status-label"></span>
+  <a href="/report" style="display:inline-block;margin-left:16px;color:#ffa600;font-size:0.8rem;opacity:0.6;text-decoration:none;border:1px solid #7a5200;padding:4px 12px">VIEW REPORT</a>
 
   <div id="root"></div>
   <p id="refresh-note"></p>
@@ -533,6 +692,7 @@ app.get('/flights', async (req, res) => {
         if (routeStr) ac.route = routeStr;
       }
       cache.set(key, { data, timestamp: Date.now() });
+      logFlights(data.ac || []);
       return data;
     })();
     inFlight.set(key, promise);
@@ -666,6 +826,305 @@ app.get('/weather', async (req, res) => {
     res.status(502).json({ error: e.message });
   }
 });
+
+// ── Report generation ─────────────────────────────────────────────────
+function loadDayData(ds) {
+  try {
+    return JSON.parse(fs.readFileSync(todayFilePath(ds), 'utf8'));
+  } catch { return null; }
+}
+
+function prevDateStr(ds, daysBack) {
+  const d = new Date(ds + 'T12:00:00');
+  d.setDate(d.getDate() - daysBack);
+  return dateStr(d);
+}
+
+function generateReport(ds) {
+  let data;
+  if (ds === todayDate) {
+    data = { date: ds, summary: buildSummary(), flights: todayFlights };
+  } else {
+    data = loadDayData(ds);
+  }
+  if (!data) return null;
+
+  const flights = Object.values(data.flights);
+  const total = flights.length;
+
+  // Top airlines
+  const airlineCounts = {};
+  for (const f of flights) {
+    const prefix = airlinePrefix(f.callsign);
+    const name = AIRLINE_NAMES[prefix] || prefix;
+    airlineCounts[name] = (airlineCounts[name] || 0) + 1;
+  }
+  const topAirlines = Object.entries(airlineCounts)
+    .sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+  // Top aircraft types
+  const typeCounts = {};
+  for (const f of flights) {
+    if (f.type) typeCounts[f.type] = (typeCounts[f.type] || 0) + 1;
+  }
+  const topTypes = Object.entries(typeCounts)
+    .sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+  // Top routes
+  const routeCounts = {};
+  for (const f of flights) {
+    if (f.route) routeCounts[f.route] = (routeCounts[f.route] || 0) + 1;
+  }
+  const topRoutes = Object.entries(routeCounts)
+    .sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+  // Trends
+  const yesterday = loadDayData(prevDateStr(ds, 1));
+  let avg7 = 0, days7 = 0;
+  for (let i = 1; i <= 7; i++) {
+    const d = loadDayData(prevDateStr(ds, i));
+    if (d) { avg7 += d.summary.totalUnique; days7++; }
+  }
+  avg7 = days7 > 0 ? Math.round(avg7 / days7) : null;
+
+  const trends = {};
+  if (yesterday) {
+    const diff = total - yesterday.summary.totalUnique;
+    const pct = yesterday.summary.totalUnique > 0
+      ? Math.round((diff / yesterday.summary.totalUnique) * 100) : 0;
+    trends.vsYesterday = { diff, pct, total: yesterday.summary.totalUnique };
+  }
+  if (avg7 != null) {
+    const diff = total - avg7;
+    const pct = avg7 > 0 ? Math.round((diff / avg7) * 100) : 0;
+    trends.vs7day = { diff, pct, avg: avg7 };
+  }
+
+  // Sort flights by firstSeen
+  flights.sort((a, b) => (a.firstSeen || '').localeCompare(b.firstSeen || ''));
+
+  return {
+    date: ds,
+    total,
+    summary: data.summary,
+    topAirlines,
+    topTypes,
+    topRoutes,
+    trends,
+    flights,
+  };
+}
+
+function trendArrow(diff, pct) {
+  if (diff > 0) return `<span style="color:#60ff90">▲ +${pct}%</span>`;
+  if (diff < 0) return `<span style="color:#ff6060">▼ ${pct}%</span>`;
+  return `<span style="color:#ffa600">▬ 0%</span>`;
+}
+
+function renderReportHTML(report) {
+  if (!report) return '<p>No data for this date.</p>';
+
+  const { date, total, summary, topAirlines, topTypes, topRoutes, trends, flights } = report;
+
+  const hourLabels = summary.hourly.map((c, i) =>
+    `<td style="text-align:center;padding:2px 4px;${i === summary.peakHour ? 'color:#60ff90;font-weight:bold' : 'opacity:0.7'}">${c}</td>`
+  ).join('');
+  const hourHeaders = summary.hourly.map((_, i) =>
+    `<td style="text-align:center;padding:2px 4px;opacity:0.4;font-size:0.65rem">${String(i).padStart(2, '0')}</td>`
+  ).join('');
+
+  const maxHourly = Math.max(...summary.hourly, 1);
+  const hourBars = summary.hourly.map((c, i) => {
+    const h = Math.round((c / maxHourly) * 30);
+    return `<td style="vertical-align:bottom;text-align:center;padding:0 1px">` +
+      `<div style="width:12px;height:${h}px;background:${i === summary.peakHour ? '#60ff90' : '#ffa600'};opacity:${c > 0 ? 0.8 : 0.15};margin:0 auto"></div></td>`;
+  }).join('');
+
+  const trendYesterday = trends.vsYesterday
+    ? `vs yesterday (${trends.vsYesterday.total}): ${trendArrow(trends.vsYesterday.diff, trends.vsYesterday.pct)}`
+    : '<span style="opacity:0.4">no previous data</span>';
+  const trend7day = trends.vs7day
+    ? `vs 7-day avg (${trends.vs7day.avg}): ${trendArrow(trends.vs7day.diff, trends.vs7day.pct)}`
+    : '<span style="opacity:0.4">insufficient data</span>';
+
+  const tableRows = flights.map(f => {
+    const time = f.firstSeen ? new Date(f.firstSeen).toLocaleTimeString('en-AU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }) : '—';
+    const alt = f.minAlt != null ? `${Math.round(f.minAlt)}` : '—';
+    const dist = f.minDist != null ? `${f.minDist.toFixed(1)}` : '—';
+    return `<tr style="border-bottom:1px solid rgba(255,166,0,0.1)">
+      <td style="padding:4px 8px">${f.callsign}</td>
+      <td style="padding:4px 8px;opacity:0.7">${f.operator || '—'}</td>
+      <td style="padding:4px 8px;opacity:0.7">${f.type || '—'}</td>
+      <td style="padding:4px 8px;opacity:0.7">${f.route || '—'}</td>
+      <td style="padding:4px 8px;opacity:0.7">${time}</td>
+      <td style="padding:4px 8px;opacity:0.7">${alt} ft</td>
+      <td style="padding:4px 8px;opacity:0.7">${dist} km</td>
+    </tr>`;
+  }).join('');
+
+  const rankRows = (items, label) => items.map(([name, count]) =>
+    `<tr><td style="padding:3px 8px">${name}</td><td style="padding:3px 8px;text-align:right">${count}</td></tr>`
+  ).join('');
+
+  return `
+  <div style="font-family:'Courier New',monospace;background:#1a0a00;color:#ffa600;padding:24px;max-width:900px;margin:0 auto">
+    <h1 style="font-size:1.3rem;margin:0 0 4px;text-shadow:0 0 8px #ff8000">DAILY AIR TRAFFIC REPORT</h1>
+    <p style="opacity:0.5;margin:0 0 20px;font-size:0.85rem">${date} · Russell Lea, Sydney · 15 km geofence</p>
+
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+      <div style="border:1px solid #7a5200;padding:12px 16px;flex:1;min-width:140px;background:rgba(255,166,0,0.03)">
+        <div style="opacity:0.5;font-size:0.7rem">TOTAL FLIGHTS</div>
+        <div style="font-size:1.8rem;text-shadow:0 0 8px #ff8000">${total}</div>
+      </div>
+      <div style="border:1px solid #7a5200;padding:12px 16px;flex:1;min-width:140px;background:rgba(255,166,0,0.03)">
+        <div style="opacity:0.5;font-size:0.7rem">PEAK HOUR</div>
+        <div style="font-size:1.8rem;text-shadow:0 0 8px #ff8000">${String(summary.peakHour).padStart(2, '0')}:00</div>
+        <div style="opacity:0.5;font-size:0.7rem">${summary.peakHourCount} flights</div>
+      </div>
+      <div style="border:1px solid #7a5200;padding:12px 16px;flex:2;min-width:200px;background:rgba(255,166,0,0.03)">
+        <div style="opacity:0.5;font-size:0.7rem">TRENDS</div>
+        <div style="font-size:0.85rem;margin-top:4px">${trendYesterday}</div>
+        <div style="font-size:0.85rem;margin-top:2px">${trend7day}</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:20px;overflow-x:auto">
+      <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">▸ HOURLY DISTRIBUTION</div>
+      <table style="border-collapse:collapse;width:100%"><tr>${hourBars}</tr><tr>${hourLabels}</tr><tr>${hourHeaders}</tr></table>
+    </div>
+
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+      <div style="flex:1;min-width:200px">
+        <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">▸ TOP AIRLINES</div>
+        <table style="border-collapse:collapse;width:100%;border:1px solid #7a5200">${rankRows(topAirlines, 'Airline')}</table>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">▸ TOP AIRCRAFT</div>
+        <table style="border-collapse:collapse;width:100%;border:1px solid #7a5200">${rankRows(topTypes, 'Type')}</table>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">▸ TOP ROUTES</div>
+        <table style="border-collapse:collapse;width:100%;border:1px solid #7a5200">${rankRows(topRoutes, 'Route')}</table>
+      </div>
+    </div>
+
+    <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">▸ ALL FLIGHTS (${total})</div>
+    <div style="overflow-x:auto">
+      <table style="border-collapse:collapse;width:100%;border:1px solid #7a5200;font-size:0.8rem">
+        <tr style="opacity:0.5;border-bottom:1px solid #7a5200">
+          <th style="padding:4px 8px;text-align:left">Callsign</th>
+          <th style="padding:4px 8px;text-align:left">Airline</th>
+          <th style="padding:4px 8px;text-align:left">Type</th>
+          <th style="padding:4px 8px;text-align:left">Route</th>
+          <th style="padding:4px 8px;text-align:left">Time</th>
+          <th style="padding:4px 8px;text-align:left">Alt</th>
+          <th style="padding:4px 8px;text-align:left">Dist</th>
+        </tr>
+        ${tableRows}
+      </table>
+    </div>
+
+    <p style="opacity:0.3;font-size:0.7rem;margin-top:20px;text-align:center">
+      Generated by Overhead Tracker · overheadtracker.com
+    </p>
+  </div>`;
+}
+
+// ── Email ─────────────────────────────────────────────────────────────
+async function sendDailyEmail(ds) {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const reportTo = process.env.REPORT_TO;
+  if (!smtpHost || !smtpUser || !smtpPass || !reportTo) {
+    console.log('Email not configured — skipping daily report email');
+    return;
+  }
+
+  const report = generateReport(ds);
+  if (!report || report.total === 0) {
+    console.log(`No flights for ${ds} — skipping email`);
+    return;
+  }
+
+  const html = renderReportHTML(report);
+  const transport = nodemailer.createTransport({
+    host: smtpHost,
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: false,
+    auth: { user: smtpUser, pass: smtpPass },
+  });
+
+  try {
+    await transport.sendMail({
+      from: process.env.REPORT_FROM || `Overhead Tracker <${smtpUser}>`,
+      to: reportTo,
+      subject: `Air Traffic Report — ${ds} — ${report.total} flights`,
+      html,
+    });
+    console.log(`Daily report email sent for ${ds}`);
+    addLog({ type: 'SYS', client: 'system', key: `email sent: ${ds} (${report.total} flights)` });
+  } catch (e) {
+    console.error('Failed to send daily email:', e.message);
+    addLog({ type: 'ERR', client: 'system', error: `email failed: ${e.message}` });
+  }
+}
+
+// ── /report endpoint ──────────────────────────────────────────────────
+app.get('/report', (req, res) => {
+  const ds = req.query.date || todayDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return res.status(400).json({ error: 'Invalid date format' });
+
+  const report = generateReport(ds);
+
+  if (req.query.format === 'json') return res.json(report || { error: 'No data' });
+
+  const nav = `<div style="font-family:'Courier New',monospace;background:#1a0a00;padding:12px 24px;text-align:center">
+    <a href="/report?date=${prevDateStr(ds, 1)}" style="color:#ffa600;text-decoration:none;margin-right:20px">◀ prev day</a>
+    <a href="/report" style="color:#ffa600;text-decoration:none;margin-right:20px">today</a>
+    <a href="/report?date=${prevDateStr(ds, -1)}" style="color:#ffa600;text-decoration:none">next day ▶</a>
+    <span style="margin-left:20px;opacity:0.4;color:#ffa600">|</span>
+    <a href="/" style="color:#ffa600;text-decoration:none;margin-left:20px;opacity:0.6">dashboard</a>
+  </div>`;
+
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Report ${ds} — Overhead Tracker</title>
+    <style>body{margin:0;background:#1a0a00}</style></head>
+    <body>${nav}${renderReportHTML(report)}</body></html>`);
+});
+
+// ── /report/send — manual trigger for testing ─────────────────────────
+app.post('/report/send', async (req, res) => {
+  const ds = req.query.date || todayDate;
+  await sendDailyEmail(ds);
+  res.json({ ok: true, date: ds });
+});
+
+// ── Periodic save + day rollover + email scheduler ────────────────────
+setInterval(() => {
+  const now = aestNow();
+  const ds  = dateStr(now);
+
+  // Day rollover
+  if (ds !== todayDate) {
+    saveTodayLog(todayDate);
+    todayFlights = {};
+    todayHourly  = new Array(24).fill(0);
+    todayDate    = ds;
+    emailSentToday = false;
+    loadTodayLog(ds);
+    console.log(`Day rolled over to ${ds}`);
+  }
+
+  // Periodic save (every 60s)
+  saveTodayLog();
+
+  // Send email at 23:55 AEST
+  if (now.getHours() === 23 && now.getMinutes() >= 55 && !emailSentToday) {
+    emailSentToday = true;
+    sendDailyEmail(ds);
+  }
+}, 60000);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Proxy + dashboard running on port ${PORT}`);
