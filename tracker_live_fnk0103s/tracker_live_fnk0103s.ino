@@ -433,7 +433,7 @@ void loop() {
       }
     }
 
-    if (currentScreen == SCREEN_FLIGHT && flightCount > 0) drawStatusBar();
+    if (currentScreen == SCREEN_FLIGHT && flightCount > 0 && !isFetching) drawStatusBar();
 
     if (currentScreen == SCREEN_WEATHER) {
       time_t utcNow   = time(NULL);
@@ -461,9 +461,12 @@ void loop() {
   }
 
   if (flightCount > 1 && currentScreen == SCREEN_FLIGHT &&
-      now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
+      !isFetching && now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
     lastCycle = now;
-    flightIndex = (flightIndex + 1) % flightCount;
-    renderFlight(flights[flightIndex]);
+    int fc = flightCount;  // snapshot to avoid race with fetchFlights()
+    if (fc > 0) {
+      flightIndex = (flightIndex + 1) % fc;
+      renderFlight(flights[flightIndex]);
+    }
   }
 }

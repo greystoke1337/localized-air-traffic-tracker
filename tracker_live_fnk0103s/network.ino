@@ -43,9 +43,11 @@ int parsePayload(String& payload) {
   af["alt_baro"] = af["gs"] = af["baro_rate"] = af["track"] =
   af["squawk"] = af["route"] = af["dep"] = af["arr"] = true;
   g_jsonDoc.clear();
+  esp_task_wdt_reset();
   Serial.printf("[MEM] Before JSON parse: %d free\n", ESP.getFreeHeap());
   DeserializationError err = deserializeJson(g_jsonDoc, &payload[0], payload.length(), DeserializationOption::Filter(filter));
   Serial.printf("[MEM] After JSON parse: %d free\n", ESP.getFreeHeap());
+  esp_task_wdt_reset();
   if (err) {
     Serial.printf("JSON parse error: %s\n", err.c_str());
     return -1;
@@ -334,6 +336,7 @@ void fetchFlights() {
       String payload = fetchFromProxy();
       if (!payload.isEmpty()) {
         writeCache(payload);
+        esp_task_wdt_reset();
         newCount = parsePayload(payload);
         payload = String();
         dataSource = 0;
@@ -380,6 +383,7 @@ void fetchFlights() {
   usingCache  = fromCache;
 
   for (int i = 0; i < flightCount; i++) logFlight(flights[i]);
+  esp_task_wdt_reset();
   if (flightCount == 0) {
     logTs("FETCH", "No flights, switching to weather");
     currentScreen = SCREEN_WEATHER;
