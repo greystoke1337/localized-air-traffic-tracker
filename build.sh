@@ -17,6 +17,11 @@
 #   ./build.sh log 5         → capture for 5 minutes
 #   ./build.sh log 20 COM5   → capture on specific port
 #   ./build.sh safe          → test + validate (full pre-push check)
+#   ./build.sh stress        → 10-min chaos stress test (mock proxy + serial)
+#   ./build.sh stress 20     → 20-min stress test
+#   ./build.sh stress 10 COM5 → stress test on specific port
+#   ./build.sh stress 10 COM4 transition → stress with transition mode
+#   ./build.sh proxy-host 192.168.86.30  → change PROXY_HOST + compile + flash
 #   OVERHEAD_TRACKER_IP=x.x.x.x ./build.sh ota  → OTA to specific IP
 #
 # ──────────────────────────────────────────────────────────────────────────────
@@ -46,6 +51,10 @@ detect_platform() {
       ARDUINO_CLI="${ARDUINO_CLI:-/c/Program Files/Arduino IDE/resources/app/lib/backend/resources/arduino-cli.exe}"
       CONFIG_FILE="${ARDUINO_CLI_CONFIG:-C:/Users/$(whoami)/.arduinoIDE/arduino-cli.yaml}"
       ESPOTA="${ESPOTA:-/c/Users/$(whoami)/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.7/tools/espota.exe}"
+      # Add MSYS2 gcc/g++ to PATH if available
+      if [ -d "/c/msys64/ucrt64/bin" ]; then
+        export PATH="/c/msys64/ucrt64/bin:$PATH"
+      fi
       ;;
     Linux*)
       PLATFORM="linux"
@@ -373,6 +382,93 @@ print(f'File: {logfile}')
 " "$port" "$BAUD" "$minutes" "$logfile"
 }
 
+# ── Stress test ──────────────────────────────────────────────────────────────
+run_stress() {
+  local minutes="${2:-10}"
+  local port
+  port=$(resolve_port "${3:-}")
+  local proxy_mode="${4:-chaos}"
+  mkdir -p logs
+  local logfile="logs/stress-$(date +%Y-%m-%d-%H%M%S).log"
+
+  info "STRESS TEST — ${minutes}m, ${proxy_mode} mode, serial on ${port}"
+  echo ""
+  echo "  NOTE: ESP32 PROXY_HOST must point to this machine's IP."
+  echo "  Use: ./build.sh proxy-host <your-ip> to set it."
+  echo ""
+
+  # Start mock proxy in background
+  info "Starting mock proxy (${proxy_mode} mode, port 3000)..."
+  node tools/mock-proxy.js "$proxy_mode" 3000 &
+  local proxy_pid=$!
+  sleep 1
+
+  # Capture serial output
+  info "Capturing serial → $logfile (${minutes}m)..."
+  /c/python314/python.exe -u -c "
+import serial, sys, time
+
+port, baud, minutes = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+logfile = sys.argv[4]
+duration = minutes * 60
+
+ser = serial.Serial(port, baud, timeout=1)
+time.sleep(0.1)
+ser.reset_input_buffer()
+
+start = time.time()
+deadline = start + duration
+line_count = 0
+
+with open(logfile, 'w', encoding='utf-8') as f:
+    try:
+        while time.time() < deadline:
+            raw = ser.readline()
+            if not raw:
+                continue
+            line = raw.decode('utf-8', errors='replace').rstrip()
+            elapsed = time.time() - start
+            stamped = f'[{elapsed:8.3f}] {line}'
+            f.write(stamped + '\n')
+            f.flush()
+            print(stamped)
+            line_count += 1
+    except KeyboardInterrupt:
+        pass
+
+ser.close()
+print(f'\nCapture complete: {line_count} lines, {(time.time()-start)/60:.1f} min')
+" "$port" "$BAUD" "$minutes" "$logfile" || true
+
+  # Kill mock proxy
+  kill $proxy_pid 2>/dev/null || true
+  wait $proxy_pid 2>/dev/null || true
+
+  # Analyze
+  echo ""
+  info "Analyzing log..."
+  node tools/serial-stress.js "$logfile"
+}
+
+# ── Proxy host ────────────────────────────────────────────────────────────────
+run_proxy_host() {
+  local new_ip="${2:-}"
+  local port="${3:-COM4}"
+  if [ -z "$new_ip" ]; then
+    echo "Usage: ./build.sh proxy-host <ip> [port]"
+    echo "  Example: ./build.sh proxy-host 192.168.86.30 COM4"
+    exit 1
+  fi
+  local ino_file="tracker_live_fnk0103s/tracker_live_fnk0103s.ino"
+  local old_ip
+  old_ip=$(sed -n 's/.*PROXY_HOST *= *"\([^"]*\)".*/\1/p' "$ino_file")
+  info "Changing PROXY_HOST: ${old_ip} → ${new_ip}"
+  sed -i "s|PROXY_HOST = \"${old_ip}\"|PROXY_HOST = \"${new_ip}\"|" "$ino_file"
+  grep "PROXY_HOST" "$ino_file"
+  run_compile
+  run_upload _ "$port"
+}
+
 # ── Safe (test + validate — full pre-push check) ─────────────────────────────
 run_safe() {
   info "SAFE — full pre-push validation"
@@ -395,5 +491,7 @@ case "$CMD" in
   validate)         run_validate ;;
   test)             run_test ;;
   safe)             run_safe ;;
+  stress)           run_stress  "$@" ;;
+  proxy-host)       run_proxy_host "$@" ;;
   all|*)            run_compile && run_upload "$@" ;;
 esac

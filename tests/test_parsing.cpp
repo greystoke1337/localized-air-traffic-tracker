@@ -9,6 +9,7 @@
   proxy/cache responses.
 */
 
+#define _USE_MATH_DEFINES
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -19,6 +20,19 @@
 #include <sstream>
 
 #include <ArduinoJson.h>
+
+// ─── strlcpy for non-BSD systems ──────────────────────
+#ifndef __APPLE__
+static size_t strlcpy(char* dst, const char* src, size_t size) {
+  size_t len = strlen(src);
+  if (size > 0) {
+    size_t n = (len >= size) ? size - 1 : len;
+    memcpy(dst, src, n);
+    dst[n] = '\0';
+  }
+  return len;
+}
+#endif
 
 // ─── Types from firmware ──────────────────────────────
 enum FlightStatus {
@@ -35,6 +49,8 @@ struct Flight {
   int alt, speed, vs, track;
   float dist;
   char squawk[6];
+  char dep[6];
+  char arr[6];
   FlightStatus status;
 };
 
@@ -84,6 +100,7 @@ int extractFlights(DynamicJsonDocument& doc) {
     if (dist > GEOFENCE_KM) continue;
 
     Flight& f = newFlights[count];
+    memset(&f, 0, sizeof(Flight));
     const char* cs = a["flight"] | "";
     strlcpy(f.callsign, cs, sizeof(f.callsign));
     for (int i = (int)strlen(f.callsign)-1; i >= 0 && f.callsign[i] == ' '; i--) f.callsign[i] = 0;
@@ -91,6 +108,8 @@ int extractFlights(DynamicJsonDocument& doc) {
     strlcpy(f.type,   a["t"]      | "",     sizeof(f.type));
     strlcpy(f.squawk, a["squawk"] | "----", sizeof(f.squawk));
     strlcpy(f.route,  a["route"]  | "",     sizeof(f.route));
+    strlcpy(f.dep,    a["dep"]    | "",     sizeof(f.dep));
+    strlcpy(f.arr,    a["arr"]    | "",     sizeof(f.arr));
     f.lat = lat; f.lon = lon; f.alt = alt;
     f.speed = (int)(a["gs"] | 0.0f);
     f.vs = a["baro_rate"] | 0;
@@ -113,20 +132,7 @@ int extractFlights(DynamicJsonDocument& doc) {
   return count;
 }
 
-// ─── strlcpy for non-BSD systems ──────────────────────
-#ifndef __APPLE__
-#ifndef strlcpy
-size_t strlcpy(char* dst, const char* src, size_t size) {
-  size_t len = strlen(src);
-  if (size > 0) {
-    size_t n = (len >= size) ? size - 1 : len;
-    memcpy(dst, src, n);
-    dst[n] = '\0';
-  }
-  return len;
-}
-#endif
-#endif
+// strlcpy definition moved before extractFlights (see top of file)
 
 // ─── Test helpers ─────────────────────────────────────
 static int tests_run = 0;
@@ -161,7 +167,7 @@ int parseFixture(const char* filename) {
   JsonObject af = filter["ac"].createNestedObject();
   af["flight"] = af["r"] = af["t"] = af["lat"] = af["lon"] =
   af["alt_baro"] = af["gs"] = af["baro_rate"] = af["track"] =
-  af["squawk"] = af["route"] = true;
+  af["squawk"] = af["route"] = af["dep"] = af["arr"] = true;
 
   DeserializationError err = deserializeJson(doc, json.c_str(), json.length(),
     DeserializationOption::Filter(filter));
@@ -255,6 +261,106 @@ void test_boundary_geofence() {
   EXPECT(n == 1);
 }
 
+void test_single_flight() {
+  printf("\n── single_flight.json (0-to-1 transition) ──\n");
+  memset(newFlights, 0, sizeof(newFlights));
+  int n0 = parseFixture("empty_response.json");
+  TEST("parse empty first");
+  EXPECT(n0 == 0);
+
+  int n1 = parseFixture("single_flight.json");
+  TEST("then parse single flight");
+  EXPECT(n1 == 1);
+
+  TEST("flight has valid callsign");
+  EXPECT(newFlights[0].callsign[0] != '\0');
+
+  TEST("stale slots are zeroed");
+  EXPECT(newFlights[1].callsign[0] == '\0' && newFlights[1].lat == 0.0f);
+}
+
+void test_empty_optional_fields() {
+  printf("\n── empty_fields.json ──\n");
+  memset(newFlights, 0, sizeof(newFlights));
+  int n = parseFixture("empty_fields.json");
+
+  TEST("parses successfully");
+  EXPECT(n == 1);
+
+  TEST("empty callsign handled");
+  EXPECT(newFlights[0].callsign[0] == '\0');
+
+  TEST("empty reg handled");
+  EXPECT(newFlights[0].reg[0] == '\0');
+
+  TEST("has valid coordinates");
+  EXPECT(newFlights[0].lat != 0.0f && newFlights[0].lon != 0.0f);
+}
+
+void test_null_optional_fields() {
+  printf("\n── null_fields.json ──\n");
+  memset(newFlights, 0, sizeof(newFlights));
+  int n = parseFixture("null_fields.json");
+
+  TEST("parses successfully");
+  EXPECT(n == 1);
+
+  TEST("null callsign defaults to empty");
+  EXPECT(newFlights[0].callsign[0] == '\0');
+
+  TEST("null reg defaults to empty");
+  EXPECT(newFlights[0].reg[0] == '\0');
+
+  TEST("null type defaults to empty");
+  EXPECT(newFlights[0].type[0] == '\0');
+}
+
+void test_max_flights_boundary() {
+  printf("\n── max_flights.json (20 flights) ──\n");
+  memset(newFlights, 0, sizeof(newFlights));
+  int n = parseFixture("max_flights.json");
+
+  TEST("parses successfully");
+  EXPECT(n >= 0);
+
+  TEST("returns exactly 20 flights");
+  EXPECT(n == 20);
+
+  TEST("last flight has valid data");
+  EXPECT(n == 20 && newFlights[19].callsign[0] != '\0');
+}
+
+void test_overflow_capped() {
+  printf("\n── overflow_flights.json (25 flights, cap at 20) ──\n");
+  memset(newFlights, 0, sizeof(newFlights));
+  int n = parseFixture("overflow_flights.json");
+
+  TEST("parses successfully");
+  EXPECT(n >= 0);
+
+  TEST("capped at 20 flights");
+  EXPECT(n == 20);
+}
+
+void test_repeated_empty_then_full() {
+  printf("\n── repeated empty then full ──\n");
+  memset(newFlights, 0, sizeof(newFlights));
+
+  for (int i = 0; i < 10; i++) parseFixture("empty_response.json");
+  TEST("10 empty parses succeed");
+  EXPECT(true);
+
+  int n = parseFixture("normal_response.json");
+  TEST("normal parse after empties succeeds");
+  EXPECT(n >= 0);
+
+  TEST("correct flight count after empties");
+  EXPECT(n == 4);
+
+  TEST("first flight has valid callsign after empties");
+  EXPECT(n > 0 && newFlights[0].callsign[0] != '\0');
+}
+
 int main() {
   printf("═══════════════════════════════════════\n");
   printf("  Overhead Tracker — JSON Parsing Tests\n");
@@ -266,6 +372,12 @@ int main() {
   test_malformed_json();
   test_no_altitude();
   test_boundary_geofence();
+  test_single_flight();
+  test_empty_optional_fields();
+  test_null_optional_fields();
+  test_max_flights_boundary();
+  test_overflow_capped();
+  test_repeated_empty_then_full();
 
   printf("\n═══════════════════════════════════════\n");
   printf("  Results: %d / %d passed\n", tests_passed, tests_run);

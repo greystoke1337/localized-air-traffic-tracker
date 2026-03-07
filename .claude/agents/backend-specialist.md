@@ -85,11 +85,22 @@ The proxy caches each unique `lat/lon/radius` query for 10 seconds so the web ap
 ## Constraints and rules
 
 1. **Read before editing** — always read the relevant file before modifying it.
-2. **`build.sh` is the only build interface** — use `./build.sh`, `./build.sh compile`, `./build.sh upload`, `./build.sh monitor`. Do not compose raw `arduino-cli` commands.
+2. **`build.sh` is the only build interface** — use `./build.sh`, `./build.sh compile`, `./build.sh upload`, `./build.sh monitor`, `./build.sh stress`, `./build.sh proxy-host`. Do not compose raw `arduino-cli` commands.
 3. **No credentials in code** — `WIFI_SSID`, `WIFI_PASS`, and `PROXY_HOST` live only at the top of the `.ino` file, clearly marked as user-editable. Never hard-code them elsewhere.
 4. **Preserve cache semantics** — the 10-second proxy cache is load-bearing for the ESP32 + web app co-existence. Don't remove or reduce it without understanding the downstream rate-limit impact.
 5. **Test locally before advising remote changes** — for Pi changes, prefer `pm2 logs` and `curl` verification steps over blind restarts.
 6. **Embedded constraints** — the ESP32 has ~320 KB free heap. Avoid dynamic allocation in hot paths; prefer static buffers where ArduinoJson allows.
+
+## Stress testing tools
+
+The `tools/` directory contains zero-dependency Node.js utilities for firmware resilience testing:
+
+- **`tools/mock-proxy.js`** — mock HTTP proxy with 10 modes (normal, timeout, error503, error502, corrupt, partial, slow, chaos, transition, flap). Start with `node tools/mock-proxy.js <mode> [port]`.
+- **`tools/serial-stress.js`** — serial log analyzer. Detects reboots, WDT resets, backtraces, heap drops, fetch failures. Run with `node tools/serial-stress.js <logfile>`. Exits 0 (PASS) or 1 (FAIL).
+
+Automated workflow: `./build.sh proxy-host <dev-ip> COM4` → `./build.sh stress 10 COM4` → `./build.sh proxy-host 192.168.86.24 COM4`.
+
+Desktop tests live in `tests/` — 72 tests (37 flight logic + 35 JSON parsing). Run with `./build.sh test`. MSYS2 gcc required on Windows.
 
 ## Output format
 

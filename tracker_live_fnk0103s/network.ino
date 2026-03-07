@@ -191,6 +191,7 @@ int fetchAndParseDirectAPI() {
     float dist = haversineKm(HOME_LAT, HOME_LON, ac_lat, ac_lon);
     if (dist > GEOFENCE_KM) return;
     Flight& f = newFlights[newCount];
+    memset(&f, 0, sizeof(Flight));
     strlcpy(f.callsign, ac_callsign, sizeof(f.callsign));
     for (int i = strlen(f.callsign)-1; i >= 0 && f.callsign[i] == ' '; i--) f.callsign[i] = 0;
     strlcpy(f.reg,    ac_reg,    sizeof(f.reg));
@@ -290,6 +291,7 @@ int extractFlights(DynamicJsonDocument& doc) {
     if (dist > GEOFENCE_KM) continue;
 
     Flight& f = newFlights[newCount];
+    memset(&f, 0, sizeof(Flight));
     const char* cs = a["flight"] | "";
     strlcpy(f.callsign, cs, sizeof(f.callsign));
     for (int i = strlen(f.callsign)-1; i >= 0 && f.callsign[i] == ' '; i--) f.callsign[i] = 0;
@@ -319,21 +321,28 @@ int extractFlights(DynamicJsonDocument& doc) {
 
 // ─── Main fetch orchestrator ───────────────────────────
 void fetchFlights() {
-  logTs("FETCH", "Start (heap %d)", ESP.getFreeHeap());
+  logTs("FETCH", "Start (heap %d, maxblk %d)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
   isFetching = true;
+  memset(newFlights, 0, sizeof(newFlights));
 
   int newCount = -1;
   bool fromCache = false;
 
   if (wifiOk()) {
-    String payload = fetchFromProxy();
-    if (!payload.isEmpty()) {
-      writeCache(payload);
-      newCount = parsePayload(payload);
-      payload = String();
-      dataSource = 0;
+    int maxBlock = ESP.getMaxAllocHeap();
+    if (maxBlock >= 8000) {
+      String payload = fetchFromProxy();
+      if (!payload.isEmpty()) {
+        writeCache(payload);
+        newCount = parsePayload(payload);
+        payload = String();
+        dataSource = 0;
+      }
     } else {
-      logTs("FETCH", "Proxy empty, trying direct API...");
+      logTs("FETCH", "WARN: heap fragmented (maxblk %d), skipping proxy", maxBlock);
+    }
+    if (newCount < 0) {
+      logTs("FETCH", "Proxy empty/skipped, trying direct API...");
       esp_task_wdt_reset();
       newCount = fetchAndParseDirectAPI();
       if (newCount >= 0) dataSource = 1;

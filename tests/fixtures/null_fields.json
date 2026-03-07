@@ -1,0 +1,19 @@
+{
+  "ac": [
+    {
+      "flight": null,
+      "r": null,
+      "t": null,
+      "lat": -33.8600,
+      "lon": 151.2100,
+      "alt_baro": 5000,
+      "gs": 200.0,
+      "baro_rate": -500,
+      "track": 90,
+      "squawk": null,
+      "dep": null,
+      "arr": null,
+      "route": null
+    }
+  ]
+}

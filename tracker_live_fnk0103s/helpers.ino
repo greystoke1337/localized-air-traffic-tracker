@@ -17,12 +17,14 @@ void logTs(const char* tag, const char* fmt, ...) {
 }
 
 bool alreadyLogged(const char* cs) {
+  if (!cs || !cs[0]) return true;
   for (int i = 0; i < loggedCount; i++)
     if (strcmp(loggedCallsigns[i], cs) == 0) return true;
   return false;
 }
 
 const Airline* getAirline(const char* cs) {
+  if (!cs || !cs[0]) return nullptr;
   for (int i = 0; i < AIRLINE_COUNT; i++)
     if (strncmp(cs, AIRLINES[i].prefix, 3) == 0) return &AIRLINES[i];
   return nullptr;

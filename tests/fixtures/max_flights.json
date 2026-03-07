@@ -1,0 +1,24 @@
+{
+  "ac": [
+    {"flight":"AAA001  ","r":"VH-A01","t":"A320","lat":-33.8600,"lon":151.2100,"alt_baro":5000,"gs":200,"baro_rate":0,"track":90,"squawk":"1001"},
+    {"flight":"AAA002  ","r":"VH-A02","t":"A320","lat":-33.8610,"lon":151.2110,"alt_baro":5100,"gs":210,"baro_rate":0,"track":91,"squawk":"1002"},
+    {"flight":"AAA003  ","r":"VH-A03","t":"A320","lat":-33.8620,"lon":151.2120,"alt_baro":5200,"gs":220,"baro_rate":0,"track":92,"squawk":"1003"},
+    {"flight":"AAA004  ","r":"VH-A04","t":"A320","lat":-33.8630,"lon":151.2130,"alt_baro":5300,"gs":230,"baro_rate":0,"track":93,"squawk":"1004"},
+    {"flight":"AAA005  ","r":"VH-A05","t":"A320","lat":-33.8640,"lon":151.2140,"alt_baro":5400,"gs":240,"baro_rate":0,"track":94,"squawk":"1005"},
+    {"flight":"AAA006  ","r":"VH-A06","t":"A320","lat":-33.8650,"lon":151.2150,"alt_baro":5500,"gs":250,"baro_rate":0,"track":95,"squawk":"1006"},
+    {"flight":"AAA007  ","r":"VH-A07","t":"A320","lat":-33.8660,"lon":151.2160,"alt_baro":5600,"gs":260,"baro_rate":0,"track":96,"squawk":"1007"},
+    {"flight":"AAA008  ","r":"VH-A08","t":"A320","lat":-33.8670,"lon":151.2170,"alt_baro":5700,"gs":270,"baro_rate":0,"track":97,"squawk":"1008"},
+    {"flight":"AAA009  ","r":"VH-A09","t":"A320","lat":-33.8680,"lon":151.2180,"alt_baro":5800,"gs":280,"baro_rate":0,"track":98,"squawk":"1009"},
+    {"flight":"AAA010  ","r":"VH-A10","t":"A320","lat":-33.8690,"lon":151.2190,"alt_baro":5900,"gs":290,"baro_rate":0,"track":99,"squawk":"1010"},
+    {"flight":"AAA011  ","r":"VH-A11","t":"A320","lat":-33.8700,"lon":151.2000,"alt_baro":6000,"gs":200,"baro_rate":0,"track":100,"squawk":"1011"},
+    {"flight":"AAA012  ","r":"VH-A12","t":"A320","lat":-33.8710,"lon":151.2010,"alt_baro":6100,"gs":210,"baro_rate":0,"track":101,"squawk":"1012"},
+    {"flight":"AAA013  ","r":"VH-A13","t":"A320","lat":-33.8720,"lon":151.2020,"alt_baro":6200,"gs":220,"baro_rate":0,"track":102,"squawk":"1013"},
+    {"flight":"AAA014  ","r":"VH-A14","t":"A320","lat":-33.8730,"lon":151.2030,"alt_baro":6300,"gs":230,"baro_rate":0,"track":103,"squawk":"1014"},
+    {"flight":"AAA015  ","r":"VH-A15","t":"A320","lat":-33.8740,"lon":151.2040,"alt_baro":6400,"gs":240,"baro_rate":0,"track":104,"squawk":"1015"},
+    {"flight":"AAA016  ","r":"VH-A16","t":"A320","lat":-33.8750,"lon":151.2050,"alt_baro":6500,"gs":250,"baro_rate":0,"track":105,"squawk":"1016"},
+    {"flight":"AAA017  ","r":"VH-A17","t":"A320","lat":-33.8760,"lon":151.2060,"alt_baro":6600,"gs":260,"baro_rate":0,"track":106,"squawk":"1017"},
+    {"flight":"AAA018  ","r":"VH-A18","t":"A320","lat":-33.8770,"lon":151.2070,"alt_baro":6700,"gs":270,"baro_rate":0,"track":107,"squawk":"1018"},
+    {"flight":"AAA019  ","r":"VH-A19","t":"A320","lat":-33.8780,"lon":151.2080,"alt_baro":6800,"gs":280,"baro_rate":0,"track":108,"squawk":"1019"},
+    {"flight":"AAA020  ","r":"VH-A20","t":"A320","lat":-33.8790,"lon":151.2090,"alt_baro":6900,"gs":290,"baro_rate":0,"track":109,"squawk":"1020"}
+  ]
+}

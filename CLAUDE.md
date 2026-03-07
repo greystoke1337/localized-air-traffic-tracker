@@ -115,6 +115,7 @@ The Pi proxy at `api.overheadtracker.com` caches airplanes.live responses for 10
 5. Serial monitor: `./build.sh monitor`.
 6. Send a debug command: `./build.sh send <cmd>` (commands: help, heap, state, wifi, config, diag, fetch, weather, restart).
 7. Pre-push safety check: `./build.sh safe` (runs desktop tests + compile with all warnings).
+8. Stress test: `./build.sh proxy-host <dev-ip>` to point at dev machine, `./build.sh stress 10 COM4` for 10-min chaos test, then `./build.sh proxy-host 192.168.86.24` to restore.
 
 ---
 
