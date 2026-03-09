@@ -101,9 +101,12 @@ sudo mv cloudflared /usr/local/bin/
 ├── server.js          # Main proxy server
 ├── dashboard.html     # Browser dashboard UI
 ├── display.py         # 3.5" TFT dashboard (framebuffer)
+├── watchdog.sh        # Undervoltage watchdog (cron, restarts PM2)
 ├── package.json
-└── data/
-    └── peak.json      # Persisted hourly traffic counts (auto-created)
+├── data/
+│   └── peak.json      # Persisted hourly traffic counts (auto-created)
+└── logs/
+    └── watchdog.log   # Watchdog activity log (auto-created)
 ```
 
 ---
@@ -241,6 +244,40 @@ pm2 restart display     # restart after display.py changes
 
 ---
 
+## Undervoltage Watchdog
+
+The Pi 3B+ can experience undervoltage with insufficient power supplies, causing
+services to hang without crashing (PM2 doesn't detect this). A watchdog script
+monitors for this and restarts services when needed.
+
+**File:** `/home/pi/proxy/watchdog.sh` — see [`pi-proxy/watchdog.sh`](pi-proxy/watchdog.sh).
+
+### How it works
+
+1. Runs every 60s via cron
+2. Reads `vcgencmd get_throttled` for undervoltage flags
+3. If undervoltage detected, checks if the proxy responds at `localhost:3000/status`
+4. If proxy is unresponsive for 2 consecutive checks (2 min), restarts all PM2 services
+5. 5-minute cooldown between restarts to prevent restart storms
+6. If PM2 itself is hung, falls back to `pm2 kill` + `pm2 resurrect`
+
+### Setup
+
+```bash
+chmod +x /home/pi/proxy/watchdog.sh
+crontab -e
+# Add this line:
+# * * * * * /home/pi/proxy/watchdog.sh
+```
+
+### Checking watchdog activity
+
+```bash
+tail -20 /home/pi/proxy/logs/watchdog.log
+```
+
+---
+
 ## Domain — overheadtracker.com
 
 Registered through Cloudflare Registrar.
@@ -296,6 +333,7 @@ pm2 status  # verify both are online after reboot
 | ESP32 shows HTTP ERR | Is Pi powered on? ping 192.168.86.24. ESP32 will fall back to direct API automatically after 3 s. |
 | 429 errors from airplanes.live | Cache may have been disabled — check server.js |
 | Tunnel restart count very high | `pm2 logs tunnel --lines 20` — check for auth or memory errors |
+| Services unresponsive after power issue | `tail -20 ~/proxy/logs/watchdog.log` — check watchdog is in crontab |
 
 ---
 
