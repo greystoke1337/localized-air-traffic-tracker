@@ -1,5 +1,7 @@
 # Overhead // Live Aircraft Tracker
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/R6R61VRQHC)
+
 Shows which aircraft are flying directly above any location in the world. Single HTML file, no dependencies, no build step.
 
 Live: [overheadtracker.com](https://www.overheadtracker.com/)
