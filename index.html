@@ -85,9 +85,11 @@
     }
     #info-wrap.phase-landing    { border-color: #ff6060; box-shadow: -4px 0 12px rgba(255,96,96,0.3); }
     #info-wrap.phase-takeoff    { border-color: #60ff90; box-shadow: -4px 0 12px rgba(96,255,144,0.3); }
-    #info-wrap.phase-climbing   { border-color: #60ff90; box-shadow: -4px 0 12px rgba(96,255,144,0.2); }
+    #info-wrap.phase-climbing   { border-color: #00e5ff; box-shadow: -4px 0 12px rgba(0,229,255,0.25); }
     #info-wrap.phase-descending { border-color: #ff9040; box-shadow: -4px 0 12px rgba(255,144,64,0.25); }
     #info-wrap.phase-approach   { border-color: #ffcc40; box-shadow: -4px 0 12px rgba(255,204,64,0.25); }
+    #info-wrap.phase-cruising   { border-color: #ffa600; box-shadow: -4px 0 12px rgba(255,166,0,0.2); }
+    #info-wrap.phase-overhead   { border-color: #ffff00; box-shadow: -4px 0 12px rgba(255,255,0,0.3); }
 
     /* Altitude bar — thin vertical strip on the right, fills bottom-to-top */
     #alt-bar-wrap {
@@ -803,18 +805,19 @@
     // ── Flight phase detection ───────────────────────────────────────
     // Classifies aircraft by altitude + vertical speed.
     // Returns { label, color, cls } for the UI and colour bleed effect.
-    function flightPhase(f) {
+    function flightPhase(f, distKm) {
       const alt  = typeof f.alt_baro  === 'number' ? f.alt_baro  : null;
       const vspd = typeof f.baro_rate === 'number' ? f.baro_rate : 0;
       if (alt === null) return { label: '---', color: null, cls: '' };
+      if (distKm < 2 && alt < 8000) return { label: '◉ OVERHEAD',   color: '#ffff00', cls: 'phase-overhead' };
       if (alt < 3000) {
         if (vspd < -200) return { label: '▼ LANDING',    color: '#ff6060', cls: 'phase-landing' };
         if (vspd >  200) return { label: '▲ TAKING OFF', color: '#60ff90', cls: 'phase-takeoff' };
         if (vspd < -50)  return { label: '~ APPROACH',   color: '#ffcc40', cls: 'phase-approach' };
       }
       if (vspd < -100) return { label: '▼ DESCENDING', color: '#ff9040', cls: 'phase-descending' };
-      if (vspd >  100) return { label: '▲ CLIMBING',   color: '#60ff90', cls: 'phase-climbing' };
-      return { label: '── OVERHEAD', color: null, cls: '' };
+      if (vspd >  100) return { label: '▲ CLIMBING',   color: '#00e5ff', cls: 'phase-climbing' };
+      return { label: '── CRUISING', color: '#ffa600', cls: 'phase-cruising' };
     }
 
 
@@ -939,7 +942,7 @@
         if (entry.dist === null || distKm < entry.dist) entry.dist = distKm;
       } else {
         if (sessionLog.size >= 500) sessionLog.delete(sessionLog.keys().next().value);
-        sessionLog.set(hex, { call, type, timeStr, phase: phase.label, airline,
+        sessionLog.set(hex, { call, type, timeStr, phase: phase.label, phaseColor: phase.color, airline,
           alt, gs, dist: distKm, interesting: flags.length > 0 });
         renderLog();
       }
@@ -955,7 +958,7 @@
         '<div class="log-entry">' +
         '<span style="opacity:0.5">' + e.timeStr + '</span> ' +
         '<strong>' + e.call + '</strong> ' + e.type +
-        ' <span style="opacity:0.6">' + e.phase + '</span></div>'
+        ' <span style="color:' + (e.phaseColor || 'inherit') + '">' + e.phase + '</span></div>'
       ).join('');
     }
 
@@ -1076,16 +1079,18 @@
 
     // Places/moves the aircraft dot, dashed line to location, and
     // a speed-scaled heading vector with chevron arrowhead.
-    function updateMap(lat, lon, callsign, groundSpeedKt, trackDeg) {
+    function updateMap(lat, lon, callsign, groundSpeedKt, trackDeg, phaseColor) {
       const pos = [lat, lon];
       const t   = THEMES[currentTheme];
+      const dotColor = phaseColor || t.acMarker;
 
       // Aircraft dot
       if (acMarker) {
         acMarker.setLatLng(pos);
         acMarker.getTooltip().setContent(callsign);
+        acMarker.setStyle({ color: dotColor, fillColor: dotColor });
       } else {
-        acMarker = L.circleMarker(pos, { radius: 7, color: t.acMarker, fillColor: t.acMarker, fillOpacity: 1, weight: 2 })
+        acMarker = L.circleMarker(pos, { radius: 7, color: dotColor, fillColor: dotColor, fillOpacity: 1, weight: 2 })
           .addTo(map).bindTooltip(callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
       }
 
@@ -1100,10 +1105,12 @@
         const headKm    = vectorKm * 0.28;
         const leftWing  = destPoint(tip[0], tip[1], (trackDeg + 180 - 28 + 360) % 360, headKm);
         const rightWing = destPoint(tip[0], tip[1], (trackDeg + 180 + 28) % 360, headKm);
-        const vs        = { color: t.acMarker, weight: 2, opacity: 0.7 };
+        const vs        = { color: dotColor, weight: 2, opacity: 0.7 };
         if (acVector) {
           acVector.setLatLngs([pos, tip]);
+          acVector.setStyle({ color: dotColor });
           acArrowHead.setLatLngs([leftWing, tip, rightWing]);
+          acArrowHead.setStyle({ color: dotColor });
         } else {
           acVector    = L.polyline([pos, tip], vs).addTo(map);
           acArrowHead = L.polyline([leftWing, tip, rightWing], vs).addTo(map);
@@ -1455,7 +1462,7 @@
         ? '<a href="https://www.flightaware.com/live/flight/' + call + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">' + call + '</a>'
         : '---';
 
-      const phase     = flightPhase(f);
+      const phase     = flightPhase(f, distLoc);
       const phaseHtml = phase.color
         ? '<span style="color:' + phase.color + ';">' + phase.label + '</span>'
         : phase.label;
@@ -1553,7 +1560,7 @@
 
       logFlight(f, phase, distLoc);
       fetchPhoto(reg, f.hex || '', (f.t || '').toUpperCase());
-      updateMap(f.lat, f.lon, call, f.gs, f.track);
+      updateMap(f.lat, f.lon, call, f.gs, f.track, phase.color);
       updateInterestingBadge(f);
       updateIntercept(f, distLoc);
     }
