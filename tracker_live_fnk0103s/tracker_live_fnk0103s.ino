@@ -25,13 +25,14 @@
     serial_cmd.ino             — serial debug console (command-line diagnostics)
 */
 
+#include "board.h"
 #include "lgfx_config.h"
 #include <SPI.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
-#if HAS_SD
+#ifndef BOARD_2P8
   #include <SD.h>
 #endif
 #include <math.h>

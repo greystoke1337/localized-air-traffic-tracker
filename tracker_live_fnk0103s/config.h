@@ -52,6 +52,8 @@
 #define C_YELLOW  0xFFE0
 #define C_ORANGE  0xFC60   // descending (aligned with web app #ff8844)
 #define C_GOLD    0xFE68   // approach   (aligned with web app #ffaa00)
+#define C_TIDE_HI 0x43DF   // blue  — rising toward high tide
+#define C_TIDE_LO 0x07FF   // cyan  — falling toward low tide
 
 // ─── Airline brand colours (RGB565) ─────────────────
 #define AL_RED     0xF904   // #FF2222  Qantas, JAL, British

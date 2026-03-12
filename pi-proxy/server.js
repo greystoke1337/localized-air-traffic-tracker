@@ -925,6 +925,40 @@ function windCardinal(deg) {
   return dirs[Math.round(deg / 45) % 8];
 }
 
+// ── Tide predictions (BOM Sydney Fort Denison 2026) ──────────────────────────
+let tideData = {};
+try {
+  tideData = JSON.parse(fs.readFileSync(path.join(__dirname, 'tides-2026.json'), 'utf8'));
+} catch (e) { console.warn('[TIDE] Could not load tides-2026.json:', e.message); }
+
+function getTideInfo(utcOffsetSecs) {
+  if (!utcOffsetSecs || Object.keys(tideData).length === 0) return null;
+  const now = new Date(Date.now() + utcOffsetSecs * 1000);
+  const dateStr = now.toISOString().slice(0, 10);
+  const hhmm = now.toISOString().slice(11, 16);
+  const todayEvents = tideData[dateStr];
+  if (!todayEvents) return null;
+
+  // find next event today
+  let next = todayEvents.find(e => e.time > hhmm);
+  if (!next) {
+    // look at tomorrow
+    const tomorrow = new Date(now.getTime() + 86400000);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    const tomorrowEvents = tideData[tomorrowStr];
+    if (tomorrowEvents && tomorrowEvents.length > 0) next = tomorrowEvents[0];
+  }
+  if (!next) return null;
+
+  const isHigh = next.t === 'H';
+  return {
+    tide_dir:    isHigh ? 'RISING' : 'FALLING',
+    tide_type:   isHigh ? 'HIGH' : 'LOW',
+    tide_time:   next.time,
+    tide_height: next.h,
+  };
+}
+
 app.get('/weather', async (req, res) => {
   const { lat, lon } = req.query;
   if (!lat || !lon) return res.status(400).json({ error: 'lat and lon required' });
@@ -963,6 +997,8 @@ app.get('/weather', async (req, res) => {
         uv_index:        c.uv_index,
         utc_offset_secs: raw.utc_offset_seconds,
       };
+      const tide = getTideInfo(data.utc_offset_secs);
+      if (tide) Object.assign(data, tide);
       cacheSet(key, { data, timestamp: Date.now() });
       return data;
     })();

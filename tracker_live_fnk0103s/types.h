@@ -45,6 +45,10 @@ struct WeatherData {
   char    wind_cardinal[4];
   float   uv_index;
   int32_t utc_offset_secs;
+  char    tide_dir[8];     // "RISING" or "FALLING" or ""
+  char    tide_time[6];    // "HH:MM" or ""
+  float   tide_height;
+  bool    tide_is_high;    // true = next tide is HIGH
 };
 
 // ─── Airline lookup ───────────────────────────────────

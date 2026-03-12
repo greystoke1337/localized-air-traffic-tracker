@@ -429,7 +429,7 @@ bool fetchWeather() {
     String body = http.getString();
     http.end();
     esp_task_wdt_reset();
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<640> doc;
     if (deserializeJson(doc, body) != DeserializationError::Ok) {
       Serial.printf("[WX] JSON parse error (attempt %d/2)\n", attempt);
       continue;
@@ -445,8 +445,15 @@ bool fetchWeather() {
     strlcpy(wxData.condition, cond, sizeof(wxData.condition));
     const char* wc = doc["wind_cardinal"] | "?";
     strlcpy(wxData.wind_cardinal, wc, sizeof(wxData.wind_cardinal));
+    const char* td = doc["tide_dir"] | "";
+    strlcpy(wxData.tide_dir, td, sizeof(wxData.tide_dir));
+    const char* tt = doc["tide_time"] | "";
+    strlcpy(wxData.tide_time, tt, sizeof(wxData.tide_time));
+    wxData.tide_height  = doc["tide_height"] | 0.0f;
+    wxData.tide_is_high = (strcmp(doc["tide_type"] | "LOW", "HIGH") == 0);
     wxReady = true;
-    Serial.printf("[WX] %.1f C  %s  UV %.1f\n", wxData.temp, wxData.condition, wxData.uv_index);
+    Serial.printf("[WX] %.1f C  %s  UV %.1f  TIDE %s %s\n",
+      wxData.temp, wxData.condition, wxData.uv_index, wxData.tide_dir, wxData.tide_time);
     return true;
   }
   Serial.println("[WX] All attempts failed");

@@ -515,12 +515,16 @@ void renderWeather() {
 
   tft.drawFastHLine(10, cy, W - 20, C_DIMMER); cy += 6;
 
-  // Row 4: UV Index
+  // Row 4: UV Index | Tide
   tft.setTextSize(1);
   tft.setTextColor(C_DIM, C_BG);
   tft.setCursor(lx, cy); tft.print("UV INDEX");
+  if (wxData.tide_time[0]) { tft.setCursor(rx, cy); tft.print("TIDE"); }
   cy += 10;
-  if (!fresh) tft.fillRect(lx, cy, W - 20, 16, C_BG);
+  if (!fresh) {
+    tft.fillRect(lx, cy, W/2 - 15, 16, C_BG);
+    tft.fillRect(rx, cy, W/2 - 15, 16, C_BG);
+  }
   uint16_t uvCol = wxData.uv_index < 3.0f ? C_GREEN :
                    wxData.uv_index < 6.0f ? C_YELLOW :
                    wxData.uv_index < 8.0f ? C_AMBER  : C_RED;
@@ -528,6 +532,15 @@ void renderWeather() {
   tft.setTextColor(uvCol, C_BG);
   snprintf(buf, sizeof(buf), "%.1f", wxData.uv_index);
   tft.setCursor(lx, cy); tft.print(buf);
+  if (wxData.tide_time[0]) {
+    uint16_t tideCol = wxData.tide_is_high ? C_TIDE_HI : C_TIDE_LO;
+    tft.setTextColor(tideCol, C_BG);
+    snprintf(buf, sizeof(buf), "%c%s %s",
+      wxData.tide_is_high ? 0x18 : 0x19,
+      wxData.tide_is_high ? "HI" : "LO",
+      wxData.tide_time);
+    tft.setCursor(rx, cy); tft.print(buf);
+  }
 
   drawStatusBar();
 }
