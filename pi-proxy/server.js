@@ -21,10 +21,74 @@ const PORT     = 3000;
 const CACHE_MS         = 10000;
 const ROUTE_CACHE_MS   = 30 * 60 * 1000;
 const ROUTE_CACHE_FILE = __dirname + '/route-cache.json';
+const MAX_CACHE_ENTRIES    = 500;   // evict oldest when exceeded
+const MAX_ROUTE_ENTRIES    = 5000;  // cap route cache size
+const MAX_UPSTREAM_CONCURRENT = 20; // max simultaneous upstream API calls
+const SEMAPHORE_TIMEOUT_MS    = 10000; // fail fast if queued too long
+const MAX_ROUTE_CONCURRENT    = 5;  // max simultaneous route lookups
 
 const cache      = new Map();
 const inFlight   = new Map();  // key → Promise (dedup concurrent upstream fetches)
 const routeCache = new Map();  // callsign -> { dep, arr, timestamp }
+
+// ── Concurrency semaphore ───────────────────────────────────────────
+function semaphore(max) {
+  let active = 0;
+  const queue = [];
+  return {
+    get active() { return active; },
+    async acquire(timeoutMs) {
+      if (active < max) { active++; return; }
+      if (timeoutMs) {
+        const acquired = await new Promise(resolve => {
+          const entry = { resolve, done: false };
+          const timer = setTimeout(() => { entry.done = true; resolve(false); }, timeoutMs);
+          queue.push((ok) => { clearTimeout(timer); if (!entry.done) { entry.done = true; resolve(ok !== false); } });
+        });
+        if (!acquired) throw new Error('Semaphore timeout');
+      } else {
+        await new Promise(resolve => queue.push(() => resolve()));
+      }
+      active++;
+    },
+    release() {
+      active--;
+      if (queue.length > 0) queue.shift()();
+    },
+  };
+}
+
+const upstreamSem = semaphore(MAX_UPSTREAM_CONCURRENT);
+const routeSem    = semaphore(MAX_ROUTE_CONCURRENT);
+
+// ── Geo-bucketing (round coords so nearby clients share cache) ───────
+function bucketCoord(v, decimals) { return Number(Number(v).toFixed(decimals)); }
+function bucketKey(lat, lon, radius) {
+  return `${bucketCoord(lat, 2)},${bucketCoord(lon, 2)},${radius}`;
+}
+
+// ── Cache eviction (LRU-like: evict oldest by timestamp) ────────────
+function cacheSet(key, entry) {
+  cache.set(key, entry);
+  if (cache.size > MAX_CACHE_ENTRIES) {
+    let oldestKey = null, oldestTs = Infinity;
+    for (const [k, v] of cache) {
+      if (v.timestamp < oldestTs) { oldestTs = v.timestamp; oldestKey = k; }
+    }
+    if (oldestKey) cache.delete(oldestKey);
+  }
+}
+
+function routeCacheSet(key, entry) {
+  routeCache.set(key, entry);
+  if (routeCache.size > MAX_ROUTE_ENTRIES) {
+    let oldestKey = null, oldestTs = Infinity;
+    for (const [k, v] of routeCache) {
+      if (v.timestamp < oldestTs) { oldestTs = v.timestamp; oldestKey = k; }
+    }
+    if (oldestKey) routeCache.delete(oldestKey);
+  }
+}
 
 // ── .env loader ──────────────────────────────────────────────────────
 try {
@@ -328,7 +392,10 @@ function addLog(entry) {
   if (requestLog.length > 100) requestLog.pop();
 }
 
+let routeCacheDirty = false;
 function saveRouteCache() {
+  if (!routeCacheDirty) return;
+  routeCacheDirty = false;
   const obj = {};
   for (const [cs, entry] of routeCache) obj[cs] = entry;
   fs.writeFile(ROUTE_CACHE_FILE, JSON.stringify(obj, null, 2), () => {});
@@ -339,40 +406,49 @@ async function lookupRoute(callsign) {
   const hit = routeCache.get(cs);
   if (hit && (Date.now() - hit.timestamp) < ROUTE_CACHE_MS) return hit;
 
-  // Source 1: OpenSky Network
+  await routeSem.acquire();
   try {
-    const url = `https://opensky-network.org/api/routes?callsign=${encodeURIComponent(cs)}`;
-    const r   = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (r.ok) {
-      const d = await r.json();
-      if (Array.isArray(d.route) && d.route.length >= 2) {
-        const entry = { dep: d.route[0], arr: d.route[d.route.length - 1], timestamp: Date.now() };
-        routeCache.set(cs, entry);
-        saveRouteCache();
-        return entry;
-      }
-    }
-  } catch { /* timeout or network error */ }
+    // Re-check after acquiring semaphore (another request may have filled it)
+    const hit2 = routeCache.get(cs);
+    if (hit2 && (Date.now() - hit2.timestamp) < ROUTE_CACHE_MS) return hit2;
 
-  // Source 2: adsbdb.com fallback
-  try {
-    const url = `https://api.adsbdb.com/v0/callsign/${encodeURIComponent(cs)}`;
-    const r   = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (r.ok) {
-      const d = await r.json();
-      const fr = d?.response?.flightroute;
-      if (fr) {
-        const dep = fr.origin?.icao_code || fr.origin?.iata_code || null;
-        const arr = fr.destination?.icao_code || fr.destination?.iata_code || null;
-        if (dep || arr) {
-          const entry = { dep, arr, timestamp: Date.now() };
-          routeCache.set(cs, entry);
-          saveRouteCache();
+    // Source 1: OpenSky Network
+    try {
+      const url = `https://opensky-network.org/api/routes?callsign=${encodeURIComponent(cs)}`;
+      const r   = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (r.ok) {
+        const d = await r.json();
+        if (Array.isArray(d.route) && d.route.length >= 2) {
+          const entry = { dep: d.route[0], arr: d.route[d.route.length - 1], timestamp: Date.now() };
+          routeCacheSet(cs, entry);
+          routeCacheDirty = true;
           return entry;
         }
       }
-    }
-  } catch { /* timeout or network error */ }
+    } catch { /* timeout or network error */ }
+
+    // Source 2: adsbdb.com fallback
+    try {
+      const url = `https://api.adsbdb.com/v0/callsign/${encodeURIComponent(cs)}`;
+      const r   = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        const d = await r.json();
+        const fr = d?.response?.flightroute;
+        if (fr) {
+          const dep = fr.origin?.icao_code || fr.origin?.iata_code || null;
+          const arr = fr.destination?.icao_code || fr.destination?.iata_code || null;
+          if (dep || arr) {
+            const entry = { dep, arr, timestamp: Date.now() };
+            routeCacheSet(cs, entry);
+            routeCacheDirty = true;
+            return entry;
+          }
+        }
+      }
+    } catch { /* timeout or network error */ }
+  } finally {
+    routeSem.release();
+  }
 
   if (hit) return hit;  // stale disk entry as fallback
   return null;
@@ -385,10 +461,17 @@ function cpuTemp() {
   } catch { return 'N/A'; }
 }
 
-function pm2Status() {
+let pm2Cache = { data: [], timestamp: 0 };
+async function pm2Status() {
+  if (Date.now() - pm2Cache.timestamp < 5000) return pm2Cache.data;
   try {
-    const out = execSync('pm2 jlist', { timeout: 3000 }).toString();
-    return JSON.parse(out).map(p => ({
+    const { execFile } = require('child_process');
+    const out = await new Promise((resolve, reject) => {
+      execFile('pm2', ['jlist'], { timeout: 3000 }, (err, stdout) => {
+        if (err) reject(err); else resolve(stdout);
+      });
+    });
+    pm2Cache.data = JSON.parse(out).map(p => ({
       name:     p.name,
       status:   p.pm2_env.status,
       uptime:   p.pm2_env.pm_uptime
@@ -396,7 +479,9 @@ function pm2Status() {
         : null,
       restarts: p.pm2_env.restart_time,
     }));
-  } catch { return []; }
+    pm2Cache.timestamp = Date.now();
+    return pm2Cache.data;
+  } catch { return pm2Cache.data; }
 }
 
 function networkInfo() {
@@ -670,7 +755,7 @@ app.get('/', (req, res) => {
 });
 
 // ── Status API ────────────────────────────────────────────────────────
-app.get('/status', (req, res) => {
+app.get('/status', async (req, res) => {
   res.json({
     proxyEnabled,
     uptime:  os.uptime(),
@@ -678,7 +763,7 @@ app.get('/status', (req, res) => {
     loadAvg: os.loadavg(),
     ram:     { total: os.totalmem(), free: os.freemem() },
     network: networkInfo(),
-    pm2:     pm2Status(),
+    pm2:     await pm2Status(),
     log:     requestLog,
   });
 });
@@ -700,7 +785,7 @@ app.get('/flights', async (req, res) => {
   const coordErr = validateCoord(lat, lon, radius);
   if (coordErr) return res.status(400).json({ error: coordErr });
 
-  const key = `${lat},${lon},${radius}`;
+  const key = bucketKey(lat, lon, radius);
   const now  = Date.now();
   const hit  = cache.get(key);
 
@@ -716,42 +801,48 @@ app.get('/flights', async (req, res) => {
 
   if (!inFlight.has(key)) {
     const promise = (async () => {
-      const apis = [
-        { name: 'adsb.lol',        url: `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}` },
-        { name: 'adsb.fi',         url: `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}` },
-        { name: 'airplanes.live',  url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}` },
-      ];
-      let data = null, lastErr = null;
-      for (const api of apis) {
-        try {
-          const response = await fetch(api.url, { signal: AbortSignal.timeout(8000) });
-          if (!response.ok) throw new Error(`${api.name} returned ${response.status}`);
-          data = await response.json();
-          addLog({ type: 'MISS', client, key: key + ` (${api.name})` });
-          break;
-        } catch (e) {
-          lastErr = e;
-          addLog({ type: 'ERR', client, key, error: `${api.name}: ${e.message}` });
+      await upstreamSem.acquire(SEMAPHORE_TIMEOUT_MS);
+      try {
+        const apis = [
+          { name: 'adsb.lol',        url: `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}` },
+          { name: 'adsb.fi',         url: `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}` },
+          { name: 'airplanes.live',  url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}` },
+        ];
+        let data = null, lastErr = null;
+        for (const api of apis) {
+          try {
+            const response = await fetch(api.url, { signal: AbortSignal.timeout(8000) });
+            if (!response.ok) throw new Error(`${api.name} returned ${response.status}`);
+            data = await response.json();
+            addLog({ type: 'MISS', client, key: key + ` (${api.name})` });
+            break;
+          } catch (e) {
+            lastErr = e;
+            addLog({ type: 'ERR', client, key, error: `${api.name}: ${e.message}` });
+          }
         }
+        if (!data) throw lastErr || new Error('All APIs failed');
+        const unrouted = (data.ac || []).filter(ac => ac.flight?.trim() && !ac.dep && !ac.arr);
+        if (unrouted.length > 0) {
+          const routes = await Promise.all(unrouted.map(ac => lookupRoute(ac.flight.trim())));
+          unrouted.forEach((ac, i) => {
+            if (routes[i]?.dep) ac.dep = routes[i].dep;
+            if (routes[i]?.arr) ac.arr = routes[i].arr;
+          });
+        }
+        for (const ac of (data.ac || [])) {
+          const dep = ac.dep || ac.orig_iata || null;
+          const arr = ac.arr || ac.dest_iata || null;
+          const routeStr = formatRouteString(dep, arr);
+          if (routeStr) ac.route = routeStr;
+        }
+        cacheSet(key, { data, timestamp: Date.now() });
+        saveRouteCache();
+        logFlights(data.ac || []);
+        return data;
+      } finally {
+        upstreamSem.release();
       }
-      if (!data) throw lastErr || new Error('All APIs failed');
-      const unrouted = (data.ac || []).filter(ac => ac.flight?.trim() && !ac.dep && !ac.arr);
-      if (unrouted.length > 0) {
-        const routes = await Promise.all(unrouted.map(ac => lookupRoute(ac.flight.trim())));
-        unrouted.forEach((ac, i) => {
-          if (routes[i]?.dep) ac.dep = routes[i].dep;
-          if (routes[i]?.arr) ac.arr = routes[i].arr;
-        });
-      }
-      for (const ac of (data.ac || [])) {
-        const dep = ac.dep || ac.orig_iata || null;
-        const arr = ac.arr || ac.dest_iata || null;
-        const routeStr = formatRouteString(dep, arr);
-        if (routeStr) ac.route = routeStr;
-      }
-      cache.set(key, { data, timestamp: Date.now() });
-      logFlights(data.ac || []);
-      return data;
     })();
     inFlight.set(key, promise);
     promise.finally(() => inFlight.delete(key)).catch(() => {});
@@ -784,6 +875,10 @@ app.get('/stats', (req, res) => {
     errors:        stats.errors,
     uniqueClients: stats.uniqueClients.size,
     cacheEntries:  cache.size,
+    routeCacheEntries: routeCache.size,
+    activeUpstream: upstreamSem.active,
+    activeRoutes:   routeSem.active,
+    inFlightKeys:   inFlight.size,
   });
 });
 
@@ -836,7 +931,7 @@ app.get('/weather', async (req, res) => {
   const coordErr = validateCoord(lat, lon);
   if (coordErr) return res.status(400).json({ error: coordErr });
 
-  const key = `weather:${lat},${lon}`;
+  const key = `weather:${bucketCoord(lat, 2)},${bucketCoord(lon, 2)}`;
   const now = Date.now();
   const hit = cache.get(key);
 
@@ -868,7 +963,7 @@ app.get('/weather', async (req, res) => {
         uv_index:        c.uv_index,
         utc_offset_secs: raw.utc_offset_seconds,
       };
-      cache.set(key, { data, timestamp: Date.now() });
+      cacheSet(key, { data, timestamp: Date.now() });
       return data;
     })();
     inFlight.set(key, promise);
@@ -879,6 +974,7 @@ app.get('/weather', async (req, res) => {
     const data = await inFlight.get(key);
     res.json(data);
   } catch (e) {
+    stats.errors++;
     if (hit) {
       addLog({ type: 'STALE', client, key });
       return res.json({ ...hit.data, stale: true });
@@ -1148,7 +1244,7 @@ app.post('/report/send', async (req, res) => {
 });
 
 // ── Periodic save + day rollover + email scheduler ────────────────────
-setInterval(() => {
+const periodicTimer = setInterval(() => {
   const now = aestNow();
   const ds  = dateStr(now);
 
@@ -1173,6 +1269,23 @@ setInterval(() => {
   }
 }, 60000);
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Proxy + dashboard running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Proxy + dashboard running on port ${PORT}`);
+  });
+} else {
+  // When imported as module (tests), don't keep process alive
+  periodicTimer.unref();
+}
+
+module.exports = {
+  app, cache, inFlight, routeCache, stats, requestLog,
+  haversine, airlineName, airlinePrefix, airportName,
+  formatRouteString, validateCoord, escapeHtml, formatUptime,
+  windCardinal, addLog, cacheSet, routeCacheSet,
+  semaphore, upstreamSem, routeSem,
+  bucketCoord, bucketKey,
+  CACHE_MS, ROUTE_CACHE_MS, SEMAPHORE_TIMEOUT_MS,
+  MAX_CACHE_ENTRIES, MAX_ROUTE_ENTRIES,
+  MAX_UPSTREAM_CONCURRENT, MAX_ROUTE_CONCURRENT,
+};

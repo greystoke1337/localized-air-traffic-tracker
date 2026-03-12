@@ -361,6 +361,158 @@ void test_repeated_empty_then_full() {
   EXPECT(n > 0 && newFlights[0].callsign[0] != '\0');
 }
 
+// ── Error response tests (proxy under load) ──────────
+
+void test_error_502_response() {
+  printf("\n── error_502.json (proxy upstream failure) ──\n");
+  std::string json = readFixture("error_502.json");
+
+  DynamicJsonDocument doc(4096);
+  DeserializationError err = deserializeJson(doc, json.c_str(), json.length());
+
+  TEST("parses as valid JSON");
+  EXPECT(!err);
+
+  TEST("has error field");
+  EXPECT(doc.containsKey("error"));
+
+  TEST("no 'ac' array");
+  EXPECT(doc["ac"].isNull());
+
+  int n = extractFlights(doc);
+  TEST("extractFlights returns 0 for error response");
+  EXPECT(n == 0);
+}
+
+void test_error_503_response() {
+  printf("\n── error_503.json (proxy disabled) ──\n");
+  std::string json = readFixture("error_503.json");
+
+  DynamicJsonDocument doc(4096);
+  DeserializationError err = deserializeJson(doc, json.c_str(), json.length());
+
+  TEST("parses as valid JSON");
+  EXPECT(!err);
+
+  int n = extractFlights(doc);
+  TEST("extractFlights returns 0 for disabled proxy");
+  EXPECT(n == 0);
+}
+
+void test_truncated_response() {
+  printf("\n── truncated_response.json (connection cut) ──\n");
+  std::string json = readFixture("truncated_response.json");
+
+  DynamicJsonDocument doc(16384);
+  DeserializationError err = deserializeJson(doc, json.c_str(), json.length());
+
+  TEST("deserialization fails on truncated JSON");
+  EXPECT(err);
+}
+
+void test_stale_weather_response() {
+  printf("\n── stale_weather.json (stale flag) ──\n");
+  std::string json = readFixture("stale_weather.json");
+
+  DynamicJsonDocument doc(4096);
+  DeserializationError err = deserializeJson(doc, json.c_str(), json.length());
+
+  TEST("parses as valid JSON");
+  EXPECT(!err);
+
+  TEST("has temp field");
+  EXPECT(doc["temp"].as<float>() > -100.0f);
+
+  TEST("has stale flag");
+  EXPECT(doc["stale"] == true);
+}
+
+void test_empty_string_response() {
+  printf("\n── empty string (timeout/connection reset) ──\n");
+  DynamicJsonDocument doc(4096);
+  DeserializationError err = deserializeJson(doc, "", 0);
+
+  TEST("deserialization fails on empty string");
+  EXPECT(err);
+}
+
+void test_html_error_page() {
+  printf("\n── HTML error page (Cloudflare 502) ──\n");
+  const char* html = "<html><head><title>502 Bad Gateway</title></head><body><h1>502</h1></body></html>";
+  DynamicJsonDocument doc(4096);
+  DeserializationError err = deserializeJson(doc, html, strlen(html));
+
+  TEST("deserialization fails on HTML");
+  EXPECT(err);
+}
+
+void test_rate_limit_response() {
+  printf("\n── rate limit response (429) ──\n");
+  const char* json = "{\"message\":\"Too many requests\",\"retryAfter\":60}";
+  DynamicJsonDocument doc(4096);
+  DeserializationError err = deserializeJson(doc, json, strlen(json));
+
+  TEST("parses as valid JSON");
+  EXPECT(!err);
+
+  TEST("no 'ac' array");
+  EXPECT(doc["ac"].isNull());
+
+  int n = extractFlights(doc);
+  TEST("extractFlights returns 0 for rate limit response");
+  EXPECT(n == 0);
+}
+
+void test_rapid_state_transitions() {
+  printf("\n── rapid state transitions (load simulation) ──\n");
+  memset(newFlights, 0, sizeof(newFlights));
+
+  // Simulate rapid alternation between data and errors
+  int n;
+  n = parseFixture("normal_response.json");
+  TEST("parse 1: normal response");
+  EXPECT(n == 4);
+
+  // Error response (proxy overloaded)
+  {
+    DynamicJsonDocument doc(4096);
+    deserializeJson(doc, "{\"error\":\"temporarily unavailable\"}");
+    n = extractFlights(doc);
+  }
+  TEST("parse 2: error response gives 0 flights");
+  EXPECT(n == 0);
+
+  n = parseFixture("normal_response.json");
+  TEST("parse 3: recovery after error");
+  EXPECT(n == 4);
+
+  n = parseFixture("empty_response.json");
+  TEST("parse 4: empty (clear skies)");
+  EXPECT(n == 0);
+
+  n = parseFixture("single_flight.json");
+  TEST("parse 5: single flight after empty");
+  EXPECT(n == 1);
+
+  TEST("flight data not corrupted by transitions");
+  EXPECT(newFlights[0].callsign[0] != '\0' && newFlights[0].lat != 0.0f);
+}
+
+void test_very_large_ac_count_in_json() {
+  printf("\n── response with ac count field ──\n");
+  // Some APIs return a "total" or "now" count alongside "ac"
+  const char* json = "{\"ac\":[],\"total\":0,\"now\":1710000000}";
+  DynamicJsonDocument doc(4096);
+  DeserializationError err = deserializeJson(doc, json, strlen(json));
+
+  TEST("parses extra fields without issue");
+  EXPECT(!err);
+
+  int n = extractFlights(doc);
+  TEST("returns 0 flights for empty ac array");
+  EXPECT(n == 0);
+}
+
 int main() {
   printf("═══════════════════════════════════════\n");
   printf("  Overhead Tracker — JSON Parsing Tests\n");
@@ -378,6 +530,17 @@ int main() {
   test_max_flights_boundary();
   test_overflow_capped();
   test_repeated_empty_then_full();
+
+  // Error / resilience tests
+  test_error_502_response();
+  test_error_503_response();
+  test_truncated_response();
+  test_stale_weather_response();
+  test_empty_string_response();
+  test_html_error_page();
+  test_rate_limit_response();
+  test_rapid_state_transitions();
+  test_very_large_ac_count_in_json();
 
   printf("\n═══════════════════════════════════════\n");
   printf("  Results: %d / %d passed\n", tests_passed, tests_run);
