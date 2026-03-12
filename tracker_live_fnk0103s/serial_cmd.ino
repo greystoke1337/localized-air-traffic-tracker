@@ -27,7 +27,11 @@ void checkSerialCmd() {
       scr, flightCount, flightIndex, countdown, wxCountdown, src,
       isFetching ? "true" : "false",
       usingCache ? "true" : "false",
+#if HAS_SD
       sdAvailable ? "true" : "false",
+#else
+      "false",
+#endif
       wxReady ? "true" : "false",
       loggedCount, millis() / 1000,
       ESP.getFreeHeap(), ESP.getMaxAllocHeap());
@@ -81,6 +85,7 @@ void checkSerialCmd() {
       wxData.temp, wxData.condition, ESP.getFreeHeap());
 
   } else if (input == "unknowns") {
+#if HAS_SD
     if (!sdAvailable) {
       Serial.println("{\"cmd\":\"unknowns\",\"ok\":false,\"error\":\"no SD\"}");
     } else {
@@ -91,6 +96,9 @@ void checkSerialCmd() {
         f.close();
       }
     }
+#else
+    Serial.println("{\"cmd\":\"unknowns\",\"ok\":false,\"error\":\"no SD\"}");
+#endif
 
   } else if (input == "restart") {
     Serial.println("{\"cmd\":\"restart\",\"ok\":true}");

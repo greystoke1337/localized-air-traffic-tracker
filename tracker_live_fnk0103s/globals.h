@@ -35,12 +35,16 @@ extern const int   GEO_COUNT;
 extern int         geoIndex;
 
 // ─── SD state ─────────────────────────────────────────
+#if HAS_SD
 extern bool sdAvailable;
+#endif
 
 // ─── Touch ────────────────────────────────────────────
+#if HAS_TOUCH
 extern uint16_t touchCalData[8];
 extern bool     touchReady;
 extern uint32_t lastTouchMs;
+#endif
 
 // ─── Screen ───────────────────────────────────────────
 extern ScreenMode currentScreen;
@@ -120,8 +124,10 @@ void fetchFlights();
 bool fetchWeather();
 
 // touch.ino
+#if HAS_TOUCH
 void initTouch();
 void handleTouch(uint16_t tx, uint16_t ty);
+#endif
 
 // wifi_setup.ino
 bool loadWiFiConfig();

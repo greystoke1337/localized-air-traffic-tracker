@@ -1,4 +1,5 @@
 // ─── Touch calibration & input handling ────────────────
+#if HAS_TOUCH
 
 bool loadTouchCal() {
   Preferences p;
@@ -142,3 +143,5 @@ void handleTouch(uint16_t tx, uint16_t ty) {
     return;
   }
 }
+
+#endif // HAS_TOUCH

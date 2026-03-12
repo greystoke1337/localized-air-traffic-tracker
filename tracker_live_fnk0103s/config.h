@@ -1,22 +1,45 @@
 #pragma once
+#include "board.h"
+
+// ─── Feature flags ───────────────────────────────────
+#ifdef BOARD_2P8
+  #define HAS_TOUCH 0
+  #define HAS_SD    0
+#else
+  #define HAS_TOUCH 1
+  #define HAS_SD    1
+#endif
 
 // ─── SD pin ───────────────────────────────────────────
-#define SD_CS 5
+#if HAS_SD
+  #define SD_CS 5
+#endif
 
 // ─── Refresh ──────────────────────────────────────────
 #define REFRESH_SECS 15
 #define CYCLE_SECS   8
 
-// ─── Screen (landscape: 480 wide x 320 tall) ──────────
-#define W 480
-#define H 320
+// ─── Screen ──────────────────────────────────────────
+#ifdef BOARD_2P8
+  #define W 320
+  #define H 240
+#else
+  #define W 480
+  #define H 320
+#endif
 
 // ─── Layout ───────────────────────────────────────────
-#define HDR_H      28   // amber header bar
-#define NAV_H      36   // navigation/controls bar below header
-#define FOOT_H     20   // dim footer bar
-#define CONTENT_Y  (HDR_H + NAV_H)                // 64
-#define CONTENT_H  (H - HDR_H - NAV_H - FOOT_H)  // 236px
+#ifdef BOARD_2P8
+  #define HDR_H      22
+  #define NAV_H       0   // no nav bar (no touch)
+  #define FOOT_H     16
+#else
+  #define HDR_H      28
+  #define NAV_H      36
+  #define FOOT_H     20
+#endif
+#define CONTENT_Y  (HDR_H + NAV_H)
+#define CONTENT_H  (H - HDR_H - NAV_H - FOOT_H)
 
 // ─── Colours (RGB565) ─────────────────────────────────
 #define C_BG      0x0820
@@ -41,16 +64,16 @@
 #define AL_VIOLET  0xA33F   // #AA66FF  Thai, Hawaiian
 
 // ─── Touch ────────────────────────────────────────────
-#define TOUCH_DEBOUNCE_MS  350
-
-// ─── Nav bar button zones ─────────────────────────────
-#define NAV_Y       HDR_H
-#define NAV_BTN_W   70
-#define NAV_BTN_H   (NAV_H - 4)   // 32px tall (2px top/bottom padding)
-#define NAV_BTN_GAP 4
-#define CFG_BTN_X1  (W - NAV_BTN_W)                          // 410
-#define GEO_BTN_X1  (CFG_BTN_X1 - NAV_BTN_GAP - NAV_BTN_W)  // 336
-#define WX_BTN_X1   (GEO_BTN_X1 - NAV_BTN_GAP - NAV_BTN_W)  // 262
+#if HAS_TOUCH
+  #define TOUCH_DEBOUNCE_MS  350
+  #define NAV_Y       HDR_H
+  #define NAV_BTN_W   70
+  #define NAV_BTN_H   (NAV_H - 4)
+  #define NAV_BTN_GAP 4
+  #define CFG_BTN_X1  (W - NAV_BTN_W)
+  #define GEO_BTN_X1  (CFG_BTN_X1 - NAV_BTN_GAP - NAV_BTN_W)
+  #define WX_BTN_X1   (GEO_BTN_X1 - NAV_BTN_GAP - NAV_BTN_W)
+#endif
 
 // ─── Direct API robustness ────────────────────────────
 #define DIRECT_API_MIN_HEAP  40000  // 40 KB minimum free heap for TLS

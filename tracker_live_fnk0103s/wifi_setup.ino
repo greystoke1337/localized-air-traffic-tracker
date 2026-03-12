@@ -160,31 +160,47 @@ void startCaptivePortal() {
   tft.fillScreen(C_BG);
   tft.fillRect(0, 0, W, HDR_H, C_AMBER);
   tft.setTextColor(C_BG, C_AMBER);
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+  tft.setCursor(4, 7);
+#else
   tft.setTextSize(2);
   tft.setCursor(8, 6);
+#endif
   tft.print("OVERHEAD TRACKER");
 
+  int sy = HDR_H + 14;
   tft.setTextColor(C_AMBER, C_BG);
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+#else
   tft.setTextSize(2);
-  tft.setCursor(16, 50);
+#endif
+  tft.setCursor(16, sy);
   tft.print("SETUP MODE");
 
+  sy += 28;
   tft.setTextColor(C_DIM, C_BG);
   tft.setTextSize(1);
-  tft.setCursor(16, 86);
+  tft.setCursor(16, sy);
   tft.print("ON YOUR PHONE:");
-  tft.setCursor(16, 104);
+  sy += 14;
+  tft.setCursor(16, sy);
   tft.print("1. CONNECT TO WI-FI:");
+  sy += 14;
   tft.setTextColor(C_AMBER, C_BG);
-  tft.setCursor(28, 120);
+  tft.setCursor(28, sy);
   tft.print("OVERHEAD-SETUP");
+  sy += 18;
   tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(16, 144);
+  tft.setCursor(16, sy);
   tft.print("2. OPEN ANY BROWSER");
-  tft.setCursor(28, 160);
+  sy += 14;
+  tft.setCursor(28, sy);
   tft.print("(PAGE OPENS AUTOMATICALLY)");
+  sy += 16;
   tft.setTextColor(C_DIMMER, C_BG);
-  tft.setCursor(28, 180);
+  tft.setCursor(28, sy);
   tft.print("OR: 192.168.4.1");
 
   WiFi.mode(WIFI_AP);

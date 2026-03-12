@@ -3,15 +3,26 @@
 void drawHeader() {
   tft.fillRect(0, 0, W, HDR_H, C_AMBER);
   tft.setTextColor(C_BG, C_AMBER);
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+  tft.setCursor(4, 7);
+  tft.print("OVERHEAD TRACKER");
+  int locW = strlen(LOCATION_NAME) * 6;
+  tft.setCursor(W - locW - 4, 7);
+#else
   tft.setTextSize(2);
   tft.setCursor(8, 6);
   tft.print("OVERHEAD TRACKER");
   int locW = strlen(LOCATION_NAME) * 12;
   tft.setCursor(W - locW - 8, 6);
+#endif
   tft.print(LOCATION_NAME);
 }
 
 void drawNavBar() {
+#if !HAS_TOUCH
+  return;
+#else
   tft.fillRect(0, NAV_Y, W, NAV_H, C_BG);
   tft.drawFastHLine(0, NAV_Y, W, C_DIMMER);
 
@@ -51,6 +62,7 @@ void drawNavBar() {
   int cfgW = strlen(cfgLbl) * 12;
   tft.setCursor(CFG_BTN_X1 + (NAV_BTN_W - cfgW) / 2, NAV_Y + 10);
   tft.print(cfgLbl);
+#endif
 }
 
 void drawStatusBar() {
@@ -77,10 +89,19 @@ void drawStatusBar() {
                flightIndex+1, flightCount, ageSec/3600, (ageSec%3600)/60, countdown);
   } else {
     const char* src = dataSource==2 ? "CACHE" : dataSource==1 ? "DIRECT" : "PROXY";
+#ifdef BOARD_2P8
+    snprintf(buf, sizeof(buf), " AC %d/%d  %s  %ds  H:%d",
+             flightIndex+1, flightCount, src, countdown, ESP.getFreeHeap());
+#else
     snprintf(buf, sizeof(buf), "  AC %d/%d   SRC:%s   NEXT:%ds   H:%d",
              flightIndex+1, flightCount, src, countdown, ESP.getFreeHeap());
+#endif
   }
+#ifdef BOARD_2P8
+  tft.setCursor(4, y + 4);
+#else
   tft.setCursor(6, y + 6);
+#endif
   tft.print(buf);
 }
 
@@ -115,6 +136,15 @@ void renderFlight(const Flight& f) {
     const char* emergLabel = strcmp(f.squawk,"7700")==0 ? "EMERGENCY - MAYDAY" :
                              strcmp(f.squawk,"7600")==0 ? "EMERGENCY - NORDO"  :
                                                           "EMERGENCY - HIJACK";
+#ifdef BOARD_2P8
+    tft.fillRect(0, CONTENT_Y, W, 18, C_RED);
+    tft.setTextColor(C_BG, C_RED);
+    tft.setTextSize(1);
+    int lblW = strlen(emergLabel) * 6;
+    tft.setCursor((W - lblW) / 2, CONTENT_Y + 5);
+    tft.print(emergLabel);
+    emergOffset = 18;
+#else
     tft.fillRect(0, CONTENT_Y, W, 24, C_RED);
     tft.setTextColor(C_BG, C_RED);
     tft.setTextSize(2);
@@ -122,13 +152,18 @@ void renderFlight(const Flight& f) {
     tft.setCursor((W - lblW) / 2, CONTENT_Y + 4);
     tft.print(emergLabel);
     emergOffset = 24;
+#endif
   }
 
   int x = 15;
   int y = CONTENT_Y + emergOffset + 4;
 
   // 1. PRIMARY IDENTITY
+#ifdef BOARD_2P8
+  int csSize = hasEmergency ? 2 : 3;
+#else
   int csSize = hasEmergency ? 3 : 4;
+#endif
   tft.setTextSize(csSize);
   tft.setTextColor(C_AMBER, C_BG);
   tft.setCursor(x, y);
@@ -137,11 +172,19 @@ void renderFlight(const Flight& f) {
   y += csSize * 8;
   if (!hasEmergency) {
     const Airline* al = getAirline(f.callsign);
+#ifdef BOARD_2P8
+    tft.setTextSize(1);
+    tft.setTextColor(al ? al->color : C_DIM, C_BG);
+    tft.setCursor(x, y);
+    tft.print(al ? al->name : "UNKNOWN AIRLINE");
+    y += 12;
+#else
     tft.setTextSize(2);
     tft.setTextColor(al ? al->color : C_DIM, C_BG);
     tft.setCursor(x, y);
     tft.print(al ? al->name : "UNKNOWN AIRLINE");
     y += 20;
+#endif
   } else {
     y += 8;
   }
@@ -155,7 +198,11 @@ void renderFlight(const Flight& f) {
   tft.setCursor(x, y);
   tft.print(acCat ? acCat : "AIRCRAFT TYPE");
   tft.setTextColor(C_DIM, C_BG);
+#ifdef BOARD_2P8
+  tft.setCursor(W/2 + 10, y);
+#else
   tft.setCursor(W/2 + 20, y);
+#endif
   tft.print("REGISTRATION");
   y += 10;
   tft.setTextSize(2);
@@ -163,7 +210,11 @@ void renderFlight(const Flight& f) {
   tft.setCursor(x, y);
   tft.print(getAircraftTypeName(f.type));
   tft.setTextColor(C_AMBER, C_BG);
+#ifdef BOARD_2P8
+  tft.setCursor(W/2 + 10, y);
+#else
   tft.setCursor(W/2 + 20, y);
+#endif
   tft.print(f.reg[0] ? f.reg : "---");
 
   // 3. ROUTE SECTION
@@ -188,69 +239,113 @@ void renderFlight(const Flight& f) {
   }
 
   // 4. DASHBOARD: PHASE | ALT | SPEED | DIST
-  int dashY = H - FOOT_H - 75;
+  const int COL_W = W / 4;
+#ifdef BOARD_2P8
+  const int DASH_H = 58;
+#else
+  const int DASH_H = 75;
+#endif
+  int dashY = H - FOOT_H - DASH_H;
   tft.drawFastHLine(0, dashY, W, C_DIM);
 
-  // Phase Block (0-120)
+  // Phase Block
   uint16_t sCol = statusColor(f.status);
-  tft.fillRect(0, dashY + 1, 4, 74, sCol);
+  tft.fillRect(0, dashY + 1, 4, DASH_H - 1, sCol);
   tft.setTextSize(1);
   tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(12, dashY + 8);
+  tft.setCursor(8, dashY + 5);
   tft.print("PHASE");
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+  tft.setTextColor(sCol, C_BG);
+  tft.setCursor(8, dashY + 18);
+  tft.print(statusLabel(f.status));
+#else
   tft.setTextSize(2);
   tft.setTextColor(sCol, C_BG);
   tft.setCursor(12, dashY + 24);
   tft.print(statusLabel(f.status));
+#endif
 
   // Squawk (below phase)
   bool emerg = strcmp(f.squawk,"7700")==0 || strcmp(f.squawk,"7600")==0 || strcmp(f.squawk,"7500")==0;
   const char* sqLabel = strcmp(f.squawk,"7700")==0 ? "MAYDAY" : strcmp(f.squawk,"7600")==0 ? "NORDO" : strcmp(f.squawk,"7500")==0 ? "HIJACK" : f.squawk;
   tft.setTextColor(emerg ? C_RED : C_DIM, C_BG);
   tft.setTextSize(1);
+#ifdef BOARD_2P8
+  tft.setCursor(8, dashY + 32);
+#else
   tft.setCursor(12, dashY + 44);
+#endif
   tft.print("SQK ");
   tft.print(sqLabel);
 
-  // Altitude Block (120-240)
+  // Altitude Block
   char altBuf[20];
   formatAlt(f.alt, altBuf, sizeof(altBuf));
-  tft.drawFastVLine(120, dashY + 5, 65, C_DIMMER);
+  tft.drawFastVLine(COL_W, dashY + 5, DASH_H - 10, C_DIMMER);
   tft.setTextSize(1);
   tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(132, dashY + 8);
-  tft.print("ALTITUDE");
+  tft.setCursor(COL_W + 8, dashY + 5);
+  tft.print("ALT");
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+  tft.setTextColor(C_AMBER, C_BG);
+  tft.setCursor(COL_W + 8, dashY + 18);
+  tft.print(altBuf);
+#else
   tft.setTextSize(2);
   tft.setTextColor(C_AMBER, C_BG);
-  tft.setCursor(132, dashY + 24);
+  tft.setCursor(COL_W + 12, dashY + 24);
   tft.print(altBuf);
+#endif
   tft.setTextSize(1);
   if (abs(f.vs) >= 50) {
     char vsBuf[16];
     if (f.vs > 0) {
-      snprintf(vsBuf, sizeof(vsBuf), "+%d FPM", f.vs);
+      snprintf(vsBuf, sizeof(vsBuf), "+%d", f.vs);
       tft.setTextColor(C_GREEN, C_BG);
     } else {
-      snprintf(vsBuf, sizeof(vsBuf), "%d FPM", f.vs);
+      snprintf(vsBuf, sizeof(vsBuf), "%d", f.vs);
       tft.setTextColor(C_RED, C_BG);
     }
-    tft.setCursor(132, dashY + 44);
+#ifdef BOARD_2P8
+    tft.setCursor(COL_W + 8, dashY + 32);
+#else
+    tft.setCursor(COL_W + 12, dashY + 44);
+#endif
     tft.print(vsBuf);
   } else {
     tft.setTextColor(C_AMBER, C_BG);
-    tft.setCursor(132, dashY + 44);
+#ifdef BOARD_2P8
+    tft.setCursor(COL_W + 8, dashY + 32);
+#else
+    tft.setCursor(COL_W + 12, dashY + 44);
+#endif
     tft.print("LEVEL");
   }
 
-  // Speed Block (240-360)
-  tft.drawFastVLine(240, dashY + 5, 65, C_DIMMER);
+  // Speed Block
+  tft.drawFastVLine(COL_W * 2, dashY + 5, DASH_H - 10, C_DIMMER);
   tft.setTextSize(1);
   tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(252, dashY + 8);
-  tft.print("SPEED");
+  tft.setCursor(COL_W * 2 + 8, dashY + 5);
+  tft.print("SPD");
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+  tft.setTextColor(C_AMBER, C_BG);
+  tft.setCursor(COL_W * 2 + 8, dashY + 18);
+  if (f.speed > 0) {
+    char spdBuf[16];
+    snprintf(spdBuf, sizeof(spdBuf), "%dKT", f.speed);
+    tft.print(spdBuf);
+  } else {
+    tft.print("---");
+  }
+#else
   tft.setTextSize(2);
   tft.setTextColor(C_AMBER, C_BG);
-  tft.setCursor(252, dashY + 24);
+  tft.setCursor(COL_W * 2 + 12, dashY + 24);
   if (f.speed > 0) {
     char spdBuf[16];
     snprintf(spdBuf, sizeof(spdBuf), "%d", f.speed);
@@ -260,16 +355,29 @@ void renderFlight(const Flight& f) {
   } else {
     tft.print("---");
   }
+#endif
 
-  // Distance Block (360-480)
-  tft.drawFastVLine(360, dashY + 5, 65, C_DIMMER);
+  // Distance Block
+  tft.drawFastVLine(COL_W * 3, dashY + 5, DASH_H - 10, C_DIMMER);
   tft.setTextSize(1);
   tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(372, dashY + 8);
-  tft.print("DISTANCE");
-  tft.setTextSize(2);
+  tft.setCursor(COL_W * 3 + 8, dashY + 5);
+  tft.print("DIST");
   tft.setTextColor(distanceColor(f.dist, GEOFENCE_KM), C_BG);
-  tft.setCursor(372, dashY + 24);
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+  tft.setCursor(COL_W * 3 + 8, dashY + 18);
+  if (f.dist > 0) {
+    char distBuf[16];
+    if (f.dist >= 10.0f) snprintf(distBuf, sizeof(distBuf), "%.0fKM", f.dist);
+    else                  snprintf(distBuf, sizeof(distBuf), "%.1f", f.dist);
+    tft.print(distBuf);
+  } else {
+    tft.print("---");
+  }
+#else
+  tft.setTextSize(2);
+  tft.setCursor(COL_W * 3 + 12, dashY + 24);
   if (f.dist > 0) {
     char distBuf[16];
     if (f.dist >= 10.0f) snprintf(distBuf, sizeof(distBuf), "%.0f", f.dist);
@@ -280,6 +388,7 @@ void renderFlight(const Flight& f) {
   } else {
     tft.print("---");
   }
+#endif
 
   drawStatusBar();
 }
@@ -291,7 +400,7 @@ void renderWeather() {
 
   drawNavBar();
 
-  // ── Clock ── (always 5 chars — overwrite in place, no clear needed)
+  // ── Clock ──
   time_t utcNow  = time(NULL);
   bool   ntpOk   = utcNow > 1000000000UL;
   time_t localNow = (ntpOk && wxReady && wxData.utc_offset_secs != 0)
@@ -303,12 +412,20 @@ void renderWeather() {
   if (ntpOk) snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", t->tm_hour, t->tm_min);
   else       strlcpy(timeBuf, "--:--", sizeof(timeBuf));
 
+#ifdef BOARD_2P8
+  tft.setTextSize(4);
+  tft.setTextColor(C_AMBER, C_BG);
+  tft.setCursor((W - 5*24) / 2, cy);
+  tft.print(timeBuf);
+  cy += 36;
+#else
   tft.setTextSize(6);
   tft.setTextColor(C_AMBER, C_BG);
   tft.setCursor((W - 180) / 2, cy);
   tft.print(timeBuf);
-
   cy += 52;
+#endif
+
   if (ntpOk) {
     const char* dayNames[] = {"SUN","MON","TUE","WED","THU","FRI","SAT"};
     const char* monNames[] = {"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"};
@@ -322,7 +439,11 @@ void renderWeather() {
     tft.setCursor((W - dateW) / 2, cy);
     tft.print(dateBuf);
   }
+#ifdef BOARD_2P8
+  cy += 18;
+#else
   cy += 22;
+#endif
 
   tft.drawFastHLine(10, cy, W - 20, C_DIMMER);
   cy += 8;
@@ -338,23 +459,25 @@ void renderWeather() {
   }
 
   char buf[32];
+  int lx = 10;   // left margin
+  int rx = W/2 + 10;  // right column
 
   // Row 1: Temperature | Feels Like
   tft.setTextSize(1);
   tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(15, cy);      tft.print("TEMPERATURE");
-  tft.setCursor(W/2 + 15, cy); tft.print("FEELS LIKE");
+  tft.setCursor(lx, cy);      tft.print("TEMPERATURE");
+  tft.setCursor(rx, cy);      tft.print("FEELS LIKE");
   cy += 10;
   if (!fresh) {
-    tft.fillRect(15, cy, W/2 - 20, 16, C_BG);
-    tft.fillRect(W/2 + 15, cy, W/2 - 20, 16, C_BG);
+    tft.fillRect(lx, cy, W/2 - 15, 16, C_BG);
+    tft.fillRect(rx, cy, W/2 - 15, 16, C_BG);
   }
   tft.setTextSize(2);
   tft.setTextColor(C_AMBER, C_BG);
   snprintf(buf, sizeof(buf), "%.1f C", wxData.temp);
-  tft.setCursor(15, cy); tft.print(buf);
+  tft.setCursor(lx, cy); tft.print(buf);
   snprintf(buf, sizeof(buf), "%.1f C", wxData.feels_like);
-  tft.setCursor(W/2 + 15, cy); tft.print(buf);
+  tft.setCursor(rx, cy); tft.print(buf);
   cy += 20;
 
   tft.drawFastHLine(10, cy, W - 20, C_DIMMER); cy += 6;
@@ -362,12 +485,12 @@ void renderWeather() {
   // Row 2: Condition
   tft.setTextSize(1);
   tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(15, cy); tft.print("CONDITIONS");
+  tft.setCursor(lx, cy); tft.print("CONDITIONS");
   cy += 10;
-  if (!fresh) tft.fillRect(15, cy, W - 30, 16, C_BG);
+  if (!fresh) tft.fillRect(lx, cy, W - 20, 16, C_BG);
   tft.setTextSize(2);
   tft.setTextColor(C_YELLOW, C_BG);
-  tft.setCursor(15, cy); tft.print(wxData.condition);
+  tft.setCursor(lx, cy); tft.print(wxData.condition);
   cy += 20;
 
   tft.drawFastHLine(10, cy, W - 20, C_DIMMER); cy += 6;
@@ -375,19 +498,19 @@ void renderWeather() {
   // Row 3: Humidity | Wind
   tft.setTextSize(1);
   tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(15, cy);       tft.print("HUMIDITY");
-  tft.setCursor(W/2 + 15, cy); tft.print("WIND");
+  tft.setCursor(lx, cy);      tft.print("HUMIDITY");
+  tft.setCursor(rx, cy);      tft.print("WIND");
   cy += 10;
   if (!fresh) {
-    tft.fillRect(15, cy, W/2 - 20, 16, C_BG);
-    tft.fillRect(W/2 + 15, cy, W/2 - 20, 16, C_BG);
+    tft.fillRect(lx, cy, W/2 - 15, 16, C_BG);
+    tft.fillRect(rx, cy, W/2 - 15, 16, C_BG);
   }
   tft.setTextSize(2);
   tft.setTextColor(C_AMBER, C_BG);
   snprintf(buf, sizeof(buf), "%d%%", wxData.humidity);
-  tft.setCursor(15, cy); tft.print(buf);
-  snprintf(buf, sizeof(buf), "%.0f KM/H %s", wxData.wind_speed, wxData.wind_cardinal);
-  tft.setCursor(W/2 + 15, cy); tft.print(buf);
+  tft.setCursor(lx, cy); tft.print(buf);
+  snprintf(buf, sizeof(buf), "%.0f %s", wxData.wind_speed, wxData.wind_cardinal);
+  tft.setCursor(rx, cy); tft.print(buf);
   cy += 20;
 
   tft.drawFastHLine(10, cy, W - 20, C_DIMMER); cy += 6;
@@ -395,16 +518,16 @@ void renderWeather() {
   // Row 4: UV Index
   tft.setTextSize(1);
   tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(15, cy); tft.print("UV INDEX");
+  tft.setCursor(lx, cy); tft.print("UV INDEX");
   cy += 10;
-  if (!fresh) tft.fillRect(15, cy, W - 30, 16, C_BG);
+  if (!fresh) tft.fillRect(lx, cy, W - 20, 16, C_BG);
   uint16_t uvCol = wxData.uv_index < 3.0f ? C_GREEN :
                    wxData.uv_index < 6.0f ? C_YELLOW :
                    wxData.uv_index < 8.0f ? C_AMBER  : C_RED;
   tft.setTextSize(2);
   tft.setTextColor(uvCol, C_BG);
   snprintf(buf, sizeof(buf), "%.1f", wxData.uv_index);
-  tft.setCursor(15, cy); tft.print(buf);
+  tft.setCursor(lx, cy); tft.print(buf);
 
   drawStatusBar();
 }
@@ -412,16 +535,24 @@ void renderWeather() {
 // ── Boot sequence ───────────────────────────────────────
 static int bootLineY = 56;
 
+#ifdef BOARD_2P8
+  static const int BOOT_DOT_END = 140;
+  static const int BOOT_RESULT_X = 142;
+#else
+  static const int BOOT_DOT_END = 212;
+  static const int BOOT_RESULT_X = 214;
+#endif
+
 static void bootLine(const char* label, const char* result, uint16_t col, int pauseMs) {
   tft.setTextColor(C_DIMMER, C_BG);
   tft.setTextSize(1);
   tft.setCursor(10, bootLineY);
   tft.print(label);
   int dotX = 10 + strlen(label) * 6;
-  while (dotX < 212) { tft.setCursor(dotX, bootLineY); tft.print("."); dotX += 6; }
+  while (dotX < BOOT_DOT_END) { tft.setCursor(dotX, bootLineY); tft.print("."); dotX += 6; }
   delay(pauseMs);
   tft.setTextColor(col, C_BG);
-  tft.setCursor(214, bootLineY);
+  tft.setCursor(BOOT_RESULT_X, bootLineY);
   tft.print(result);
   bootLineY += 14;
   delay(10);
@@ -429,7 +560,11 @@ static void bootLine(const char* label, const char* result, uint16_t col, int pa
 
 void bootSequence() {
   tft.fillScreen(C_BG);
+#ifdef BOARD_2P8
+  bootLineY = 42;
+#else
   bootLineY = 56;
+#endif
   for (int y = 0; y < H; y += 2) {
     tft.drawFastHLine(0, y, W, C_DIMMER);
     delayMicroseconds(200);
@@ -439,6 +574,15 @@ void bootSequence() {
   delay(20);
 
   tft.setTextColor(C_AMBER, C_BG);
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+  tft.setCursor(10, 6);
+  tft.print("OVERHEAD TRACKER");
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setCursor(10, 20);
+  tft.print("ADS-B SURVEILLANCE  REV 3.2");
+  tft.drawFastHLine(0, 33, W, C_DIM);
+#else
   tft.setTextSize(2);
   tft.setCursor(10, 12);
   tft.print("OVERHEAD TRACKER");
@@ -447,7 +591,9 @@ void bootSequence() {
   tft.setCursor(10, 34);
   tft.print("ADS-B AIRSPACE SURVEILLANCE  REV 3.2");
   tft.drawFastHLine(0, 47, W, C_DIM);
+#endif
   delay(100);
+
   char buf[40];
   snprintf(buf, sizeof(buf), "240 MHz  DUAL CORE");
   bootLine("CPU",            buf,                    C_GREEN,  30);
@@ -457,15 +603,21 @@ void bootSequence() {
   bootLine("FLASH SIZE",     buf,                    C_AMBER,  25);
   snprintf(buf, sizeof(buf), "%s", ESP.getSdkVersion());
   bootLine("ESP-IDF SDK",    buf,                    C_DIM,    20);
-  bootLine("SPI BUS",        "CLK 40MHz  OK",         C_GREEN,  25);
-  bootLine("DISPLAY",        "ST7796 480x320 16BIT",  C_GREEN,  30);
+  bootLine("SPI BUS",        "CLK 40MHz  OK",        C_GREEN,  25);
+#ifdef BOARD_2P8
+  bootLine("DISPLAY",        "ST7789 320x240 16BIT", C_GREEN,  30);
+#else
+  bootLine("DISPLAY",        "ST7796 480x320 16BIT", C_GREEN,  30);
+#endif
   uint8_t mac[6];
   WiFi.macAddress(mac);
   snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
            mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
   bootLine("WIFI MAC",       buf,                    C_AMBER,  30);
   bootLine("WIFI MODE",      "STA  802.11 B/G/N",    C_AMBER,  20);
+#if HAS_SD
   bootLine("SD CARD",        "SEARCHING...",         C_YELLOW, 80);
+#endif
   snprintf(buf, sizeof(buf), "%s:%d", PROXY_HOST, PROXY_PORT);
   bootLine("PROXY TARGET",   buf,                    C_AMBER,  25);
   snprintf(buf, sizeof(buf), "%.4f, %.4f", HOME_LAT, HOME_LON);
@@ -501,6 +653,15 @@ void drawOtaProgress(int pct) {
     first = false;
     tft.fillScreen(C_BG);
     tft.setTextColor(C_AMBER, C_BG);
+#ifdef BOARD_2P8
+    tft.setTextSize(2);
+    tft.setCursor(50, 80);
+    tft.print("OTA UPDATE");
+    tft.setTextSize(1);
+    tft.setTextColor(C_DIM, C_BG);
+    tft.setCursor(40, 110);
+    tft.print("Do not power off");
+#else
     tft.setTextSize(3);
     tft.setCursor(100, 110);
     tft.print("OTA UPDATE");
@@ -508,8 +669,13 @@ void drawOtaProgress(int pct) {
     tft.setTextColor(C_DIM, C_BG);
     tft.setCursor(80, 155);
     tft.print("Do not power off");
+#endif
   }
+#ifdef BOARD_2P8
+  const int BX = 20, BY = 157, BW = 280, BH = 20;
+#else
   const int BX = 40, BY = 210, BW = 400, BH = 24;
+#endif
   tft.drawRect(BX, BY, BW, BH, C_AMBER);
   tft.fillRect(BX + 1, BY + 1, (BW - 2) * pct / 100, BH - 2, C_GREEN);
 }

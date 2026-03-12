@@ -1,6 +1,8 @@
 /*
   OVERHEAD TRACKER — LIVE (Redesigned UI)
-  FNK0103S — 4.0" 480x320 ST7796 (landscape)
+  Supports two boards via BOARD_2P8 / BOARD_4P0 in config.h:
+    FNK0103S   — 4.0" 480x320 ST7796 (touch + SD)
+    FNK0103B_2P8 — 2.8" 320x240 ST7789 (no touch, no SD)
 
   Libraries needed:
     - LovyanGFX (display + touch driver)
@@ -29,7 +31,9 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
-#include <SD.h>
+#if HAS_SD
+  #include <SD.h>
+#endif
 #include <math.h>
 #include <Preferences.h>
 #include <time.h>
@@ -65,7 +69,9 @@ char  HOME_QUERY[128]   = "";
 bool  needsGeocode      = false;
 
 // ─── SD state ─────────────────────────────────────────
+#if HAS_SD
 bool sdAvailable = false;
+#endif
 
 // ─── Geofence presets ─────────────────────────────────
 const float GEO_PRESETS[] = {5.0f, 10.0f, 20.0f};
@@ -73,9 +79,11 @@ const int   GEO_COUNT     = 3;
 int         geoIndex      = 1;
 
 // ─── Touch ────────────────────────────────────────────
+#if HAS_TOUCH
 uint16_t touchCalData[8] = {0};
 bool     touchReady      = false;
 uint32_t lastTouchMs     = 0;
+#endif
 
 // ─── Screen mode ──────────────────────────────────────
 ScreenMode currentScreen  = SCREEN_NONE;
@@ -117,6 +125,12 @@ int  loggedUnknownCount = 0;
 // ─── Diagnostics ──────────────────────────────────────
 unsigned long lastDiagMs   = 0;
 
+// ─── Auto-cycle (no-touch boards) ─────────────────────
+#if !HAS_TOUCH
+int  cyclesSinceWx = 0;
+bool showingWxBriefly = false;
+#endif
+
 // ─── Setup ────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
@@ -126,6 +140,8 @@ void setup() {
   tft.setTextWrap(false);
 
   bootSequence();
+
+#if HAS_SD
   if (SD.begin(SD_CS)) {
     sdAvailable = true;
     Serial.println("SD card ready");
@@ -133,7 +149,11 @@ void setup() {
   } else {
     Serial.println("SD card not found — continuing without");
   }
+#endif
+
+#if HAS_TOUCH
   initTouch();
+#endif
 
   if (!loadWiFiConfig()) {
     startCaptivePortal();  // blocks until saved; restarts device
@@ -143,34 +163,45 @@ void setup() {
   tft.fillScreen(C_BG);
   tft.fillRect(0, 0, W, HDR_H, C_AMBER);
   tft.setTextColor(C_BG, C_AMBER);
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+  tft.setCursor(4, 7);
+#else
   tft.setTextSize(2);
   tft.setCursor(8, 6);
+#endif
   tft.print("OVERHEAD TRACKER");
 
+  int yBase = HDR_H + 10;
   tft.setTextColor(C_AMBER, C_BG);
+#ifdef BOARD_2P8
+  tft.setTextSize(1);
+#else
   tft.setTextSize(2);
-  tft.setCursor(16, 60);
+#endif
+  tft.setCursor(16, yBase);
   tft.print("CONNECTING TO WIFI");
 
   tft.setTextColor(C_DIM, C_BG);
   tft.setTextSize(1);
-  tft.setCursor(16, 88);
+  tft.setCursor(16, yBase + 24);
   tft.print("NETWORK: ");
   tft.setTextColor(C_AMBER, C_BG);
   tft.print(WIFI_SSID);
 
   const int BAR_X = 16;
-  const int BAR_Y = 120;
+  const int BAR_Y = yBase + 50;
   const int BAR_W = W - 32;
   const int BAR_H = 6;
   tft.drawRect(BAR_X, BAR_Y, BAR_W, BAR_H, C_DIMMER);
 
-  const int DOT_Y   = 148;
+  const int DOT_Y   = BAR_Y + 20;
   const int DOT_SPACING = (BAR_W) / 20;
+  const int STATUS_Y = BAR_Y + 44;
 
   tft.setTextColor(C_DIMMER, C_BG);
   tft.setTextSize(1);
-  tft.setCursor(16, 174);
+  tft.setCursor(16, STATUS_Y);
   tft.print("ATTEMPTING...");
 
   WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -199,10 +230,10 @@ void setup() {
 
     char countBuf[24];
     snprintf(countBuf, sizeof(countBuf), "ATTEMPT %d / 40", attempts + 1);
-    tft.fillRect(16, 174, 200, 10, C_BG);
+    tft.fillRect(16, STATUS_Y, 200, 10, C_BG);
     tft.setTextColor(C_DIMMER, C_BG);
     tft.setTextSize(1);
-    tft.setCursor(16, 174);
+    tft.setCursor(16, STATUS_Y);
     tft.print(countBuf);
 
     delay(500);
@@ -211,10 +242,10 @@ void setup() {
 
   if (WiFi.status() == WL_CONNECTED) {
     tft.fillRect(BAR_X + 1, BAR_Y + 1, BAR_W - 2, BAR_H - 2, C_GREEN);
-    tft.fillRect(16, 174, W - 32, 10, C_BG);
+    tft.fillRect(16, STATUS_Y, W - 32, 10, C_BG);
     tft.setTextColor(C_GREEN, C_BG);
     tft.setTextSize(1);
-    tft.setCursor(16, 174);
+    tft.setCursor(16, STATUS_Y);
     tft.print("CONNECTED");
     for (int i = 0; i < 3; i++) {
       tft.fillRect(BAR_X + 1, BAR_Y + 1, BAR_W - 2, BAR_H - 2, C_BG);
@@ -235,13 +266,21 @@ void setup() {
     ArduinoOTA.onEnd([]() {
       tft.setTextColor(C_GREEN, C_BG);
       tft.setTextSize(2);
+#ifdef BOARD_2P8
+      tft.setCursor(80, 190);
+#else
       tft.setCursor(160, 250);
+#endif
       tft.print("Restarting...");
     });
     ArduinoOTA.onError([](ota_error_t error) {
       tft.setTextColor(C_RED, C_BG);
       tft.setTextSize(2);
+#ifdef BOARD_2P8
+      tft.setCursor(50, 190);
+#else
       tft.setCursor(120, 250);
+#endif
       tft.printf("OTA Error [%u]", error);
       delay(3000);
       ESP.restart();
@@ -251,7 +290,6 @@ void setup() {
   }
 
   // Hardware watchdog: reboot if loop() stalls for > 30 s
-  // Arduino framework pre-initializes TWDT (5 s default), so reconfigure it
   const esp_task_wdt_config_t wdt_cfg = { .timeout_ms = 30000, .idle_core_mask = 0, .trigger_panic = true };
   esp_err_t wdtErr = esp_task_wdt_init(&wdt_cfg);
   if (wdtErr == ESP_ERR_INVALID_STATE) {
@@ -274,42 +312,50 @@ void setup() {
         return;
       }
     }
-    // WiFi failed — show RECONFIGURE / RETRY options
+    // WiFi failed — show error
     tft.fillScreen(C_BG);
     tft.fillRect(0, 0, W, HDR_H, C_AMBER);
     tft.setTextColor(C_BG, C_AMBER);
+#ifdef BOARD_2P8
+    tft.setTextSize(1);
+    tft.setCursor(4, 7);
+#else
     tft.setTextSize(2);
     tft.setCursor(8, 6);
+#endif
     tft.print("OVERHEAD TRACKER");
     tft.setTextColor(C_RED, C_BG);
     tft.setTextSize(2);
-    tft.setCursor(16, 58);
+    tft.setCursor(16, HDR_H + 20);
     tft.print("WIFI FAILED");
     tft.setTextColor(C_DIM, C_BG);
     tft.setTextSize(1);
-    tft.setCursor(16, 88);
+    tft.setCursor(16, HDR_H + 50);
     tft.print("Could not connect to: ");
     tft.setTextColor(C_AMBER, C_BG);
     tft.print(WIFI_SSID);
-    tft.fillRect(16, 112, 200, 44, C_DIMMER);
+
+#if HAS_TOUCH
+    int btnY = HDR_H + 74;
+    tft.fillRect(16, btnY, 200, 44, C_DIMMER);
     tft.setTextColor(C_AMBER, C_DIMMER);
     tft.setTextSize(1);
-    tft.setCursor(28, 124);
+    tft.setCursor(28, btnY + 12);
     tft.print("RECONFIGURE");
-    tft.setCursor(28, 138);
+    tft.setCursor(28, btnY + 26);
     tft.print("Change WiFi/location");
-    tft.fillRect(260, 112, 200, 44, C_DIMMER);
+    tft.fillRect(260, btnY, 200, 44, C_DIMMER);
     tft.setTextColor(C_AMBER, C_DIMMER);
     tft.setTextSize(1);
-    tft.setCursor(272, 124);
+    tft.setCursor(272, btnY + 12);
     tft.print("RETRY");
-    tft.setCursor(272, 138);
+    tft.setCursor(272, btnY + 26);
     tft.print("Reboot and try again");
     while (true) {
       if (touchReady) {
         uint16_t tx, ty;
         if (tft.getTouch(&tx, &ty)) {
-          if (ty >= 112 && ty <= 156) {
+          if (ty >= btnY && ty <= btnY + 44) {
             if (tx >= 16 && tx <= 216) {
               Preferences p;
               p.begin("tracker", false);
@@ -325,6 +371,14 @@ void setup() {
       esp_task_wdt_reset();
       delay(50);
     }
+#else
+    tft.setTextColor(C_DIM, C_BG);
+    tft.setTextSize(1);
+    tft.setCursor(16, HDR_H + 70);
+    tft.print("Rebooting in 5 seconds...");
+    delay(5000);
+    ESP.restart();
+#endif
   }
 
   // ── Geocode location name if needed ──
@@ -332,51 +386,64 @@ void setup() {
     tft.fillScreen(C_BG);
     tft.fillRect(0, 0, W, HDR_H, C_AMBER);
     tft.setTextColor(C_BG, C_AMBER);
+#ifdef BOARD_2P8
+    tft.setTextSize(1);
+    tft.setCursor(4, 7);
+#else
     tft.setTextSize(2);
     tft.setCursor(8, 6);
+#endif
     tft.print("OVERHEAD TRACKER");
     tft.setTextColor(C_AMBER, C_BG);
     tft.setTextSize(2);
-    tft.setCursor(16, 60);
+    tft.setCursor(16, HDR_H + 20);
     tft.print("LOCATING...");
     tft.setTextColor(C_DIM, C_BG);
     tft.setTextSize(1);
-    tft.setCursor(16, 90);
+    tft.setCursor(16, HDR_H + 50);
     tft.print(HOME_QUERY);
 
     if (!geocodeLocation(HOME_QUERY)) {
       tft.fillScreen(C_BG);
       tft.fillRect(0, 0, W, HDR_H, C_AMBER);
       tft.setTextColor(C_BG, C_AMBER);
+#ifdef BOARD_2P8
+      tft.setTextSize(1);
+      tft.setCursor(4, 7);
+#else
       tft.setTextSize(2);
       tft.setCursor(8, 6);
+#endif
       tft.print("OVERHEAD TRACKER");
       tft.setTextColor(C_RED, C_BG);
       tft.setTextSize(2);
-      tft.setCursor(16, 60);
+      tft.setCursor(16, HDR_H + 20);
       tft.print("LOCATION NOT FOUND");
       tft.setTextColor(C_DIM, C_BG);
       tft.setTextSize(1);
-      tft.setCursor(16, 90);
+      tft.setCursor(16, HDR_H + 50);
       tft.print(HOME_QUERY);
-      tft.fillRect(16, 120, 200, 44, C_DIMMER);
+
+#if HAS_TOUCH
+      int btnY2 = HDR_H + 80;
+      tft.fillRect(16, btnY2, 200, 44, C_DIMMER);
       tft.setTextColor(C_AMBER, C_DIMMER);
       tft.setTextSize(1);
-      tft.setCursor(28, 132);
+      tft.setCursor(28, btnY2 + 12);
       tft.print("RECONFIGURE");
-      tft.setCursor(28, 146);
+      tft.setCursor(28, btnY2 + 26);
       tft.print("Change WiFi/location");
-      tft.fillRect(260, 120, 200, 44, C_DIMMER);
+      tft.fillRect(260, btnY2, 200, 44, C_DIMMER);
       tft.setTextColor(C_AMBER, C_DIMMER);
-      tft.setCursor(272, 132);
+      tft.setCursor(272, btnY2 + 12);
       tft.print("CONTINUE");
-      tft.setCursor(272, 146);
+      tft.setCursor(272, btnY2 + 26);
       tft.print("Use default location");
       while (true) {
         if (touchReady) {
           uint16_t tx, ty;
           if (tft.getTouch(&tx, &ty)) {
-            if (ty >= 120 && ty <= 164) {
+            if (ty >= btnY2 && ty <= btnY2 + 44) {
               if (tx >= 16 && tx <= 216) {
                 Preferences p; p.begin("tracker", false); p.remove("wifi_ssid"); p.end();
                 startCaptivePortal();
@@ -389,6 +456,13 @@ void setup() {
         esp_task_wdt_reset();
         delay(50);
       }
+#else
+      tft.setTextColor(C_DIM, C_BG);
+      tft.setTextSize(1);
+      tft.setCursor(16, HDR_H + 70);
+      tft.print("Continuing with defaults...");
+      delay(3000);
+#endif
     }
   }
 
@@ -407,12 +481,14 @@ void loop() {
   if (Serial.available()) checkSerialCmd();
 
   // ── Touch polling ──
+#if HAS_TOUCH
   if (touchReady) {
     uint16_t tx, ty;
     if (tft.getTouch(&tx, &ty)) {
       handleTouch(tx, ty);
     }
   }
+#endif
 
   // Periodic diagnostics (every 60 s)
   if (now - lastDiagMs >= 60000) {
@@ -460,13 +536,47 @@ void loop() {
     }
   }
 
+  // ── Flight cycling ──
+#if HAS_TOUCH
+  // Touch boards: auto-cycle only when multiple flights
   if (flightCount > 1 && currentScreen == SCREEN_FLIGHT &&
       !isFetching && now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
     lastCycle = now;
-    int fc = flightCount;  // snapshot to avoid race with fetchFlights()
+    int fc = flightCount;
     if (fc > 0) {
       flightIndex = (flightIndex + 1) % fc;
       renderFlight(flights[flightIndex]);
     }
   }
+#else
+  // No-touch boards: auto-cycle flights + weather interlude
+  if (currentScreen == SCREEN_FLIGHT && flightCount > 0 &&
+      !isFetching && now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
+    lastCycle = now;
+    int fc = flightCount;
+    if (fc > 0) {
+      flightIndex = (flightIndex + 1) % fc;
+      if (flightIndex == 0) {
+        cyclesSinceWx++;
+        if (cyclesSinceWx >= 1) {
+          currentScreen = SCREEN_WEATHER;
+          showingWxBriefly = true;
+          cyclesSinceWx = 0;
+          renderWeather();
+        } else {
+          renderFlight(flights[flightIndex]);
+        }
+      } else {
+        renderFlight(flights[flightIndex]);
+      }
+    }
+  }
+  // Return from weather interlude
+  if (showingWxBriefly && now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
+    showingWxBriefly = false;
+    lastCycle = now;
+    currentScreen = SCREEN_FLIGHT;
+    if (flightCount > 0) renderFlight(flights[flightIndex]);
+  }
+#endif
 }

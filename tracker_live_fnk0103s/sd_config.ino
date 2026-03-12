@@ -1,5 +1,7 @@
 // ─── SD card operations: config, cache, flight log ─────
 
+#if HAS_SD
+
 void loadConfig() {
   if (!sdAvailable) return;
   File f = SD.open("/config.txt", FILE_READ);
@@ -38,7 +40,7 @@ void writeCache(const String& payload) {
   f.print(payload);
   f.close();
   time_t now = time(NULL);
-  if (now > 1000000000) {  // only write if NTP has synced (epoch > ~2001)
+  if (now > 1000000000) {
     File tf = SD.open("/cache_ts.txt", FILE_WRITE);
     if (tf) { tf.print((unsigned long)now); tf.close(); }
     cacheTimestamp = now;
@@ -118,3 +120,13 @@ void logUnknown(const char* type, const char* code, const char* context) {
     strlcpy(loggedUnknowns[loggedUnknownCount++], code, 6);
   logTs("UNKN", "%s: %s (%s)", type, code, context);
 }
+
+#else // !HAS_SD — no-op stubs
+
+void loadConfig() {}
+void writeCache(const String&) {}
+String readCache() { return ""; }
+void logFlight(const Flight&) {}
+void logUnknown(const char*, const char*, const char*) {}
+
+#endif
