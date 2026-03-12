@@ -83,12 +83,12 @@
       transition: border-color 0.5s, box-shadow 0.5s;
       min-height: 120px;
     }
-    #info-wrap.phase-landing    { border-color: #ff6060; box-shadow: -4px 0 12px rgba(255,96,96,0.3); }
-    #info-wrap.phase-takeoff    { border-color: #60ff90; box-shadow: -4px 0 12px rgba(96,255,144,0.3); }
-    #info-wrap.phase-climbing   { border-color: #00e5ff; box-shadow: -4px 0 12px rgba(0,229,255,0.25); }
-    #info-wrap.phase-descending { border-color: #ff9040; box-shadow: -4px 0 12px rgba(255,144,64,0.25); }
-    #info-wrap.phase-approach   { border-color: #ffcc40; box-shadow: -4px 0 12px rgba(255,204,64,0.25); }
-    #info-wrap.phase-cruising   { border-color: #ffa600; box-shadow: -4px 0 12px rgba(255,166,0,0.2); }
+    #info-wrap.phase-landing    { border-color: #ff0000; box-shadow: -4px 0 12px rgba(255,0,0,0.3); }
+    #info-wrap.phase-takeoff    { border-color: #00ff00; box-shadow: -4px 0 12px rgba(0,255,0,0.3); }
+    #info-wrap.phase-climbing   { border-color: #00ffff; box-shadow: -4px 0 12px rgba(0,255,255,0.25); }
+    #info-wrap.phase-descending { border-color: #ff8e00; box-shadow: -4px 0 12px rgba(255,142,0,0.25); }
+    #info-wrap.phase-approach   { border-color: #ffcf42; box-shadow: -4px 0 12px rgba(255,207,66,0.25); }
+    #info-wrap.phase-cruising   { border-color: #ffa200; box-shadow: -4px 0 12px rgba(255,162,0,0.2); }
     #info-wrap.phase-overhead   { border-color: #ffff00; box-shadow: -4px 0 12px rgba(255,255,0,0.3); }
 
     /* Altitude bar — thin vertical strip on the right, fills bottom-to-top */
@@ -122,7 +122,10 @@
       word-break: break-word;
     }
     .info-route {
-      color: #a0d8ef;
+      color: #ffff00;
+    }
+    .info-type {
+      color: #00ffff;
     }
 
     #main { line-height: 1.8; margin-bottom: 12px; font-size: clamp(0.72rem, 2vw, 0.78rem); opacity: 0.85; }
@@ -687,41 +690,45 @@
 
     // ── Lookup tables ────────────────────────────────────────────────
 
-    // ICAO callsign prefix → airline name (e.g. "QFA001" → "QANTAS")
+    // ICAO callsign prefix → [airline name, brand color]
+    // Brand colors match ESP32 firmware palette (RGB565 → RGB888)
+    const _R='#ff2021',_P='#ff458c',_O='#ff7500',_G='#ffd300',_E='#21df42',_T='#00cfbd',_S='#42aaff',_V='#a565ff',_A='#ffa200';
     const AIRLINE_DB = {
-      QFA:'QANTAS',         VOZ:'VIRGIN AUSTRALIA', JST:'JETSTAR',
-      RXA:'REX',            NWL:'NETWORK AVIATION',
-      UAE:'EMIRATES',       ETD:'ETIHAD',            QTR:'QATAR AIRWAYS',
-      SIA:'SINGAPORE AIR',  MAS:'MALAYSIA AIRLINES', CPA:'CATHAY PACIFIC',
-      ANZ:'AIR NEW ZEALAND',FJI:'FIJI AIRWAYS',      THA:'THAI AIRWAYS',
-      THY:'TURKISH AIRLINES',GIA:'GARUDA',           PAL:'PHILIPPINE AIR',
-      AIQ:'THAI AIRASIA X', XAX:'AIRASIA X',         VNA:'VIETNAM AIRLINES',
-      EVA:'EVA AIR',        CCA:'AIR CHINA',         CSN:'CHINA SOUTHERN',
-      CES:'CHINA EASTERN',  KAL:'KOREAN AIR',        AAR:'ASIANA',
-      ANA:'ANA',            JAL:'JAPAN AIRLINES',    AAL:'AMERICAN AIRLINES',
-      UAL:'UNITED AIRLINES',DAL:'DELTA AIR LINES',   ACA:'AIR CANADA',
-      BAW:'BRITISH AIRWAYS',AFR:'AIR FRANCE',        DLH:'LUFTHANSA',
-      HAL:'HAWAIIAN AIRLINES',
-      AIC:'AIR INDIA',     TGW:'SCOOT',           LAN:'LATAM',
-      CHH:'HAINAN AIRLINES',CXA:'XIAMEN AIR',     CEB:'CEBU PACIFIC',
-      VJC:'VIETJET',       CRK:'HONG KONG AIRLINES',TWB:'TWAY AIR',
-      ASA:'ALASKA AIRLINES',CSC:'SICHUAN AIRLINES',ACI:'AIRCALIN',
-      ALK:'SRILANKAN',     ANG:'AIR NIUGINI',     AMX:'AEROMEXICO',
-      CBJ:'CAPITAL AIRLINES',GCR:'TIANJIN AIRLINES',CAL:'CHINA AIRLINES',
-      KLM:'KLM',           MXD:'BATIK AIR',       SKP:'SKYTRANS',
+      QFA:['QANTAS',_R],           QLK:['QANTASLINK',_R],    VOZ:['VIRGIN AUSTRALIA',_P], JST:['JETSTAR',_O],
+      RXA:['REX',_E],              NWL:['NETWORK AVIATION',_A],
+      UAE:['EMIRATES',_G],         ETD:['ETIHAD',_G],         QTR:['QATAR AIRWAYS',_P],
+      SIA:['SINGAPORE AIR',_G],    MAS:['MALAYSIA AIRLINES',_P], CPA:['CATHAY PACIFIC',_E],
+      ANZ:['AIR NEW ZEALAND',_T],  FJI:['FIJI AIRWAYS',_T],   THA:['THAI AIRWAYS',_V],
+      THY:['TURKISH AIRLINES'],    GIA:['GARUDA'],            PAL:['PHILIPPINE AIR'],
+      AIQ:['THAI AIRASIA X'],      XAX:['AIRASIA X'],         VNA:['VIETNAM AIRLINES'],
+      EVA:['EVA AIR',_E],          CCA:['AIR CHINA',_R],      CSN:['CHINA SOUTHERN',_S],
+      CES:['CHINA EASTERN',_S],    KAL:['KOREAN AIR',_S],     AAR:['ASIANA'],
+      ANA:['ANA',_S],              JAL:['JAPAN AIRLINES',_R], AAL:['AMERICAN AIRLINES',_S],
+      UAL:['UNITED AIRLINES',_S],  DAL:['DELTA AIR LINES',_S],ACA:['AIR CANADA'],
+      BAW:['BRITISH AIRWAYS',_R],  AFR:['AIR FRANCE',_S],     DLH:['LUFTHANSA',_G],
+      HAL:['HAWAIIAN AIRLINES',_V],
+      AIC:['AIR INDIA',_O],       TGW:['SCOOT',_G],         LAN:['LATAM',_S],
+      CHH:['HAINAN AIRLINES',_R], CXA:['XIAMEN AIR',_S],    CEB:['CEBU PACIFIC',_G],
+      VJC:['VIETJET',_R],         CRK:['HONG KONG AIRLINES',_P],TWB:['TWAY AIR',_P],
+      ASA:['ALASKA AIRLINES',_S], CSC:['SICHUAN AIRLINES',_S],ACI:['AIRCALIN',_S],
+      ALK:['SRILANKAN',_E],       ANG:['AIR NIUGINI',_T],    AMX:['AEROMEXICO',_S],
+      CBJ:['CAPITAL AIRLINES'],    GCR:['TIANJIN AIRLINES'],  CAL:['CHINA AIRLINES',_P],
+      KLM:['KLM',_S],             MXD:['BATIK AIR',_R],      SKP:['SKYTRANS'],
       // Cargo carriers
-      UPS:'UPS AIRLINES',  FDX:'FEDEX EXPRESS',  GTI:'ATLAS AIR',
-      CLX:'CARGOLUX',      GEC:'LUFTHANSA CARGO', DHK:'DHL AIR',
-      TAY:'TNT AIRWAYS',   QXE:'QANTAS FREIGHT',
+      UPS:['UPS AIRLINES'],       FDX:['FEDEX EXPRESS'],     GTI:['ATLAS AIR'],
+      CLX:['CARGOLUX'],           GEC:['LUFTHANSA CARGO',_G],DHK:['DHL AIR'],
+      TAY:['TNT AIRWAYS'],        QXE:['QANTAS FREIGHT',_R],
       // Australian specialty / charter
-      FDM:'RFDS',          FDQ:'RFDS QUEENSLAND', NJT:'NETJETS',
-      PEL:'PEL-AIR',       CAV:'COBHAM AVIATION', HND:'HINTERLAND AVIATION',
-      FRE:'FLYPELICAN',    UTY:'ALLIANCE AIRLINES',
+      FDM:['RFDS'],               FDQ:['RFDS QUEENSLAND'],   NJT:['NETJETS'],
+      PEL:['PEL-AIR'],            CAV:['COBHAM AVIATION'],   HND:['HINTERLAND AVIATION'],
+      FRE:['FLYPELICAN',_A],      UTY:['ALLIANCE AIRLINES',_T],
     };
     function airlineFromCallsign(cs) {
-      if (!cs || cs === '---') return '---';
+      if (!cs || cs === '---') return { name: '---', color: null };
       const prefix = cs.match(/^[A-Z]+/)?.[0] || '';
-      return AIRLINE_DB[prefix] || prefix || '---';
+      const entry = AIRLINE_DB[prefix];
+      if (entry) return { name: entry[0], color: entry[1] || null };
+      return { name: prefix || '---', color: null };
     }
 
 
@@ -811,13 +818,13 @@
       if (alt === null) return { label: '---', color: null, cls: '' };
       if (distKm < 2 && alt < 8000) return { label: '◉ OVERHEAD',   color: '#ffff00', cls: 'phase-overhead' };
       if (alt < 3000) {
-        if (vspd < -200) return { label: '▼ LANDING',    color: '#ff6060', cls: 'phase-landing' };
-        if (vspd >  200) return { label: '▲ TAKING OFF', color: '#60ff90', cls: 'phase-takeoff' };
-        if (vspd < -50)  return { label: '~ APPROACH',   color: '#ffcc40', cls: 'phase-approach' };
+        if (vspd < -200) return { label: '▼ LANDING',    color: '#ff0000', cls: 'phase-landing' };
+        if (vspd >  200) return { label: '▲ TAKING OFF', color: '#00ff00', cls: 'phase-takeoff' };
+        if (vspd < -50)  return { label: '~ APPROACH',   color: '#ffcf42', cls: 'phase-approach' };
       }
-      if (vspd < -100) return { label: '▼ DESCENDING', color: '#ff9040', cls: 'phase-descending' };
-      if (vspd >  100) return { label: '▲ CLIMBING',   color: '#00e5ff', cls: 'phase-climbing' };
-      return { label: '── CRUISING', color: '#ffa600', cls: 'phase-cruising' };
+      if (vspd < -100) return { label: '▼ DESCENDING', color: '#ff8e00', cls: 'phase-descending' };
+      if (vspd >  100) return { label: '▲ CLIMBING',   color: '#00ffff', cls: 'phase-climbing' };
+      return { label: '── CRUISING', color: '#ffa200', cls: 'phase-cruising' };
     }
 
 
@@ -942,7 +949,7 @@
         if (entry.dist === null || distKm < entry.dist) entry.dist = distKm;
       } else {
         if (sessionLog.size >= 500) sessionLog.delete(sessionLog.keys().next().value);
-        sessionLog.set(hex, { call, type, timeStr, phase: phase.label, phaseColor: phase.color, airline,
+        sessionLog.set(hex, { call, type, timeStr, phase: phase.label, phaseColor: phase.color, airline: airline.name,
           alt, gs, dist: distKm, interesting: flags.length > 0 });
         renderLog();
       }
@@ -1488,8 +1495,10 @@
       let infoHtml =
         R('FLIGHT', callLink) +
         R('REG',    reg) +
-        R('TYPE',   typeStr) +
-        R('AIRLINE', airline) +
+        R('TYPE',   '<span class="info-type">' + typeStr + '</span>') +
+        R('AIRLINE', airline.color
+            ? '<span style="color:' + airline.color + '">' + airline.name + '</span>'
+            : airline.name) +
         R('PHASE',   phase.color
             ? '<span style="color:' + phase.color + ';">' + phase.label + '</span>'
             : phase.label) +
