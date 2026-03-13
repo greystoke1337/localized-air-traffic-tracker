@@ -57,8 +57,8 @@ char WIFI_SSID[64] = WIFI_SSID_DEFAULT;
 char WIFI_PASS[64] = WIFI_PASS_DEFAULT;
 
 // ─── Proxy ────────────────────────────────────────────
-const char* PROXY_HOST = "192.168.86.24";
-const int   PROXY_PORT = 3000;
+const char* PROXY_HOST = "api.overheadtracker.com";
+const int   PROXY_PORT = 443;
 
 // ─── Location (defaults — overridden by NVS / config.txt) ─
 float HOME_LAT    = 0.0f;

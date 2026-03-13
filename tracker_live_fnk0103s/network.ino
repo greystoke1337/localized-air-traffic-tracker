@@ -62,16 +62,17 @@ int parsePayload(String& payload) {
 String fetchFromProxy() {
   if (!wifiOk()) { Serial.println("[PROXY] WiFi not connected"); return ""; }
   unsigned long t0 = millis();
-  WiFiClient tcp;
-  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 3000)) {
+  WiFiClientSecure tcp;
+  tcp.setInsecure();
+  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
     Serial.printf("[PROXY] Connect failed (%lu ms)\n", millis() - t0);
     return "";
   }
   esp_task_wdt_reset();
   char url[160];
   snprintf(url, sizeof(url),
-    "http://%s:%d/flights?lat=%.4f&lon=%.4f&radius=%d",
-    PROXY_HOST, PROXY_PORT, HOME_LAT, HOME_LON, apiRadiusNm());
+    "https://%s/flights?lat=%.4f&lon=%.4f&radius=%d",
+    PROXY_HOST, HOME_LAT, HOME_LON, apiRadiusNm());
   HTTPClient http;
   http.begin(tcp, url);
   http.setTimeout(12000);
@@ -401,8 +402,8 @@ bool fetchWeather() {
   if (!wifiOk()) { Serial.println("[WX] WiFi not connected"); return false; }
   char url[160];
   snprintf(url, sizeof(url),
-    "http://%s:%d/weather?lat=%.4f&lon=%.4f",
-    PROXY_HOST, PROXY_PORT, HOME_LAT, HOME_LON);
+    "https://%s/weather?lat=%.4f&lon=%.4f",
+    PROXY_HOST, HOME_LAT, HOME_LON);
 
   for (int attempt = 1; attempt <= 2; attempt++) {
     if (attempt > 1) {
@@ -410,8 +411,9 @@ bool fetchWeather() {
       delay(2000);
       esp_task_wdt_reset();
     }
-    WiFiClient tcp;
-    if (!tcp.connect(PROXY_HOST, PROXY_PORT, 3000)) {
+    WiFiClientSecure tcp;
+    tcp.setInsecure();
+    if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
       Serial.printf("[WX] Connect failed (attempt %d/2)\n", attempt);
       continue;
     }

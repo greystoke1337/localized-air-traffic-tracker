@@ -17,10 +17,10 @@ const nodemailer = require('nodemailer');
 const rateLimit  = require('express-rate-limit');
 
 const app      = express();
-const PORT     = 3000;
+const PORT     = parseInt(process.env.PORT, 10) || 3000;
 const CACHE_MS         = 10000;
 const ROUTE_CACHE_MS   = 30 * 60 * 1000;
-const ROUTE_CACHE_FILE = __dirname + '/route-cache.json';
+const ROUTE_CACHE_FILE = process.env.ROUTE_CACHE_FILE || __dirname + '/route-cache.json';
 const MAX_CACHE_ENTRIES    = 500;   // evict oldest when exceeded
 const MAX_ROUTE_ENTRIES    = 5000;  // cap route cache size
 const MAX_UPSTREAM_CONCURRENT = 20; // max simultaneous upstream API calls
@@ -100,7 +100,7 @@ try {
 } catch { /* no .env file */ }
 
 // ── Report config ────────────────────────────────────────────────────
-const REPORTS_DIR = path.join(__dirname, 'reports');
+const REPORTS_DIR = process.env.REPORTS_DIR || path.join(__dirname, 'reports');
 const HOME_LAT   = parseFloat(process.env.HOME_LAT || '-33.8530');
 const HOME_LON   = parseFloat(process.env.HOME_LON || '151.1410');
 const TZ         = 'Australia/Sydney';

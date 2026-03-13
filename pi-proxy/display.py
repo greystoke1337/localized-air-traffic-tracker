@@ -23,7 +23,7 @@ WEATHER_REFRESH = 300    # weather poll interval (5 min)
 FB_DEV          = '/dev/fb1'
 
 # ── Endpoint URLs ────────────────────────────────────────
-BASE            = 'http://localhost:3000'
+BASE            = os.environ.get('PROXY_URL', 'https://api.overheadtracker.com')
 STATS_URL       = BASE + '/stats'
 PEAK_URL        = BASE + '/peak'
 STATUS_URL      = BASE + '/status'
