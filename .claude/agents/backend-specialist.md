@@ -95,7 +95,8 @@ The proxy caches each unique `lat/lon/radius` query for 10 seconds so the web ap
 
 The `tools/` directory contains zero-dependency Node.js utilities for firmware resilience testing:
 
-- **`tools/mock-proxy.js`** — mock HTTP proxy with 10 modes (normal, timeout, error503, error502, corrupt, partial, slow, chaos, transition, flap). Start with `node tools/mock-proxy.js <mode> [port]`.
+- **`tools/synthetic-data.js`** — generates realistic flight + weather JSON around any lat/lon. 8 scenarios: busy, quiet, crowded, emergency, approach_rush, single, empty, mixed. Use standalone (`node tools/synthetic-data.js --scenario emergency`) or as a module.
+- **`tools/mock-proxy.js`** — mock HTTP proxy with 10 modes (normal, timeout, error503, error502, corrupt, partial, slow, chaos, transition, flap). Now uses synthetic-data.js for rich, scenario-based data. Start with `node tools/mock-proxy.js <mode> [port] [--scenario NAME]`.
 - **`tools/serial-stress.js`** — serial log analyzer. Detects reboots, WDT resets, backtraces, heap drops, fetch failures. Run with `node tools/serial-stress.js <logfile>`. Exits 0 (PASS) or 1 (FAIL).
 
 Automated workflow: `./build.sh proxy-host <dev-ip> COM4` → `./build.sh stress 10 COM4` → `./build.sh proxy-host 192.168.86.24 COM4`.

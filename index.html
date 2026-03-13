@@ -1708,6 +1708,59 @@
         .replace(/{R}/g,   apiRadiusNm());
     }
 
+    // ── Demo mode (synthetic data) ──────────────────────────────────
+    const DEMO_MODE = new URLSearchParams(window.location.search).has('demo');
+    const DEMO_SCENARIOS = {
+      busy:          { desc: 'Busy airspace',    phases: ['takeoff','climbing','climbing','cruising','cruising','cruising','descending','descending','approach','approach','landing','overhead'] },
+      quiet:         { desc: 'Quiet sky',        phases: ['cruising','cruising'] },
+      crowded:       { desc: 'Very crowded',     phases: ['takeoff','takeoff','climbing','climbing','climbing','cruising','cruising','cruising','cruising','cruising','descending','descending','descending','approach','approach','landing','landing','overhead'] },
+      emergency:     { desc: 'Emergency',        phases: ['cruising','cruising','climbing','approach','descending','emergency'] },
+      approach_rush: { desc: 'Approach rush',    phases: ['approach','approach','approach','approach','landing','landing','landing','landing'] },
+      single:        { desc: 'Single flight',    phases: ['overhead'] },
+      mixed:         { desc: 'Mixed phases',     phases: ['takeoff','climbing','cruising','descending','approach','landing'] },
+    };
+    let demoScenario = new URLSearchParams(window.location.search).get('scenario') || 'busy';
+
+    function demoGenFlight(centerLat, centerLon, phase, idx) {
+      const DEG = Math.PI / 180, R = 6371;
+      const rand = (a,b) => a + Math.random()*(b-a), ri = (a,b) => Math.floor(rand(a,b+1)), pick = a => a[Math.floor(Math.random()*a.length)];
+      const airlines = [
+        {p:'QFA',r:'VH-OQ',t:['A388','B789']},{p:'VOZ',r:'VH-YI',t:['B738','A320']},{p:'JST',r:'VH-VK',t:['A320','A321']},
+        {p:'UAE',r:'A6-EO',t:['A388','B77W']},{p:'SIA',r:'9V-SK',t:['A388','A359']},{p:'BAW',r:'G-XLE',t:['A388','B789']},
+        {p:'AAL',r:'N178',t:['B738','A321']},{p:'DAL',r:'N501',t:['A359','B763']},{p:'UAL',r:'N127',t:['B789','B77W']},
+        {p:'AFR',r:'F-HPB',t:['A388','B77W']},{p:'DLH',r:'D-AIM',t:['A388','A359']},{p:'CPA',r:'B-LR',t:['A359','B77W']},
+        {p:'ANA',r:'JA88',t:['B789','B77W']},{p:'RYR',r:'EI-DL',t:['B738','B38M']},{p:'EZY',r:'G-EZB',t:['A320','A20N']},
+      ];
+      const apts = ['YSSY','YMML','YBBN','EGLL','KJFK','KLAX','OMDB','WSSS','VHHH','RJTT','LFPG','EDDF'];
+      const al = airlines[idx % airlines.length];
+      let alt,spd,vs,dist,brg=rand(0,360),sq=String(ri(1000,7477)).padStart(4,'0');
+      const phases = {
+        takeoff:    {alt:[500,2000],spd:[140,200],vs:[1500,3000],d:[1,5]},
+        climbing:   {alt:[3000,15000],spd:[250,380],vs:[800,2500],d:[3,12]},
+        cruising:   {alt:[28000,42000],spd:[420,520],vs:[-100,100],d:[5,18]},
+        descending: {alt:[10000,25000],spd:[300,420],vs:[-2500,-500],d:[5,15]},
+        approach:   {alt:[2000,8000],spd:[160,260],vs:[-1500,-400],d:[2,8]},
+        landing:    {alt:[300,1500],spd:[130,170],vs:[-1200,-600],d:[0.5,3]},
+        overhead:   {alt:[1000,5000],spd:[100,300],vs:[-200,200],d:[0.1,1.5]},
+        emergency:  {alt:[5000,15000],spd:[200,350],vs:[-2000,0],d:[2,10]},
+      };
+      const p = phases[phase] || phases.cruising;
+      alt=ri(...p.alt); spd=ri(...p.spd); vs=ri(...p.vs); dist=rand(...p.d);
+      if (phase==='emergency') sq=pick(['7700','7600','7500']);
+      const lat1=centerLat*DEG, lon1=centerLon*DEG, b=brg*DEG;
+      const lat2=Math.asin(Math.sin(lat1)*Math.cos(dist/R)+Math.cos(lat1)*Math.sin(dist/R)*Math.cos(b));
+      const lon2=lon1+Math.atan2(Math.sin(b)*Math.sin(dist/R)*Math.cos(lat1),Math.cos(dist/R)-Math.sin(lat1)*Math.sin(lat2));
+      const dep=pick(apts),arr=pick(apts.filter(a=>a!==dep));
+      return {hex:Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0'),flight:(al.p+ri(100,999)+'        ').slice(0,8),r:al.r+String.fromCharCode(65+ri(0,25)),t:pick(al.t),
+        lat:+(lat2/DEG).toFixed(5),lon:+(lon2/DEG).toFixed(5),alt_baro:alt,gs:spd,baro_rate:vs,track:+((brg+180+rand(-30,30))%360).toFixed(1),squawk:sq,
+        category:pick(['A2','A3','A4','A5']),dep,arr,route:dep+' > '+arr};
+    }
+
+    function demoGenerateFlights() {
+      const sc = DEMO_SCENARIOS[demoScenario] || DEMO_SCENARIOS.busy;
+      return { ac: sc.phases.map((p,i) => demoGenFlight(locationLat, locationLon, p, i)), total: sc.phases.length, now: Date.now()/1000 };
+    }
+
     async function fetchFlights() {
       if (fetchController) fetchController.abort();
       fetchController = new AbortController();
@@ -1717,6 +1770,11 @@
       document.getElementById('info-wrap').classList.add('fetching');
       document.getElementById('fetch-dot').classList.add('active');
       try {
+        let data;
+        if (DEMO_MODE) {
+          data = demoGenerateFlights();
+          document.getElementById('proxy-status').textContent = '[DEMO] ' + (demoScenario || 'busy').toUpperCase();
+        } else {
         // Try proxy first (12s timeout); fall back to direct APIs if it fails
         let res;
         try {
@@ -1744,7 +1802,8 @@
           }
           if (!directOk) throw new Error('All APIs failed');
         }
-        const data = await res.json();
+        data = await res.json();
+        }
         let ac = (data.ac || []).filter(f =>
           typeof f.alt_baro === 'number' && f.alt_baro >= altFloorFt &&
           typeof f.lat === 'number' && typeof f.lon === 'number' &&
@@ -1859,7 +1918,13 @@
 
     // ── Start ────────────────────────────────────────────────────────
     initMap();
-    if (locationLat !== 0 || locationLon !== 0) fetchFlights(); // only fetch if a location is set
+    if (DEMO_MODE && locationLat === 0 && locationLon === 0) {
+      locationName = 'DEMO — SYDNEY';
+      locationLat = -33.8688; locationLon = 151.2093;
+      document.getElementById('location-input').value = 'Sydney';
+      document.getElementById('location-display').textContent = locationName;
+    }
+    if (locationLat !== 0 || locationLon !== 0) fetchFlights();
     else document.getElementById('info').textContent = 'ENTER A LOCATION TO BEGIN.\nTYPE A CITY OR ADDRESS, THEN PRESS ENTER OR TAP [SET LOC].';
 
   </script>

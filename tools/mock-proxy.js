@@ -2,7 +2,7 @@
 // Mock proxy server for testing ESP32 firmware resilience.
 // Zero dependencies — uses only Node.js built-in modules.
 //
-// Usage:  node tools/mock-proxy.js [mode] [port]
+// Usage:  node tools/mock-proxy.js [mode] [port] [--scenario NAME]
 //
 // Modes:
 //   normal   — valid flight + weather JSON (default)
@@ -15,12 +15,19 @@
 //   chaos    — random mix of responses (stress testing)
 //   transition — cycles 0→1→0→5 flights (tests WX↔FLIGHT transitions)
 //   flap     — alternates 0/1 flights every request (worst-case)
+//
+// Scenarios (--scenario NAME):
+//   busy, quiet, crowded, emergency, approach_rush, single, mixed
+//   See tools/synthetic-data.js --list for full list.
 
 const http = require('http');
 const os = require('os');
+const { generate, SCENARIOS } = require('./synthetic-data');
 
 const mode = process.argv[2] || 'normal';
 const port = parseInt(process.argv[3]) || 3000;
+const scenarioIdx = process.argv.indexOf('--scenario');
+const scenario = scenarioIdx >= 0 ? process.argv[scenarioIdx + 1] : 'busy';
 
 const MODES = ['normal', 'timeout', 'error503', 'error502', 'corrupt', 'partial', 'slow',
                'chaos', 'transition', 'flap'];
@@ -28,44 +35,37 @@ if (!MODES.includes(mode)) {
   console.error(`Unknown mode: "${mode}"\nAvailable: ${MODES.join(', ')}`);
   process.exit(1);
 }
+if (scenarioIdx >= 0 && !SCENARIOS[scenario]) {
+  console.error(`Unknown scenario: "${scenario}"\nAvailable: ${Object.keys(SCENARIOS).join(', ')}`);
+  process.exit(1);
+}
 
 let seq = 0;
 
-const SAMPLE_FLIGHTS = JSON.stringify({
-  ac: [
-    { flight: 'QFA1    ', r: 'VH-OQA', t: 'A388', lat: -33.87, lon: 151.21,
-      alt_baro: 35000, gs: 480, baro_rate: 0, track: 180, squawk: '1234',
-      dep: 'YMML', arr: 'YSSY' },
-    { flight: 'VOZ456  ', r: 'VH-YIA', t: 'B738', lat: -33.88, lon: 151.20,
-      alt_baro: 12000, gs: 280, baro_rate: -1200, track: 90, squawk: '2345',
-      dep: 'YBBN', arr: 'YSSY' }
-  ],
-  total: 2, now: Date.now() / 1000
-});
+// Generate synthetic data from request lat/lon or defaults
+function parseLatLon(url) {
+  try {
+    const u = new URL(url, 'http://localhost');
+    const lat = parseFloat(u.searchParams.get('lat')) || -33.8688;
+    const lon = parseFloat(u.searchParams.get('lon')) || 151.2093;
+    return { lat, lon };
+  } catch { return { lat: -33.8688, lon: 151.2093 }; }
+}
 
-const SAMPLE_WEATHER = JSON.stringify({
-  temp: 22.5, feels_like: 21.0, humidity: 65,
-  condition: 'Partly Cloudy', weather_code: 2,
-  wind_speed: 15.0, wind_dir: 180, wind_cardinal: 'S',
-  uv_index: 5.0, utc_offset_secs: 36000
-});
+function makeSyntheticFlights(url, sc) {
+  const { lat, lon } = parseLatLon(url);
+  return JSON.stringify(generate(lat, lon, sc || scenario).flights);
+}
 
-const EXTRA_FLIGHTS = [
-  { flight: 'JST442  ', r: 'VH-VKD', t: 'A320', lat: -33.87, lon: 151.20,
-    alt_baro: 8000, gs: 320, baro_rate: 1200, track: 270, squawk: '3456',
-    dep: 'YBBN', arr: 'YSSY' },
-  { flight: 'UAE417  ', r: 'A6-EON', t: 'A388', lat: -33.88, lon: 151.19,
-    alt_baro: 35000, gs: 490, baro_rate: 0, track: 45, squawk: '6501',
-    dep: 'OMDB', arr: 'YSSY' },
-  { flight: 'SIA221  ', r: '9V-SKA', t: 'A388', lat: -33.86, lon: 151.22,
-    alt_baro: 28000, gs: 420, baro_rate: -800, track: 160, squawk: '5512',
-    dep: 'WSSS', arr: 'YSSY' }
-];
+function makeSyntheticWeather() {
+  return JSON.stringify(generate(0, 0, 'empty').weather);
+}
 
 function makeFlightResponse(count) {
-  const base = JSON.parse(SAMPLE_FLIGHTS);
-  const all = base.ac.concat(EXTRA_FLIGHTS);
-  return JSON.stringify({ ac: all.slice(0, count), total: count, now: Date.now() / 1000 });
+  const data = generate(-33.8688, 151.2093, scenario).flights;
+  data.ac = data.ac.slice(0, count);
+  data.total = count;
+  return JSON.stringify(data);
 }
 
 const ZERO_FLIGHTS = JSON.stringify({ ac: [], total: 0, now: Date.now() / 1000 });
@@ -91,13 +91,13 @@ function logReq(req, note) {
 const handlers = {
   normal(req, res) {
     if (req.url.startsWith('/flights')) {
-      logReq(req, '200 flights');
+      logReq(req, `200 flights (${scenario})`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(SAMPLE_FLIGHTS);
+      res.end(makeSyntheticFlights(req.url));
     } else if (req.url.startsWith('/weather')) {
       logReq(req, '200 weather');
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(SAMPLE_WEATHER);
+      res.end(makeSyntheticWeather());
     } else {
       logReq(req, '404');
       res.writeHead(404);
@@ -141,11 +141,11 @@ const handlers = {
     setTimeout(() => {
       if (req.url.startsWith('/flights')) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(SAMPLE_FLIGHTS);
+        res.end(makeSyntheticFlights(req.url));
         console.log(`  [${timestamp()}]   -> sent response`);
       } else if (req.url.startsWith('/weather')) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(SAMPLE_WEATHER);
+        res.end(makeSyntheticWeather());
         console.log(`  [${timestamp()}]   -> sent response`);
       } else {
         res.writeHead(404);
@@ -159,7 +159,7 @@ const handlers = {
     if (!req.url.startsWith('/flights')) {
       // Weather always responds normally in chaos mode
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(SAMPLE_WEATHER);
+      res.end(makeSyntheticWeather());
       return;
     }
     const r = Math.random();
@@ -199,7 +199,7 @@ const handlers = {
     seq++;
     if (!req.url.startsWith('/flights')) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(SAMPLE_WEATHER);
+      res.end(makeSyntheticWeather());
       return;
     }
     // Cycle: 0,0 | 1 | 0,0,0 | 5,5 — repeating every 8 requests
@@ -215,7 +215,7 @@ const handlers = {
     seq++;
     if (!req.url.startsWith('/flights')) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(SAMPLE_WEATHER);
+      res.end(makeSyntheticWeather());
       return;
     }
     const n = seq % 2 === 0 ? 0 : 1;
@@ -242,7 +242,9 @@ const expectations = {
 const server = http.createServer(handlers[mode]);
 server.listen(port, () => {
   const ip = getLocalIP();
-  console.log(`\n=== MOCK PROXY: ${mode} mode on port ${port} ===\n`);
+  const scDesc = SCENARIOS[scenario] ? SCENARIOS[scenario].desc : scenario;
+  console.log(`\n=== MOCK PROXY: ${mode} mode on port ${port} ===`);
+  console.log(`    Scenario: ${scenario} — ${scDesc}\n`);
   console.log(`Local IP: ${ip}`);
   console.log(`Set PROXY_HOST in tracker_live_fnk0103s.ino line 37 to "${ip}"`);
   console.log(`Then:  ./build.sh compile && ./build.sh upload COM4`);

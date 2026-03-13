@@ -53,7 +53,8 @@ tracker_live_fnk0103s/      # ESP32 hardware project (multi-file Arduino sketch)
   secrets.h                 # WiFi credential defaults (gitignored)
   enclosure/                # 3D-printable case files (STL/STEP)
 tools/                      # Development utilities
-  mock-proxy.js             # mock proxy for firmware resilience testing
+  synthetic-data.js         # flight + weather data generator (8 scenarios, any lat/lon)
+  mock-proxy.js             # mock proxy for firmware resilience testing (uses synthetic-data)
 tests/                      # Desktop logic tests (no hardware needed)
   test_flight_logic.c       # C tests for flight logic
   test_parsing.cpp          # C++ tests for JSON parsing
@@ -122,6 +123,11 @@ The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B
 6. Send a debug command: `./build.sh send <cmd>` (commands: help, heap, state, wifi, config, diag, fetch, weather, restart).
 7. Pre-push safety check: `./build.sh safe` (runs desktop tests + compile with all warnings).
 8. Stress test: `./build.sh proxy-host <dev-ip>` to point at dev machine, `./build.sh stress 10 COM4` for 10-min chaos test, then `./build.sh proxy-host 192.168.86.24` to restore.
+
+### Testing with synthetic data
+- **Web app demo mode**: open `index.html?demo=true` (or `?demo=true&scenario=emergency`). Uses generated flights with no API calls. Scenarios: busy, quiet, crowded, emergency, approach_rush, single, mixed.
+- **Mock proxy for ESP32**: `node tools/mock-proxy.js normal 3000 --scenario crowded`. Supports all 10 modes × 8 scenarios.
+- **Generate fixture JSON**: `node tools/synthetic-data.js --scenario emergency` (prints to stdout). Pre-generated fixtures live in `tests/fixtures/synthetic-flights.json`.
 
 ---
 
