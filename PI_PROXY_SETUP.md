@@ -11,11 +11,15 @@ The proxy server runs on **Railway** (managed hosting, ~$5/mo).
 The Raspberry Pi 3B+ remains in use solely for the 3.5" TFT display.
 
 ```
-Browser / ESP32  →  Railway proxy (:8080)  →  airplanes.live
-                         ↑
-                  api.overheadtracker.com
+Browser / ESP32  →  Railway proxy (:8080)  →  adsb.lol    ┐
+                         ↑                  →  adsb.fi     ├─ raced (first wins)
+                  api.overheadtracker.com   →  airplanes.live ┘
                   (CNAME → overhead-tracker-proxy-production.up.railway.app)
 ```
+
+The proxy fires all three upstream ADS-B APIs simultaneously and uses whichever
+responds first (~0.8 s typical). Route lookups (OpenSky, adsbdb) run in the
+background and are cached for 30 minutes.
 
 ### Why Railway?
 

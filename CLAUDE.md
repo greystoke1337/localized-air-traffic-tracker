@@ -78,12 +78,13 @@ Pushes to `master` deploy automatically to GitHub Pages within ~60 seconds.
 
 | Service | Purpose | Auth |
 |---------|---------|------|
-| airplanes.live | Live ADS-B flight data | None (via Pi proxy cache) |
+| adsb.lol / adsb.fi / airplanes.live | Live ADS-B flight data (raced, first wins) | None (via proxy) |
+| OpenSky / adsbdb | Route lookups (dep/arr airports) | None (via proxy) |
 | Nominatim / OpenStreetMap | Location geocoding | None |
 | Planespotters.net | Aircraft photos by registration | None |
 | CartoDB | Dark map tiles (Leaflet) | None |
 
-The proxy at `api.overheadtracker.com` (hosted on Railway) caches airplanes.live responses for 10 s to avoid hammering the upstream API.
+The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B APIs in parallel and uses the fastest response. Results are cached for 10 s. Route lookups are non-blocking (fire-and-forget, cached for next request).
 
 ---
 

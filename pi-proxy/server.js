@@ -811,36 +811,61 @@ app.get('/flights', async (req, res) => {
           { name: 'adsb.fi',         url: `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}` },
           { name: 'airplanes.live',  url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}` },
         ];
-        let data = null, lastErr = null;
-        for (const api of apis) {
-          try {
-            const response = await fetch(api.url, { signal: AbortSignal.timeout(8000) });
-            if (!response.ok) throw new Error(`${api.name} returned ${response.status}`);
-            data = await response.json();
-            addLog({ type: 'MISS', client, key: key + ` (${api.name})` });
-            break;
-          } catch (e) {
-            lastErr = e;
-            addLog({ type: 'ERR', client, key, error: `${api.name}: ${e.message}` });
-          }
-        }
-        if (!data) throw lastErr || new Error('All APIs failed');
-        const unrouted = (data.ac || []).filter(ac => ac.flight?.trim() && !ac.dep && !ac.arr);
-        if (unrouted.length > 0) {
-          const routes = await Promise.all(unrouted.map(ac => lookupRoute(ac.flight.trim())));
-          unrouted.forEach((ac, i) => {
-            if (routes[i]?.dep) ac.dep = routes[i].dep;
-            if (routes[i]?.arr) ac.arr = routes[i].arr;
+
+        // Race all APIs — first successful response wins
+        const data = await new Promise((resolve, reject) => {
+          let settled = false, errors = [];
+          const controllers = apis.map(() => new AbortController());
+          apis.forEach((api, i) => {
+            fetch(api.url, { signal: AbortSignal.any([controllers[i].signal, AbortSignal.timeout(6000)]) })
+              .then(async r => {
+                if (!r.ok) throw new Error(`${api.name} returned ${r.status}`);
+                const d = await r.json();
+                if (!settled) {
+                  settled = true;
+                  addLog({ type: 'MISS', client, key: key + ` (${api.name})` });
+                  controllers.forEach((c, j) => { if (j !== i) c.abort(); });
+                  resolve(d);
+                }
+              })
+              .catch(e => {
+                errors.push(e);
+                addLog({ type: 'ERR', client, key, error: `${api.name}: ${e.message}` });
+                if (errors.length === apis.length && !settled) {
+                  settled = true;
+                  reject(errors[0]);
+                }
+              });
           });
-        }
+        });
+
+        // Attach cached routes immediately, fire background lookups for misses
+        const unrouted = [];
         for (const ac of (data.ac || [])) {
+          const cs = (ac.flight || '').trim();
+          if (cs && !ac.dep && !ac.arr) {
+            const hit = routeCache.get(cs);
+            if (hit && (Date.now() - hit.timestamp) < ROUTE_CACHE_MS) {
+              if (hit.dep) ac.dep = hit.dep;
+              if (hit.arr) ac.arr = hit.arr;
+            } else {
+              unrouted.push(cs);
+            }
+          }
           const dep = ac.dep || ac.orig_iata || null;
           const arr = ac.arr || ac.dest_iata || null;
           const routeStr = formatRouteString(dep, arr);
           if (routeStr) ac.route = routeStr;
         }
+
+        // Fire-and-forget route lookups so they're cached for next request
+        if (unrouted.length > 0) {
+          Promise.allSettled(unrouted.map(cs => lookupRoute(cs)))
+            .then(() => saveRouteCache())
+            .catch(() => {});
+        }
+
         cacheSet(key, { data, timestamp: Date.now() });
-        saveRouteCache();
         logFlights(data.ac || []);
         return data;
       } finally {
