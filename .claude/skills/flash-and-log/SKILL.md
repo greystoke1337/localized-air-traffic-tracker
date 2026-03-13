@@ -14,7 +14,100 @@ Compile, flash, and capture serial output from the ESP32 in one workflow.
 - `$ARGUMENTS[0]` — Log duration in minutes (default: 20)
 - `$ARGUMENTS[1]` — Descriptive label for the log file (default: "debug")
 
-## Steps
+## Platform Detection
+
+Detect the current platform first:
+
+```bash
+uname -s
+```
+
+- **Darwin** → macOS flow (see macOS Steps)
+- **MINGW/MSYS/CYGWIN** → Windows/Git Bash flow (see Windows Steps)
+
+---
+
+## macOS Steps
+
+### 1. Compile the firmware
+
+```bash
+export PATH=~/bin:$PATH && bash build.sh compile
+```
+
+If compilation fails, stop and report the errors. Do NOT proceed to flash.
+
+### 2. Flash via USB
+
+Auto-detect the serial port, then flash:
+
+```bash
+ls /dev/cu.usbserial-* /dev/cu.SLAB_USBtoUART* 2>/dev/null | head -1
+```
+
+```bash
+export PATH=~/bin:$PATH && bash build.sh upload <DETECTED_PORT>
+```
+
+If the port is busy, wait 3 seconds and retry once.
+
+### 3. Start serial log capture in background
+
+Wait 5 seconds after flash for the ESP32 to boot, then start capture.
+
+Use a **descriptive filename**: `logs/<label>-YYYY-MM-DD.log`
+
+Where `<label>` comes from `$ARGUMENTS[1]` or defaults to "debug".
+
+Run the capture in the background using `run_in_background: true`.
+
+```bash
+mkdir -p logs && sleep 5 && python3 -u -c "
+import serial, sys, time
+
+port, baud, minutes = '<DETECTED_PORT>', 115200, <MINUTES>
+logfile = 'logs/<LABEL>-<DATE>.log'
+duration = minutes * 60
+
+ser = serial.Serial(port, baud, timeout=1)
+time.sleep(0.1)
+ser.reset_input_buffer()
+
+start = time.time()
+deadline = start + duration
+line_count = 0
+
+print(f'Capturing to {logfile} for {minutes} min... (Ctrl-C to stop early)')
+
+with open(logfile, 'w', encoding='utf-8') as f:
+    try:
+        while time.time() < deadline:
+            raw = ser.readline()
+            if not raw:
+                continue
+            line = raw.decode('utf-8', errors='replace').rstrip()
+            elapsed = time.time() - start
+            ts = f'[{elapsed:8.3f}]'
+            stamped = f'{ts} {line}'
+            f.write(stamped + '\n')
+            f.flush()
+            print(stamped)
+            line_count += 1
+    except KeyboardInterrupt:
+        pass
+
+elapsed = time.time() - start
+ser.close()
+print(f'\n--- Capture complete ---')
+print(f'Lines: {line_count}')
+print(f'Duration: {elapsed:.0f}s ({elapsed/60:.1f} min)')
+print(f'File: {logfile}')
+"
+```
+
+---
+
+## Windows (Git Bash) Steps
 
 ### 1. Kill any Python processes holding COM4
 
@@ -50,15 +143,11 @@ If the port is busy, wait 3 seconds and retry once. If it still fails, report th
 
 Wait 5 seconds after flash for the ESP32 to boot, then start capture.
 
-Use an inline Python script (same pattern as `build.sh log`) with a **descriptive filename**:
-
-```
-logs/<label>-YYYY-MM-DD.log
-```
+Use a **descriptive filename**: `logs/<label>-YYYY-MM-DD.log`
 
 Where `<label>` comes from `$ARGUMENTS[1]` or defaults to "debug".
 
-Run the capture in the background using `run_in_background: true` so it doesn't block the conversation.
+Run the capture in the background using `run_in_background: true`.
 
 ```bash
 cd /c/Users/maxim/localized-air-traffic-tracker && mkdir -p logs && sleep 5 && /c/python314/python.exe -u -c "
@@ -104,11 +193,15 @@ print(f'File: {logfile}')
 "
 ```
 
-### 5. Verify capture started
+---
+
+## Final Steps (both platforms)
+
+### Verify capture started
 
 Wait 10 seconds, then read the first 15 lines of the log file to confirm the ESP32 booted and is producing output.
 
-### 6. Report summary
+### Report summary
 
 Tell the user:
 - Compilation result (flash size / RAM usage)

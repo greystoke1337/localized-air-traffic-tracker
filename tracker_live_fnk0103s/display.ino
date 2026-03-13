@@ -535,10 +535,30 @@ void renderWeather() {
   if (wxData.tide_time[0]) {
     uint16_t tideCol = wxData.tide_is_high ? C_TIDE_HI : C_TIDE_LO;
     tft.setTextColor(tideCol, C_BG);
-    snprintf(buf, sizeof(buf), "%c%s %s",
-      wxData.tide_is_high ? 0x18 : 0x19,
-      wxData.tide_is_high ? "HI" : "LO",
-      wxData.tide_time);
+    // Compute countdown to next tide
+    int tideH = (wxData.tide_time[0] - '0') * 10 + (wxData.tide_time[1] - '0');
+    int tideM = (wxData.tide_time[3] - '0') * 10 + (wxData.tide_time[4] - '0');
+    int tideMins = tideH * 60 + tideM;
+    int nowMins  = t->tm_hour * 60 + t->tm_min;
+    int diff     = tideMins - nowMins;
+    if (diff < 0) diff += 24 * 60;  // tide is tomorrow
+    if (diff > 0 && diff < 24 * 60) {
+      int dh = diff / 60;
+      int dm = diff % 60;
+      if (dh > 0)
+        snprintf(buf, sizeof(buf), "%c%s %dh%02dm %.1fm",
+          wxData.tide_is_high ? 0x18 : 0x19,
+          wxData.tide_is_high ? "HI" : "LO", dh, dm, wxData.tide_height);
+      else
+        snprintf(buf, sizeof(buf), "%c%s %dm %.1fm",
+          wxData.tide_is_high ? 0x18 : 0x19,
+          wxData.tide_is_high ? "HI" : "LO", dm, wxData.tide_height);
+    } else {
+      snprintf(buf, sizeof(buf), "%c%s %s %.1fm",
+        wxData.tide_is_high ? 0x18 : 0x19,
+        wxData.tide_is_high ? "HI" : "LO",
+        wxData.tide_time, wxData.tide_height);
+    }
     tft.setCursor(rx, cy); tft.print(buf);
   }
 

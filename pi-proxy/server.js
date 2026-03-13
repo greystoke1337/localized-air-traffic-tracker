@@ -525,7 +525,10 @@ function escapeHtml(str) {
 
 function requireAdmin(req, res) {
   const token = process.env.ADMIN_TOKEN;
-  if (!token) return false; // no token configured = open (backwards compat)
+  if (!token) {
+    res.status(403).json({ error: 'Admin access disabled (ADMIN_TOKEN not configured)' });
+    return true; // blocked — deny by default when no token is set
+  }
   const auth = req.headers.authorization;
   if (auth !== `Bearer ${token}`) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -552,10 +555,9 @@ app.use((req, res, next) => {
   const origin = req.get('origin');
   if (ALLOWED_ORIGINS.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
-  } else if (!origin) {
-    // Allow non-browser requests (ESP32, curl, display.py)
-    res.header('Access-Control-Allow-Origin', '*');
   }
+  // Non-browser requests (ESP32, curl, display.py) have no Origin header
+  // and are not subject to CORS — no Access-Control header needed
   res.header('X-Frame-Options', 'DENY');
   res.header('X-Content-Type-Options', 'nosniff');
   res.header('Strict-Transport-Security', 'max-age=31536000');
@@ -1305,8 +1307,30 @@ const periodicTimer = setInterval(() => {
   }
 }, 60000);
 
+// ── Graceful shutdown ──────────────────────────────────────────────
+function gracefulShutdown(signal) {
+  console.log(`${signal} received — shutting down gracefully`);
+  saveRouteCache();
+  saveTodayLog();
+  if (server) {
+    server.close(() => {
+      console.log('All connections drained — exiting');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.log('Drain timeout — forcing exit');
+      process.exit(1);
+    }, 5000);
+  } else {
+    process.exit(0);
+  }
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+
+let server;
 if (require.main === module) {
-  app.listen(PORT, '0.0.0.0', () => {
+  server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Proxy + dashboard running on port ${PORT}`);
   });
 } else {

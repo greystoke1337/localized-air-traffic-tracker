@@ -139,12 +139,40 @@ Features:
 
 | Endpoint     | Description |
 |--------------|-------------|
-| `GET /`      | Serves dashboard.html |
+| `GET /`      | Serves dashboard HTML |
 | `GET /flights?lat=&lon=&radius=` | Proxied + cached flight data from airplanes.live (10 s cache) |
 | `GET /weather?lat=&lon=` | Current weather from Open-Meteo (10 min cache) |
 | `GET /stats` | JSON — uptime, request counts, cache stats, peak hour array |
 | `GET /peak`  | JSON — full 24-hour breakdown with labels and percentages |
-| `GET /shutdown` | Gracefully stops the process (PM2 restarts it automatically) |
+| `GET /report?date=YYYY-MM-DD` | Daily flight report (HTML or JSON with `&format=json`) |
+| `POST /proxy/toggle` | Toggle proxy on/off — requires `ADMIN_TOKEN` (see below) |
+| `POST /report/send` | Manually trigger daily email report — requires `ADMIN_TOKEN` |
+
+### Environment Variables (`.env`)
+
+Create `pi-proxy/.env` on the Pi with:
+
+```env
+ADMIN_TOKEN=your-secret-token    # Required for /proxy/toggle and /report/send
+HOME_LAT=-33.8530                # Home location for flight distance calculations
+HOME_LON=151.1410
+SMTP_HOST=smtp.example.com       # Optional — for daily email reports
+SMTP_PORT=587
+SMTP_USER=user@example.com
+SMTP_PASS=password
+REPORT_FROM=Overhead Tracker <user@example.com>
+REPORT_TO=you@example.com
+```
+
+Admin endpoints return 403 when `ADMIN_TOKEN` is not configured. To use the toggle:
+
+```bash
+curl -X POST -H "Authorization: Bearer your-secret-token" http://192.168.86.24:3000/proxy/toggle
+```
+
+### Graceful Shutdown
+
+The server handles SIGTERM/SIGINT by saving the route cache and flight log before exiting. PM2 sends SIGTERM on restart, so data is preserved across `pm2 restart proxy`.
 
 ---
 
@@ -349,7 +377,13 @@ node tools/mock-proxy.js normal     # valid responses — tests happy path
 
 Set `PROXY_HOST` in the firmware to your dev machine's IP, flash, and monitor serial output.
 
-The Pi proxy also has a built-in toggle: `curl -X POST http://192.168.86.24:3000/proxy/toggle` makes it return 503 until toggled back — useful for testing fallback without reflashing.
+The Pi proxy also has a built-in toggle (requires `ADMIN_TOKEN` in `.env`):
+
+```bash
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" http://192.168.86.24:3000/proxy/toggle
+```
+
+This makes it return 503 until toggled back — useful for testing fallback without reflashing.
 
 ---
 
