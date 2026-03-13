@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "/opt/homebrew/bin/npx",
+      "args": ["@playwright/mcp", "--allow-unrestricted-file-access"]
+    }
+  }
+}

@@ -1,7 +1,6 @@
 ---
 name: tft-screenshot
 description: Take Playwright screenshots of all TFT preview scenarios. Use when the user says "screenshot", "TFT preview", "test display", or wants visual verification of firmware display changes.
-allowed-tools: Bash, Read, Grep, Glob
 ---
 
 # TFT Preview Screenshot Suite
@@ -13,7 +12,7 @@ Serve `tft-preview.html` locally and use Playwright MCP to screenshot every scen
 ### 1. Start a local HTTP server
 
 ```bash
-cd /c/Users/maxim/localized-air-traffic-tracker && /c/python314/python.exe -m http.server 8765
+cd /Users/maximecazaly/localized-air-traffic-tracker && python3 -m http.server 8765
 ```
 
 Run this in the background. The server must stay alive for the entire screenshot session.

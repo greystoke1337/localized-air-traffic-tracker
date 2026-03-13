@@ -549,6 +549,7 @@ app.use(rateLimit({
 // ── CORS ─────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
   'https://overheadtracker.com',
+  'https://www.overheadtracker.com',
   'https://greystoke1337.github.io',
 ];
 app.use((req, res, next) => {

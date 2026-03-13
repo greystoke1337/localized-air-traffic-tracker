@@ -154,7 +154,7 @@
       background: none; border: 1px solid var(--c-main); color: var(--c-main);
       font-family: 'Share Tech Mono', monospace; font-size: 0.85rem;
       padding: 10px 8px; flex: 1; outline: none;
-      min-height: 44px; -webkit-appearance: none;
+      min-height: 44px; -webkit-appearance: none; appearance: none;
     }
     #location-input::placeholder { color: var(--c-dim); }
     #location-ctrl button { flex: 0 0 auto; width: auto; padding: 10px 12px; }
@@ -179,7 +179,6 @@
 
     /* Map */
     #dm-map { width: 100%; height: clamp(180px, 40vw, 240px); margin-top: 12px; border: 1px solid var(--c-dim); }
-    #dm-map * { }
     .dm-callout {
       background: var(--c-bg); border: 1px solid var(--c-main); color: var(--c-main);
       font-family: 'Share Tech Mono', monospace; font-size: 11px; padding: 2px 5px;
@@ -1718,11 +1717,11 @@
       document.getElementById('info-wrap').classList.add('fetching');
       document.getElementById('fetch-dot').classList.add('active');
       try {
-        // Try proxy first (6s timeout); fall back to airplanes.live directly if it fails
+        // Try proxy first (12s timeout); fall back to direct APIs if it fails
         let res;
         try {
           const proxySignal = (AbortSignal.any && AbortSignal.timeout)
-            ? AbortSignal.any([signal, timeoutSignal(6000)])
+            ? AbortSignal.any([signal, timeoutSignal(12000)])
             : signal;
           res = await fetch(buildUrl(PROXY_URL), { signal: proxySignal });
           if (!res.ok) throw new Error('proxy HTTP ' + res.status);
