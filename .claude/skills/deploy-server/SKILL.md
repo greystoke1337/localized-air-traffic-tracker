@@ -1,51 +1,51 @@
 ---
 name: deploy-server
-description: Deploy server.js to the Pi proxy. Use when the user says "deploy server", "push server", "update proxy", or after making changes to pi-proxy/server.js.
+description: Deploy server.js to Railway. Use when the user says "deploy server", "push server", "update proxy", or after making changes to pi-proxy/server.js.
 allowed-tools: Bash, Read
 ---
 
-# Deploy Pi Proxy Server
+# Deploy Proxy Server to Railway
 
-SCP and restart the Node.js proxy server on the Raspberry Pi.
+Deploy the pi-proxy server to Railway hosting.
 
 ## Steps
 
-### 1. Basic validation
+### 1. Syntax check
 
 ```bash
-cd /c/Users/maxim/localized-air-traffic-tracker && node --check pi-proxy/server.js
+eval "$(/opt/homebrew/bin/brew shellenv)" && node --check /Users/maximecazaly/localized-air-traffic-tracker/pi-proxy/server.js
 ```
 
 If this fails, stop and report the syntax error. Do NOT deploy broken code.
 
-### 2. Deploy via SCP + PM2 restart
+### 2. Deploy via Railway CLI
 
 ```bash
-scp /c/Users/maxim/localized-air-traffic-tracker/pi-proxy/server.js piproxy:/home/pi/proxy/server.js && ssh piproxy "pm2 restart proxy"
+eval "$(/opt/homebrew/bin/brew shellenv)" && cd /Users/maximecazaly/localized-air-traffic-tracker/pi-proxy && railway up
 ```
 
-Use a 15-second timeout. The SSH alias `piproxy` resolves to `piproxy.local` with user `pi` and key `~/.ssh/pi_proxy`.
+### 3. Wait for deployment and verify
 
-### 3. Verify the server is responding
-
-Wait 5 seconds, then:
+Wait 30 seconds, then:
 
 ```bash
-ssh piproxy "curl -s http://localhost:3000/stats | head -c 200"
+curl -s https://api.overheadtracker.com/status | head -c 300
 ```
 
 This confirms the proxy is up and serving requests.
 
-### 4. Check for errors in logs
+### 4. Check logs for errors
 
 ```bash
-ssh piproxy "pm2 logs proxy --nostream --lines 15"
+eval "$(/opt/homebrew/bin/brew shellenv)" && railway service logs --service overhead-tracker-proxy
 ```
+
+Look for any errors or crash messages in the output.
 
 ### 5. Report summary
 
 Tell the user:
 - Whether the syntax check passed
-- Whether the deploy and restart succeeded
-- The /stats response (confirms the server is live)
-- Any errors from the last 15 log lines
+- Whether the Railway deploy succeeded
+- The /status response (confirms the server is live)
+- Any errors from the logs

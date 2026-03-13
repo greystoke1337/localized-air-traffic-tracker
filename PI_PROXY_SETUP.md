@@ -1,32 +1,86 @@
-# Pi Proxy Setup — Overhead Tracker
+# Proxy Setup — Overhead Tracker
 
-Complete record of how the Raspberry Pi proxy was configured.
-Written: February 2026 — Updated: February 2026
+Complete record of how the proxy server is configured.
+Written: February 2026 — Updated: March 2026
 
 ---
 
-## Hardware
+## Architecture
+
+The proxy server runs on **Railway** (managed hosting, ~$5/mo).
+The Raspberry Pi 3B+ remains in use solely for the 3.5" TFT display.
+
+```
+Browser / ESP32  →  Railway proxy (:8080)  →  airplanes.live
+                         ↑
+                  api.overheadtracker.com
+                  (CNAME → overhead-tracker-proxy-production.up.railway.app)
+```
+
+### Why Railway?
+
+The proxy originally ran on the Pi via Cloudflare Tunnel, but the Pi suffered
+from undervoltage crashes, SD card corruption, and required manual SSH deploys.
+Railway provides managed hosting, auto-deploys, persistent volumes, and better uptime.
+
+---
+
+## Railway Hosting
+
+- **Project:** resourceful-integrity
+- **Service:** overhead-tracker-proxy
+- **Railway domain:** overhead-tracker-proxy-production.up.railway.app
+- **Custom domain:** api.overheadtracker.com
+- **Volume:** /data (persistent storage for route cache + flight reports)
+- **Node version:** 22 (auto-detected by Railpack)
+- **Start command:** `node server.js` (from Procfile)
+
+### Environment Variables (set in Railway dashboard or CLI)
+
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | Set by Railway (8080) |
+| `ADMIN_TOKEN` | Required for /proxy/toggle and /report/send |
+| `HOME_LAT` | Home location latitude |
+| `HOME_LON` | Home location longitude |
+| `ROUTE_CACHE_FILE` | `/data/route-cache.json` |
+| `REPORTS_DIR` | `/data/reports` |
+| `SMTP_HOST` | For daily email reports |
+| `SMTP_PORT` | SMTP port (default 587) |
+| `SMTP_USER` | SMTP username |
+| `SMTP_PASS` | SMTP password |
+| `REPORT_FROM` | Email sender address |
+| `REPORT_TO` | Email recipient address |
+
+### Deploying
+
+```bash
+eval "$(/opt/homebrew/bin/brew shellenv)"
+cd pi-proxy
+railway up
+```
+
+Or use the `/railway` or `/deploy-server` Claude skills.
+
+### Managing
+
+```bash
+eval "$(/opt/homebrew/bin/brew shellenv)"
+railway service logs --service overhead-tracker-proxy    # view logs
+railway service redeploy --service overhead-tracker-proxy --yes  # restart
+railway variables                                         # view env vars
+railway variables set KEY=VALUE                           # set env var
+```
+
+---
+
+## Raspberry Pi (display only)
 
 - **Device:** Raspberry Pi 3B+
 - **OS:** Raspberry Pi OS Lite 64-bit (headless)
 - **Local IP:** 192.168.86.24
 - **Hostname:** piproxy
-
----
-
-## What it does
-
-Acts as a caching proxy between the flight tracker clients and airplanes.live.
-Caches each unique query for 10 seconds so multiple devices (web app + ESP32)
-can refresh freely without hitting API rate limits (HTTP 429).
-
-```
-Browser / ESP32  →  Pi proxy (:3000)  →  airplanes.live
-                         ↑
-                  Cloudflare Tunnel
-                  api.overheadtracker.com
-                  dashboard.overheadtracker.com
-```
+- **Role:** Runs `display.py` only (3.5" TFT dashboard)
 
 ---
 
@@ -176,36 +230,16 @@ The server handles SIGTERM/SIGINT by saving the route cache and flight log befor
 
 ---
 
-## Cloudflare Tunnel
+## Cloudflare Tunnel (RETIRED)
 
-### Account
-- Cloudflare account linked to **overheadtracker.com**
-- Tunnel name: **overhead-tracker**
-- Tunnel ID: `REDACTED`
-- Public URLs:
-  - **https://api.overheadtracker.com** — proxy API
-  - **https://dashboard.overheadtracker.com** — dashboard UI
+The Cloudflare Tunnel previously connected the Pi proxy to the internet.
+It has been replaced by Railway hosting. The tunnel service (`cloudflared`)
+and PM2 `tunnel` process should be stopped on the Pi.
 
-### Config file
-**File:** `/home/pi/.cloudflared/config.yml`
+To clean up:
 
-```yaml
-tunnel: REDACTED
-credentials-file: /home/pi/.cloudflared/REDACTED.json
-
-ingress:
-  - hostname: api.overheadtracker.com
-    service: http://localhost:3000
-  - hostname: dashboard.overheadtracker.com
-    service: http://localhost:3000
-  - service: http_status:404
-```
-
-### DNS records
-Added automatically by:
 ```bash
-cloudflared tunnel route dns overhead-tracker api.overheadtracker.com
-cloudflared tunnel route dns overhead-tracker dashboard.overheadtracker.com
+ssh piproxy "pm2 stop tunnel && pm2 delete tunnel && pm2 save"
 ```
 
 ---
@@ -242,31 +276,27 @@ dtoverlay=tft35a:rotate=270
 
 ---
 
-## PM2 Services
+## PM2 Services (Pi)
+
+The Pi now only runs the TFT display. The proxy runs on Railway.
 
 | Name    | Command                                        | Purpose               |
 |---------|------------------------------------------------|-----------------------|
-| proxy   | `node /home/pi/proxy/server.js`               | Flight data proxy     |
-| tunnel  | `cloudflared tunnel run overhead-tracker`     | Cloudflare Tunnel     |
 | display | `python3 /home/pi/proxy/display.py`           | 3.5" TFT dashboard    |
 
-### Setup commands
+### Setup
+
 ```bash
-pm2 start server.js --name proxy
-pm2 start "cloudflared tunnel run overhead-tracker" --name tunnel
 pm2 start "python3 /home/pi/proxy/display.py" --name display
 pm2 save
 pm2 startup  # then run the printed sudo command
 ```
 
-### Useful PM2 commands
+### Useful commands
+
 ```bash
-pm2 status              # check all 3 services are online
-pm2 logs proxy          # see [FETCH] and [CACHE HIT] activity
-pm2 logs tunnel         # check tunnel connection status
+pm2 status              # check display is online
 pm2 logs display        # check display rendering errors
-pm2 restart proxy       # restart proxy after code changes
-pm2 restart tunnel      # restart if tunnel drops
 pm2 restart display     # restart after display.py changes
 ```
 
@@ -280,7 +310,7 @@ monitors for this and restarts services when needed.
 
 **File:** `/home/pi/proxy/watchdog.sh` — see [`pi-proxy/watchdog.sh`](pi-proxy/watchdog.sh).
 
-### How it works
+### Behavior
 
 1. Runs every 60s via cron
 2. Reads `vcgencmd get_throttled` for undervoltage flags
@@ -289,7 +319,7 @@ monitors for this and restarts services when needed.
 5. 5-minute cooldown between restarts to prevent restart storms
 6. If PM2 itself is hung, falls back to `pm2 kill` + `pm2 resurrect`
 
-### Setup
+### Watchdog setup
 
 ```bash
 chmod +x /home/pi/proxy/watchdog.sh
@@ -316,35 +346,38 @@ Registered through Cloudflare Registrar.
 |-------|-------------|---------------------------------|-------|
 | CNAME | `@`         | `greystoke1337.github.io`      | On    |
 | CNAME | `www`       | `greystoke1337.github.io`      | On    |
-| CNAME | `api`       | `<your-tunnel-id>.cfargotunnel.com` | On    |
-| CNAME | `dashboard` | `<your-tunnel-id>.cfargotunnel.com` | On    |
+| CNAME | `api`       | `overhead-tracker-proxy-production.up.railway.app` | **Off** (grey cloud) |
+
+**Important:** The `api` CNAME must have Cloudflare proxy **OFF** (grey cloud / DNS only).
+Railway handles its own TLS via Let's Encrypt and will fail with 502 if Cloudflare proxies the request.
 
 ---
 
 ## Client Configuration
 
 ### Web app (index.html)
+
 ```
 https://api.overheadtracker.com/flights?lat=LAT&lon=LON&radius=RADIUS
 https://api.overheadtracker.com/weather?lat=LAT&lon=LON
 ```
 
 ### ESP32 (.ino)
+
 ```
-http://192.168.86.24:3000/flights?lat=LAT&lon=LON&radius=RADIUS
-http://192.168.86.24:3000/weather?lat=LAT&lon=LON
+https://api.overheadtracker.com/flights?lat=LAT&lon=LON&radius=RADIUS
+https://api.overheadtracker.com/weather?lat=LAT&lon=LON
 ```
 
 ---
 
 ## If the Pi reboots
 
-Both `proxy` and `tunnel` start automatically via PM2.
-Peak hour data is restored from `~/proxy/data/peak.json` automatically.
-No manual intervention needed.
+The display process starts automatically via PM2.
+The proxy runs on Railway and is unaffected by Pi reboots.
 
 ```bash
-pm2 status  # verify both are online after reboot
+ssh piproxy "pm2 status"  # verify display is online after reboot
 ```
 
 ---
@@ -353,15 +386,13 @@ pm2 status  # verify both are online after reboot
 
 | Symptom | Check |
 |---|---|
-| `Cannot GET /` on dashboard | Add root route to server.js, restart proxy |
-| dashboard.overheadtracker.com not loading | Check Cloudflare tunnel config has dashboard hostname in ingress |
-| Stats all zero after restart | Normal — peak.json restores hourly data but session counts reset |
-| Website shows fetch error | `pm2 status` — is proxy online? |
-| api.overheadtracker.com unreachable | `pm2 logs tunnel` — is tunnel connected? |
-| ESP32 shows HTTP ERR | Is Pi powered on? ping 192.168.86.24. ESP32 will fall back to direct API automatically after 3 s. |
+| api.overheadtracker.com returns 502 | Check Railway: `railway service logs --service overhead-tracker-proxy`. Verify Cloudflare proxy is OFF (grey cloud) on the `api` CNAME. |
+| Website shows fetch error | Check Railway status: `curl https://api.overheadtracker.com/status` |
+| ESP32 shows HTTP ERR | Check Railway is up. ESP32 will fall back to direct API automatically after 3 s. |
 | 429 errors from airplanes.live | Cache may have been disabled — check server.js |
-| Tunnel restart count very high | `pm2 logs tunnel --lines 20` — check for auth or memory errors |
-| Services unresponsive after power issue | `tail -20 ~/proxy/logs/watchdog.log` — check watchdog is in crontab |
+| Stats all zero after restart | Normal — peak data restores but session counts reset |
+| TFT display blank | SSH into Pi: `pm2 logs display` — check for errors |
+| Display shows "proxy unreachable" | Railway proxy is down — check `railway service status` |
 
 ---
 

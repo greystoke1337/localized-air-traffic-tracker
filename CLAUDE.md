@@ -10,8 +10,9 @@ Three components:
 | Component | Tech | Hosted at |
 |-----------|------|-----------|
 | Web app | Single-file HTML + vanilla JS | GitHub Pages (auto-deploy on push to `master`) |
-| Pi proxy | Node.js / Express on Raspberry Pi 3B+ | api.overheadtracker.com (Cloudflare Tunnel) |
+| Proxy server | Node.js / Express | Railway (`api.overheadtracker.com`) |
 | ESP32 firmware | Arduino C++ | Physical device (USB upload via `build.sh`) |
+| Pi display | Python / Pygame on Raspberry Pi 3B+ | Physical device (3.5" TFT on `/dev/fb1`) |
 
 Live URL: https://greystoke1337.github.io/localized-air-traffic-tracker/
 Custom domain: https://overheadtracker.com
@@ -29,9 +30,11 @@ SPEC.md                     # Product specification and feature matrix
 README.md                   # User-facing documentation
 CNAME                       # GitHub Pages custom domain
 pi-proxy/                   # Raspberry Pi proxy source
-  server.js                 # Node.js caching proxy + dashboard
-  display.py                # Pygame TFT display (480×320, writes to /dev/fb1)
-  watchdog.sh               # Undervoltage watchdog (cron, restarts PM2)
+  server.js                 # Node.js caching proxy + dashboard (deployed to Railway)
+  Procfile                  # Railway start command
+  .dockerignore             # Railway build exclusions
+  display.py                # Pygame TFT display (480×320, writes to /dev/fb1, runs on Pi)
+  watchdog.sh               # Undervoltage watchdog (cron, restarts PM2, Pi only)
   dashboard.html            # Legacy dashboard UI (used by older server)
   package.json              # Node deps (express, node-fetch)
 tracker_live_fnk0103s/      # ESP32 hardware project (multi-file Arduino sketch)
@@ -80,7 +83,7 @@ Pushes to `master` deploy automatically to GitHub Pages within ~60 seconds.
 | Planespotters.net | Aircraft photos by registration | None |
 | CartoDB | Dark map tiles (Leaflet) | None |
 
-The Pi proxy at `api.overheadtracker.com` caches airplanes.live responses for 10 s to avoid hammering the upstream API.
+The proxy at `api.overheadtracker.com` (hosted on Railway) caches airplanes.live responses for 10 s to avoid hammering the upstream API.
 
 ---
 
@@ -103,10 +106,11 @@ The Pi proxy at `api.overheadtracker.com` caches airplanes.live responses for 10
 3. `git add index.html && git commit -m "..." && git push origin master`
 4. Verify at the live URL after ~60 s.
 
-### Pi proxy change
-- The full server source and setup instructions are in `PI_PROXY_SETUP.md`.
-- SSH into the Pi on your local network, then run `pm2 restart proxy`.
-- Tunnel is managed by `cloudflared` running as a systemd service.
+### Proxy server change
+1. Edit files in `pi-proxy/`.
+2. Deploy to Railway: `eval "$(/opt/homebrew/bin/brew shellenv)" && cd pi-proxy && railway up` (or use the `/railway` skill).
+3. Verify at `https://api.overheadtracker.com/status`.
+4. Full setup details in `PI_PROXY_SETUP.md`.
 
 ### ESP32 firmware change
 1. Edit the relevant file in `tracker_live_fnk0103s/` — the firmware is split by concern (see repo layout above).
