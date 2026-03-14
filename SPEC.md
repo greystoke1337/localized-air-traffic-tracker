@@ -17,19 +17,19 @@ FlightRadar24 and similar apps show the whole world — you have to go find your
 ```
 ┌─────────────────────┐     HTTPS      ┌────────────────────────────────┐
 │  Web app            │ ──────────────▶│ api.overheadtracker.com         │
-│  (GitHub Pages)     │                │ (Cloudflare Tunnel →            │
-│  index.html         │                │  Raspberry Pi proxy :3000)      │
+│  (GitHub Pages)     │                │ (Railway-hosted proxy)          │
+│  index.html         │                │                                 │
 └─────────────────────┘                └──────────────┬─────────────────┘
                                                        │ HTTPS
-┌─────────────────────┐     HTTP LAN   │               ▼
-│  ESP32 TFT display  │ ──────────────▶│        airplanes.live ADS-B API
+┌─────────────────────┐     HTTPS      │               ▼
+│  ESP32 TFT display  │ ──────────────▶│        ADS-B APIs (raced)
 │  (Freenove FNK0103S)│                │
 └─────────────────────┘     ◀──────────┘ cached (10s TTL)
 ```
 
 **Web app (`index.html`)** — single HTML file, no build step, no framework. Deployed to GitHub Pages at `overheadtracker.com` on push to `master`.
 
-**Raspberry Pi proxy (`server.js`)** — Node.js/Express on a Pi 3B+ at `192.168.x.x:3000`. Caches airplanes.live responses for 10 seconds so multiple clients can refresh at 15-second intervals without hitting rate limits. Exposed publicly via Cloudflare Tunnel. Managed by PM2.
+**Proxy server (`server.js`)** — Node.js/Express on Railway. Races three ADS-B APIs (adsb.lol, adsb.fi, airplanes.live) and caches responses for 10 seconds so multiple clients can refresh at 15-second intervals without hitting rate limits. Public endpoint: `api.overheadtracker.com`.
 
 **ESP32 TFT display (`.ino` firmware)** — Freenove FNK0103S, 4" 480×320 ST7796 touchscreen. Polls the local proxy over LAN, independent of the web app. Displays one flight at a time, cycling every 8 seconds.
 
@@ -82,7 +82,7 @@ FlightRadar24 and similar apps show the whole world — you have to go find your
 | Nominatim / OpenStreetMap | Location geocoding | None |
 | Planespotters.net | Aircraft registration photos | None |
 | CartoDB / OpenStreetMap | Map tiles | None |
-| Cloudflare Tunnel | Public HTTPS ingress to Pi | Tunnel token |
+| Railway | Managed hosting for proxy server | Railway account |
 | Open-Meteo | Weather data (via Pi proxy) | None |
 
 ---
@@ -90,5 +90,5 @@ FlightRadar24 and similar apps show the whole world — you have to go find your
 ## Deployment
 
 - **Web app** — `git push` to `master`; GitHub Pages auto-deploys within ~60 seconds
-- **Proxy** — SSH to `pi@piproxy.local`, edit `/home/pi/proxy/server.js`, `pm2 restart proxy`
+- **Proxy** — edit `server/server.js`, deploy with `cd server && railway up` (or use the `/railway` skill)
 - **ESP32** — `./build.sh` (compiles with `arduino-cli` and uploads). Preview layout changes by opening `tft-preview.html` in a browser before flashing. Debug with `./build.sh send <cmd>`. Pre-push check with `./build.sh safe`.

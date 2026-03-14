@@ -33,7 +33,7 @@ Parse the user's intent and run the appropriate command(s) below.
 1. Syntax-check the server first:
 
 ```bash
-eval "$(/opt/homebrew/bin/brew shellenv)" && node --check /Users/maximecazaly/localized-air-traffic-tracker/pi-proxy/server.js
+eval "$(/opt/homebrew/bin/brew shellenv)" && node --check /Users/maximecazaly/localized-air-traffic-tracker/server/server.js
 ```
 
 If this fails, stop and report the error. Do NOT deploy broken code.
@@ -41,7 +41,7 @@ If this fails, stop and report the error. Do NOT deploy broken code.
 2. Deploy:
 
 ```bash
-eval "$(/opt/homebrew/bin/brew shellenv)" && cd /Users/maximecazaly/localized-air-traffic-tracker/pi-proxy && railway up
+eval "$(/opt/homebrew/bin/brew shellenv)" && cd /Users/maximecazaly/localized-air-traffic-tracker/server && railway up
 ```
 
 3. Wait 30 seconds, then verify:

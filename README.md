@@ -27,7 +27,7 @@ Live: [overheadtracker.com](https://www.overheadtracker.com/)
 
 ## How it works
 
-Geocodes the entered location via Nominatim, then queries the Pi proxy for aircraft within a radius 4x the geofence size. Filters down to aircraft inside the geofence and above the altitude floor, sorts by distance, and renders. Repeats every 15 seconds; any in-flight request is aborted before starting the next.
+Geocodes the entered location via Nominatim, then queries the proxy for aircraft within a radius 4x the geofence size. Filters down to aircraft inside the geofence and above the altitude floor, sorts by distance, and renders. Repeats every 15 seconds; any in-flight request is aborted before starting the next.
 
 ---
 
@@ -47,7 +47,7 @@ The app calls `api.overheadtracker.com` (flight data), `nominatim.openstreetmap.
 
 ## ESP32 hardware display
 
-Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST7796 touchscreen). Polls the local proxy directly over LAN, no browser needed.
+Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST7796 touchscreen). Polls the proxy, no browser needed.
 
 **Hardware:** Freenove FNK0103S, optional 3D-printed enclosure (STL/STEP in [`tracker_live_fnk0103s/enclosure/`](tracker_live_fnk0103s/enclosure/))
 
@@ -65,7 +65,7 @@ Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST
 
 **Libraries** (Arduino Library Manager): `TFT_eSPI` (Freenove version), `ArduinoJson`, `ArduinoOTA`, `SD`
 
-**Before flashing:** Copy `secrets.h.example` to `secrets.h` and set your default WiFi credentials. On first boot, the captive portal lets you configure WiFi and location (stored in NVS). `PROXY_HOST` in `tracker_live_fnk0103s.ino` must be hardcoded to your Pi's local IP — it has no NVS/SD fallback.
+**Before flashing:** Copy `secrets.h.example` to `secrets.h` and set your default WiFi credentials. On first boot, the captive portal lets you configure WiFi and location (stored in NVS). `PROXY_HOST` in `tracker_live_fnk0103s.ino` defaults to `api.overheadtracker.com`.
 
 ```bash
 ./build.sh                  # compile + auto-detect port + upload via USB
@@ -83,11 +83,11 @@ Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST
 
 ### Resilience
 
-The firmware uses a 3-tier fallback cascade: Pi proxy → direct airplanes.live API (HTTPS) → SD card cache. Proxy calls use a 3-second TCP connect timeout so the device boots cleanly even when the Pi is powered off — no watchdog crash loop. The 16 KB JSON document is allocated once at startup and reused every cycle to prevent heap fragmentation on long-running sessions.
+The firmware uses a 3-tier fallback cascade: Railway proxy → direct airplanes.live API (HTTPS) → SD card cache. Proxy calls use a 3-second TCP connect timeout so the device boots cleanly even when the proxy is unreachable — no watchdog crash loop. The 16 KB JSON document is allocated once at startup and reused every cycle to prevent heap fragmentation on long-running sessions.
 
 ### Mock proxy tool
 
-`tools/mock-proxy.js` is a zero-dependency Node.js server for testing firmware resilience without the real Pi proxy.
+`tools/mock-proxy.js` is a zero-dependency Node.js server for testing firmware resilience without the real proxy.
 
 ```bash
 node tools/mock-proxy.js [mode] [port]
@@ -119,7 +119,7 @@ open tft-preview.html   # or just double-click
 
 | Source | Data | Key required |
 |---|---|---|
-| [api.overheadtracker.com](https://api.overheadtracker.com) | Flight data proxy (Raspberry Pi + Cloudflare Tunnel) | No |
+| [api.overheadtracker.com](https://api.overheadtracker.com) | Flight data proxy (Railway-hosted) | No |
 | [airplanes.live](https://api.airplanes.live) | Live ADS-B positions (via proxy) | No |
 | [Nominatim / OpenStreetMap](https://nominatim.openstreetmap.org) | Location geocoding | No |
 | [Planespotters.net](https://planespotters.net) | Aircraft photos | No |

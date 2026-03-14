@@ -1,10 +1,10 @@
 ---
 name: deploy-display
-description: Deploy display.py to the Pi proxy TFT display. Use when the user says "deploy display", "push display", "update display", or after making changes to pi-proxy/display.py.
+description: Deploy display.py to the Pi TFT display. Use when the user says "deploy display", "push display", "update display", or after making changes to pi-display/display.py.
 allowed-tools: Bash, Read
 ---
 
-# Deploy Pi Proxy Display
+# Deploy Pi TFT Display
 
 Syntax-check, SCP, and restart the TFT display process on the Raspberry Pi.
 
@@ -13,7 +13,7 @@ Syntax-check, SCP, and restart the TFT display process on the Raspberry Pi.
 ### 1. Syntax check
 
 ```bash
-cd /c/Users/maxim/localized-air-traffic-tracker && python -c "import py_compile; py_compile.compile('pi-proxy/display.py', doraise=True)"
+cd /c/Users/maxim/localized-air-traffic-tracker && python -c "import py_compile; py_compile.compile('pi-display/display.py', doraise=True)"
 ```
 
 If this fails, stop and report the syntax error. Do NOT deploy broken code.
@@ -21,7 +21,7 @@ If this fails, stop and report the syntax error. Do NOT deploy broken code.
 ### 2. Deploy via SCP + PM2 restart
 
 ```bash
-scp /c/Users/maxim/localized-air-traffic-tracker/pi-proxy/display.py piproxy:/home/pi/proxy/display.py && ssh piproxy "pm2 restart display"
+scp /c/Users/maxim/localized-air-traffic-tracker/pi-display/display.py piproxy:/home/pi/proxy/display.py && ssh piproxy "pm2 restart display"
 ```
 
 Use a 15-second timeout. The SSH alias `piproxy` resolves to `piproxy.local` with user `pi` and key `~/.ssh/pi_proxy`.

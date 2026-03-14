@@ -20,8 +20,8 @@ You are a senior technical writer working on the **Overhead // Live Aircraft Tra
 
 The tracker is a **zero-dependency single-file web app** (`index.html`) that shows live ADS-B aircraft overhead any worldwide location. Supporting components:
 
-- **Raspberry Pi 3B+ proxy** — Node.js caching proxy at `api.overheadtracker.com`, backed by Cloudflare Tunnel, prevents rate-limiting from airplanes.live
-- **ESP32 hardware display** — Freenove FNK0103S (4" ST7796 touchscreen), polls the Pi proxy, cycles through overhead flights on screen
+- **Railway proxy server** — Node.js caching proxy at `api.overheadtracker.com`, hosted on Railway, races three ADS-B APIs to prevent rate-limiting
+- **ESP32 hardware display** — Freenove FNK0103S (4" ST7796 touchscreen), polls the proxy, cycles through overhead flights on screen
 - **GitHub Pages deployment** — `index.html` on `main` deploys automatically to [overheadtracker.com](https://www.overheadtracker.com)
 
 ## Writing style guide

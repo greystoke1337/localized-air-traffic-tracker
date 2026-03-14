@@ -60,7 +60,7 @@ Railway provides managed hosting, auto-deploys, persistent volumes, and better u
 
 ```bash
 eval "$(/opt/homebrew/bin/brew shellenv)"
-cd pi-proxy
+cd server
 railway up
 ```
 
@@ -173,7 +173,7 @@ sudo mv cloudflared /usr/local/bin/
 
 **File:** `/home/pi/proxy/server.js`
 
-See [`pi-proxy/server.js`](pi-proxy/server.js).
+See [`server/server.js`](server/server.js).
 
 ---
 
@@ -208,7 +208,7 @@ Features:
 
 ### Environment Variables (`.env`)
 
-Create `pi-proxy/.env` on the Pi with:
+Create `server/.env` locally (or set in Railway dashboard) with:
 
 ```env
 ADMIN_TOKEN=your-secret-token    # Required for /proxy/toggle and /report/send
@@ -261,7 +261,7 @@ No X server or desktop environment needed.
 
 Dependencies: `python3-pygame`, `python3-numpy`, `requests`
 
-See [`pi-proxy/display.py`](pi-proxy/display.py).
+See [`pi-display/display.py`](pi-display/display.py).
 
 ### Relevant boot config (`/boot/firmware/config.txt`)
 
@@ -312,7 +312,7 @@ The Pi 3B+ can experience undervoltage with insufficient power supplies, causing
 services to hang without crashing (PM2 doesn't detect this). A watchdog script
 monitors for this and restarts services when needed.
 
-**File:** `/home/pi/proxy/watchdog.sh` — see [`pi-proxy/watchdog.sh`](pi-proxy/watchdog.sh).
+**File:** `/home/pi/proxy/watchdog.sh` — see [`pi-display/watchdog.sh`](pi-display/watchdog.sh).
 
 ### Behavior
 
