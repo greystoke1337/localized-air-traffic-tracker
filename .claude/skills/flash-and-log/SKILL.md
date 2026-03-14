@@ -1,7 +1,7 @@
 ---
 name: flash-and-log
 description: Compile and flash ESP32 firmware via USB, then start a timed serial log capture for crash debugging. Use when the user says "flash", "upload firmware", "flash and log", or wants to test new firmware changes on the device.
-argument-hint: [log_minutes] [log_label]
+argument-hint: "[device] [log_minutes] [log_label]"
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -9,10 +9,31 @@ allowed-tools: Bash, Read, Grep, Glob
 
 Compile, flash, and capture serial output from the ESP32 in one workflow.
 
+## Device Selection
+
+Two devices exist — determine which one from context or arguments:
+
+| Device | Directory | COM Port | FQBN |
+|--------|-----------|----------|------|
+| **Echo** (default) | `tracker_live_fnk0103s/` | COM4 | `esp32:esp32:esp32:PartitionScheme=min_spiffs` |
+| **Foxtrot** | `tracker_foxtrot/` | COM7 | `esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB` |
+
+If `$ARGUMENTS[0]` is "echo" or "foxtrot" (case-insensitive), use that device and shift remaining args. Otherwise default to Echo.
+
+For **Echo**, use `build.sh` as described below. For **Foxtrot**, use `arduino-cli` directly:
+```bash
+CLI="/c/Program Files/Arduino IDE/resources/app/lib/backend/resources/arduino-cli.exe"
+CFG="C:/Users/maxim/.arduinoIDE/arduino-cli.yaml"
+FQBN="esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB"
+"$CLI" --config-file "$CFG" compile --fqbn "$FQBN" --build-path /tmp/tracker-foxtrot-build tracker_foxtrot/tracker_foxtrot.ino
+"$CLI" --config-file "$CFG" upload --fqbn "$FQBN" --port COM7 --input-dir /tmp/tracker-foxtrot-build tracker_foxtrot/tracker_foxtrot.ino
+```
+
 ## Arguments
 
-- `$ARGUMENTS[0]` — Log duration in minutes (default: 20)
-- `$ARGUMENTS[1]` — Descriptive label for the log file (default: "debug")
+- `$ARGUMENTS[0]` — Device name ("echo" or "foxtrot") OR log duration in minutes (default: 20)
+- `$ARGUMENTS[1]` — Log duration in minutes if device was specified, or label (default: 20)
+- `$ARGUMENTS[2]` — Descriptive label for the log file (default: "debug")
 
 ## Platform Detection
 

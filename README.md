@@ -45,11 +45,13 @@ The app calls `api.overheadtracker.com` (flight data), `nominatim.openstreetmap.
 
 ---
 
-## ESP32 hardware display
+## ESP32 hardware displays
 
-Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST7796 touchscreen). Polls the proxy, no browser needed.
+Two standalone physical trackers that poll the proxy — no browser needed.
 
-**Hardware:** Freenove FNK0103S, optional 3D-printed enclosure (STL/STEP in [`tracker_live_fnk0103s/enclosure/`](tracker_live_fnk0103s/enclosure/))
+### Echo — Freenove FNK0103S (4.0", 480×320)
+
+**Hardware:** Freenove FNK0103S (ESP32 + 4" ST7796 SPI touchscreen), optional 3D-printed enclosure (STL/STEP in [`tracker_live_fnk0103s/enclosure/`](tracker_live_fnk0103s/enclosure/))
 
 **What it shows:** Header bar, nav bar with touch buttons (WX / GEO / CFG), flight card (callsign, airline name colour-coded by brand, aircraft type, route), and a 4-column dashboard: PHASE | ALT (with vertical rate) | SPEED | DIST. Cycles through overhead flights every 8 seconds. Each of the 8 flight phases (TAKEOFF, CLIMBING, CRUISING, DESCEND, APPROACH, LANDING, OVERHEAD, UNKNOWN) has its own colour in the dashboard.
 
@@ -63,7 +65,7 @@ Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST
 
 **Emergency squawk handling:** 7700 / 7600 / 7500 triggers a flashing red banner (MAYDAY, NORDO, or HIJACK). The layout compacts automatically to prevent overlap.
 
-**Libraries** (Arduino Library Manager): `TFT_eSPI` (Freenove version), `ArduinoJson`, `ArduinoOTA`, `SD`
+**Libraries** (Arduino Library Manager): `LovyanGFX`, `ArduinoJson`, `ArduinoOTA`, `SD`
 
 **Before flashing:** Copy `secrets.h.example` to `secrets.h` and set your default WiFi credentials. On first boot, the captive portal lets you configure WiFi and location (stored in NVS). `PROXY_HOST` in `tracker_live_fnk0103s.ino` defaults to `api.overheadtracker.com`.
 
@@ -80,6 +82,20 @@ Standalone physical tracker on the **Freenove FNK0103S** (ESP32 + 4" 480×320 ST
 ```
 
 **Over-the-air updates:** after the first USB flash, the device advertises itself as `overhead-tracker.local` on the local network via mDNS. Run `./build.sh ota` (or press **Ctrl+Shift+B** in VS Code) to compile and upload wirelessly. The TFT displays a green progress bar during the update.
+
+### Foxtrot — Waveshare ESP32-S3-Touch-LCD-4.3B (4.3", 800×480)
+
+**Hardware:** Waveshare ESP32-S3-Touch-LCD-4.3B (ESP32-S3 + 4.3" ST7262 IPS parallel RGB display, GT911 capacitive touch, 16 MB flash, 8 MB PSRAM)
+
+Same feature set as Echo, scaled proportionally for the larger 800×480 display. Key hardware differences: capacitive touch (no calibration needed), CH422G I/O expander for backlight control, PSRAM for larger buffers.
+
+**Libraries** (Arduino Library Manager): `LovyanGFX`, `ArduinoJson`, `ArduinoOTA`
+
+```bash
+arduino-cli compile --fqbn "esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB" tracker_foxtrot/tracker_foxtrot.ino
+arduino-cli upload --fqbn "..." --port COM7 --input-dir /tmp/tracker-foxtrot-build tracker_foxtrot/tracker_foxtrot.ino
+arduino-cli monitor --port COM7 --config "baudrate=115200"
+```
 
 ### Resilience
 

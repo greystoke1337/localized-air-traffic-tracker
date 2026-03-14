@@ -34,7 +34,11 @@ When asked to review, improve, or build UI/UX:
 5. **Accessibility baseline** — maintain WCAG AA contrast ratios for all text against its background. Never remove keyboard navigation.
 6. **No regressions** — before proposing changes, check for interactions (e.g. phase colour bleed + hover state + altitude bar all live on the same card element).
 7. **Build and implement** — when asked to make a change, edit the source files directly with precise, minimal edits. Do not rewrite sections that are unrelated to the request. You are expected to write production-ready code, not just provide advice.
-8. **TFT display awareness** — for `display.py` changes, remember the display is 480×320 pixels rendered to `/dev/fb1` via Pygame. Use `tft-preview.html` to verify layout changes in the browser before deploying.
+8. **TFT display awareness** — for `display.py` changes, remember the Pi display is 480×320 pixels rendered to `/dev/fb1` via Pygame. Use `tft-preview.html` to verify layout changes in the browser before deploying.
+9. **Dual ESP32 device awareness** — two hardware devices exist:
+   - **Echo** (Freenove, `tracker_live_fnk0103s/`): 480×320 ST7796 SPI display, resistive touch
+   - **Foxtrot** (Waveshare, `tracker_foxtrot/`): 800×480 ST7262 parallel RGB display, capacitive touch (GT911)
+   Foxtrot's resolution is 2.7× more pixels — layouts designed for Echo will need rethinking for Foxtrot's larger canvas. Never modify one device's firmware when working on the other.
 
 ## Design tokens (current)
 

@@ -5,14 +5,15 @@
 **Overhead Tracker** is a real-time aircraft tracking system.
 It answers: *"What planes are flying directly above me right now?"*
 
-Three components:
+Five components:
 
-| Component | Tech | Hosted at |
-|-----------|------|-----------|
-| Web app | Single-file HTML + vanilla JS | GitHub Pages (auto-deploy on push to `master`) |
-| Proxy server | Node.js / Express | Railway (`api.overheadtracker.com`) |
-| ESP32 firmware | Arduino C++ | Physical device (USB upload via `build.sh`) |
-| Pi display | Python / Pygame on Raspberry Pi 3B+ | Physical device (3.5" TFT on `/dev/fb1`) |
+| Component | Codename | Tech | Hosted at |
+|-----------|----------|------|-----------|
+| Web app | — | Single-file HTML + vanilla JS | GitHub Pages (auto-deploy on push to `master`) |
+| Proxy server | — | Node.js / Express | Railway (`api.overheadtracker.com`) |
+| ESP32 firmware (4.0") | **Echo** | Arduino C++ on Freenove FNK0103S | Physical device (USB via `build.sh`, COM4) |
+| ESP32-S3 firmware (4.3") | **Foxtrot** | Arduino C++ on Waveshare ESP32-S3-Touch-LCD-4.3B | Physical device (USB via `arduino-cli`, COM7) |
+| Pi display | — | Python / Pygame on Raspberry Pi 3B+ | Physical device (3.5" TFT on `/dev/fb1`) |
 
 Live URL: https://greystoke1337.github.io/localized-air-traffic-tracker/
 Custom domain: https://overheadtracker.com
@@ -38,7 +39,7 @@ server/                     # Railway-hosted proxy server
 pi-display/                 # Raspberry Pi TFT display
   display.py                # Pygame TFT display (480×320, writes to /dev/fb1, runs on Pi)
   watchdog.sh               # Undervoltage watchdog (cron, restarts PM2, Pi only)
-tracker_live_fnk0103s/      # ESP32 hardware project (multi-file Arduino sketch)
+tracker_live_fnk0103s/      # Echo — Freenove FNK0103S 4.0" (ESP32, SPI, 480×320)
   tracker_live_fnk0103s.ino # setup() + loop() + global state
   config.h                  # #defines: layout, colours, pins, timing
   types.h                   # Flight, WeatherData, enums
@@ -53,6 +54,21 @@ tracker_live_fnk0103s/      # ESP32 hardware project (multi-file Arduino sketch)
   serial_cmd.ino            # serial debug console (9 commands)
   secrets.h                 # WiFi credential defaults (gitignored)
   enclosure/                # 3D-printable case files (STL/STEP)
+tracker_foxtrot/            # Foxtrot — Waveshare 4.3B (ESP32-S3, parallel RGB, 800×480)
+  tracker_foxtrot.ino       # setup() + loop() + CH422G init + global state
+  config.h                  # #defines: layout (800×480), colours, pins, timing
+  types.h                   # Flight, WeatherData, enums (shared with Echo)
+  globals.h                 # extern declarations + forward declarations
+  lookup_tables.h           # airline + aircraft type arrays (shared with Echo)
+  lgfx_config.h             # LovyanGFX Bus_RGB + Panel_RGB + Touch_GT911
+  helpers.ino               # pure logic (haversine, deriveStatus, formatters)
+  display.ino               # all TFT drawing functions (scaled for 800×480)
+  network.ino               # HTTP fetching, JSON parsing, flight extraction
+  touch.ino                 # GT911 capacitive touch input (no calibration needed)
+  wifi_setup.ino            # WiFi config, captive portal, geocoding
+  sd_config.ino             # SD card config, cache, flight logging
+  serial_cmd.ino            # serial debug console (9 commands)
+  secrets.h                 # WiFi credential defaults (gitignored)
 tools/                      # Development utilities
   synthetic-data.js         # flight + weather data generator (8 scenarios, any lat/lon)
   mock-proxy.js             # mock proxy for firmware resilience testing (uses synthetic-data)
@@ -115,7 +131,7 @@ The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B
 3. Verify at `https://api.overheadtracker.com/status`.
 4. Full setup details in `PI_PROXY_SETUP.md`.
 
-### ESP32 firmware change
+### Echo firmware change (Freenove 4.0", COM4)
 1. Edit the relevant file in `tracker_live_fnk0103s/` — the firmware is split by concern (see repo layout above).
 2. Preview layout changes by opening `tft-preview.html` in a browser — it mirrors the firmware's rendering logic with interactive controls.
 3. First flash (or if OTA is unavailable): run `./build.sh` to compile and upload via USB (requires Arduino IDE + `arduino-cli` on Windows).
@@ -123,7 +139,14 @@ The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B
 5. Serial monitor: `./build.sh monitor`.
 6. Send a debug command: `./build.sh send <cmd>` (commands: help, heap, state, wifi, config, diag, fetch, weather, restart).
 7. Pre-push safety check: `./build.sh safe` (runs desktop tests + compile with all warnings).
-8. Stress test: `./build.sh proxy-host <dev-ip>` to point at dev machine, `./build.sh stress 10 COM4` for 10-min chaos test, then `./build.sh proxy-host 192.168.86.24` to restore.
+8. Stress test: `./build.sh proxy-host <dev-ip>` to point at dev machine, `./build.sh stress 10 COM4` for 10-min chaos test, then `./build.sh proxy-host api.overheadtracker.com` to restore.
+
+### Foxtrot firmware change (Waveshare 4.3B, COM7)
+1. Edit files in `tracker_foxtrot/`.
+2. Compile: `arduino-cli compile --fqbn "esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB" --build-path /tmp/tracker-foxtrot-build tracker_foxtrot/tracker_foxtrot.ino`
+3. Flash: `arduino-cli upload --fqbn "..." --port COM7 --input-dir /tmp/tracker-foxtrot-build tracker_foxtrot/tracker_foxtrot.ino`
+4. Serial monitor: `arduino-cli monitor --port COM7 --config "baudrate=115200"`
+5. **Do not use `build.sh`** for Foxtrot — it only targets Echo.
 
 ### Testing with synthetic data
 - **Web app demo mode**: open `index.html?demo=true` (or `?demo=true&scenario=emergency`). Uses generated flights with no API calls. Scenarios: busy, quiet, crowded, emergency, approach_rush, single, mixed.

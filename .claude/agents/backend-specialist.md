@@ -32,18 +32,37 @@ adsb.lol / adsb.fi / airplanes.live   (raced, first wins)
 
 The proxy races three upstream ADS-B APIs simultaneously and uses the fastest response. Results are cached for 10 seconds so the web app and ESP32 can both refresh at 15-second intervals without triggering HTTP 429s.
 
-### ESP32 firmware
+### ESP32 firmware — two devices
+
+**Echo** (user's personal device):
 
 | Property | Value |
 |---|---|
 | Board | Freenove FNK0103S (ESP32, HSPI) |
-| Display | 4.0" 480×320 ST7796 (landscape) |
+| Display | 4.0" 480×320 ST7796 SPI (landscape) |
+| Touch | XPT2046 resistive (SPI) |
 | Firmware | `tracker_live_fnk0103s/tracker_live_fnk0103s.ino` |
-| Libraries | `TFT_eSPI`, `ArduinoJson`, `SD` (Arduino Library Manager) |
+| Libraries | LovyanGFX, ArduinoJson, SD |
 | Build tool | `arduino-cli` via `build.sh` |
-| Poll interval | 15 seconds |
-| Cycle interval | 8 seconds per flight card |
-| Config location | Top of `.ino` file (`WIFI_SSID`, `WIFI_PASS`, `PROXY_HOST`) |
+| FQBN | `esp32:esp32:esp32:PartitionScheme=min_spiffs` |
+| COM port | COM4 |
+
+**Foxtrot** (customer product):
+
+| Property | Value |
+|---|---|
+| Board | Waveshare ESP32-S3-Touch-LCD-4.3B |
+| Display | 4.3" 800×480 ST7262 parallel RGB (landscape) |
+| Touch | GT911 capacitive (I2C) |
+| Firmware | `tracker_foxtrot/tracker_foxtrot.ino` |
+| Libraries | LovyanGFX, ArduinoJson |
+| Build tool | `arduino-cli` (direct invocation — no `build.sh` yet) |
+| FQBN | `esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB` |
+| COM port | COM7 |
+| Backlight | CH422G I/O expander (I2C), not direct GPIO |
+| PSRAM | 8 MB OPI |
+
+**Critical rule**: Never modify Echo's firmware when working on Foxtrot, and vice versa. They are separate sketch directories with separate hardware configs.
 
 ### External APIs
 
@@ -63,13 +82,22 @@ The proxy races three upstream ADS-B APIs simultaneously and uses the fastest re
 - Check logs: `railway service logs --service overhead-tracker-proxy`
 - Manage environment variables: `railway variables`
 
-### ESP32 firmware
+### ESP32 firmware (Echo)
 
-- Read and modify `tracker_live_fnk0103s.ino` for feature changes
-- Debug display rendering (TFT_eSPI), touch calibration (NVS), JSON parsing (ArduinoJson)
+- Read and modify files in `tracker_live_fnk0103s/` for Echo feature changes
+- Debug display rendering (LovyanGFX), touch calibration (NVS), JSON parsing (ArduinoJson)
 - Use `build.sh` for compile/upload/monitor — never manually invoke `arduino-cli` with ad-hoc flags
 - Understand the captive portal WiFi setup and in-device reconfiguration flow
-- Advise on memory constraints (ESP32 heap, PSRAM, stack size)
+- Advise on memory constraints (ESP32 heap ~320 KB, no PSRAM)
+
+### ESP32-S3 firmware (Foxtrot)
+
+- Read and modify files in `tracker_foxtrot/` for Foxtrot feature changes
+- Display uses Bus_RGB (parallel) via LovyanGFX — very different from Echo's SPI bus
+- Touch uses GT911 (I2C) — different from Echo's XPT2046 (SPI)
+- Backlight requires CH422G I/O expander init before display init
+- 8 MB PSRAM available — framebuffer lives in PSRAM
+- No `build.sh` support yet — use `arduino-cli` directly with the Waveshare FQBN
 
 ### API integrations
 
@@ -80,10 +108,10 @@ The proxy races three upstream ADS-B APIs simultaneously and uses the fastest re
 ## Constraints and rules
 
 1. **Read before editing** — always read the relevant file before modifying it.
-2. **`build.sh` is the only build interface** — use `./build.sh`, `./build.sh compile`, `./build.sh upload`, `./build.sh monitor`, `./build.sh stress`, `./build.sh proxy-host`. Do not compose raw `arduino-cli` commands.
+2. **`build.sh` is the build interface for Echo** — use `./build.sh`, `./build.sh compile`, `./build.sh upload`, `./build.sh monitor`, `./build.sh stress`, `./build.sh proxy-host`. For Foxtrot, use `arduino-cli` directly with the Waveshare FQBN until `build.sh` gains Foxtrot support.
 3. **No credentials in code** — `WIFI_SSID`, `WIFI_PASS`, and `PROXY_HOST` live only at the top of the `.ino` file, clearly marked as user-editable. Never hard-code them elsewhere.
 4. **Preserve cache semantics** — the 10-second proxy cache is load-bearing for the ESP32 + web app co-existence. Don't remove or reduce it without understanding the downstream rate-limit impact.
-5. **Embedded constraints** — the ESP32 has ~320 KB free heap. Avoid dynamic allocation in hot paths; prefer static buffers where ArduinoJson allows.
+5. **Embedded constraints** — Echo has ~320 KB free heap (no PSRAM). Foxtrot has ~320 KB SRAM + 8 MB PSRAM. Avoid dynamic allocation in hot paths on Echo; Foxtrot can use PSRAM for large buffers.
 
 ## Stress testing tools
 

@@ -26,7 +26,6 @@ FB_DEV          = '/dev/fb1'
 BASE            = os.environ.get('PROXY_URL', 'https://api.overheadtracker.com')
 STATS_URL       = BASE + '/stats'
 PEAK_URL        = BASE + '/peak'
-STATUS_URL      = BASE + '/status'
 _api_radius     = int(math.ceil(RADIUS_KM / 1.852 * 4.0))
 FLIGHTS_URL     = f'{BASE}/flights?lat={HOME_LAT}&lon={HOME_LON}&radius={_api_radius}'
 WEATHER_URL     = f'{BASE}/weather?lat={HOME_LAT}&lon={HOME_LON}'
@@ -153,7 +152,7 @@ def track_flights_today(flights):
 def fetch_all():
     results = {}
     for name, url in [('stats', STATS_URL), ('peak', PEAK_URL),
-                       ('flights', FLIGHTS_URL), ('status', STATUS_URL)]:
+                       ('flights', FLIGHTS_URL)]:
         try:
             timeout = 12 if name == 'flights' else 3
             resp = requests.get(url, timeout=timeout)
@@ -167,7 +166,7 @@ def fetch_all():
             results[name] = body
         except Exception:
             results[name] = FETCH_FAILED if name == 'flights' else None
-    return results.get('stats'), results.get('peak'), results.get('flights'), results.get('status')
+    return results.get('stats'), results.get('peak'), results.get('flights')
 
 
 def fetch_weather():
@@ -334,19 +333,19 @@ def render_page_flights(flights, weather, peak, page, flights_ok=True):
     flush_to_fb()
 
 
-# ── Page 1: Stats + System Health ────────────────────────
+# ── Page 1: Railway Proxy Stats ──────────────────────────
 
-def render_page_dashboard(stats, status, peak, page):
+def render_page_dashboard(stats, peak, page):
     screen.fill(BG)
     draw_title_bar(stats is not None, page)
 
-    if stats is None and status is None:
+    if stats is None:
         draw_text('-- proxy unreachable --', font_md, RED, W // 2, H // 2, 'center')
         flush_to_fb()
         return
 
-    # Stats grid (2x3)
-    draw_text('PROXY STATS', font_sm, DIM, 10, 30)
+    # Stats grid (2x4)
+    draw_text('RAILWAY PROXY', font_sm, DIM, 10, 30)
     if stats:
         items = [
             ('UPTIME',    stats.get('uptime', '-')),
@@ -355,56 +354,32 @@ def render_page_dashboard(stats, status, peak, page):
             ('ERRORS',    str(stats.get('errors', 0))),
             ('CLIENTS',   str(stats.get('uniqueClients', 0))),
             ('CACHED',    str(stats.get('cacheEntries', 0)) + ' entries'),
+            ('ROUTES',    str(stats.get('routeCacheEntries', 0))),
+            ('UPSTREAM',  str(stats.get('activeUpstream', 0)) + ' active'),
         ]
-        col_w = W // 3
+        col_w = W // 4
         for i, (label, value) in enumerate(items):
-            cx = (i % 3) * col_w + col_w // 2
-            cy = 46 + (i // 3) * 38
+            cx = (i % 4) * col_w + col_w // 2
+            cy = 46 + (i // 4) * 42
             draw_text(label, font_sm, DIM, cx, cy, 'center')
             err_row = label == 'ERRORS' and int(stats.get('errors', 0)) > 0
             draw_text(value, font_md, RED if err_row else WHITE, cx, cy + 16, 'center')
 
-    # System health
-    health_y = 130
-    pygame.draw.line(screen, DIM, (10, health_y - 4), (W - 10, health_y - 4), 1)
-    draw_text('SYSTEM HEALTH', font_sm, DIM, 10, health_y)
-
-    if status:
-        # CPU temp (inline label + value)
-        temp_str = status.get('temp', 'N/A')
-        try:
-            temp_val = float(temp_str.replace('\u00b0C', '').strip())
-            temp_col = GREEN if temp_val < 60 else (AMBER if temp_val < 75 else RED)
-        except (ValueError, AttributeError):
-            temp_col = DIM
-        draw_text('CPU', font_sm, DIM, 10, health_y + 18)
-        draw_text(str(temp_str), font_md, temp_col, 50, health_y + 16)
-
-        # RAM (inline label + value)
-        ram = status.get('ram', {})
-        if ram.get('total') and ram.get('free'):
-            total_mb = ram['total'] / (1024 * 1024)
-            free_mb  = ram['free'] / (1024 * 1024)
-            used_pct = int((1 - ram['free'] / ram['total']) * 100)
-            draw_text('RAM', font_sm, DIM, 250, health_y + 18)
-            draw_text(f'{used_pct}%  {total_mb - free_mb:.0f}/{total_mb:.0f} MB', font_md, WHITE, 290, health_y + 16)
-
-        # PM2 services (2-column layout)
-        pm2 = status.get('pm2', [])
-        if pm2:
-            pm2_y = health_y + 38
-            draw_text('PM2 SERVICES', font_sm, DIM, 10, pm2_y)
-            for i, svc in enumerate(pm2[:6]):
-                col = i % 2
-                row = i // 2
-                row_y = pm2_y + 18 + row * 16
-                cx = col * 240
-                is_online = svc.get('status') == 'online'
-                pygame.draw.circle(screen, GREEN if is_online else RED, (cx + 14, row_y + 7), 4)
-                draw_text(svc.get('name', '?'), font_sm, WHITE if is_online else DIM, cx + 26, row_y)
-                restarts = svc.get('restarts', 0)
-                if restarts:
-                    draw_text(f'R:{restarts}', font_sm, AMBER, cx + 150, row_y)
+    # API cooldowns
+    cooldown_y = 138
+    pygame.draw.line(screen, DIM, (10, cooldown_y - 4), (W - 10, cooldown_y - 4), 1)
+    draw_text('API STATUS', font_sm, DIM, 10, cooldown_y)
+    if stats:
+        cooldowns = stats.get('apiCooldowns', {})
+        apis = ['adsb.lol', 'adsb.fi', 'airplanes.live']
+        for i, api in enumerate(apis):
+            cx = 10 + i * 160
+            cd = cooldowns.get(api, 0)
+            is_ok = cd <= 0
+            pygame.draw.circle(screen, GREEN if is_ok else AMBER, (cx + 4, cooldown_y + 24), 4)
+            draw_text(api, font_sm, WHITE if is_ok else DIM, cx + 14, cooldown_y + 18)
+            if not is_ok:
+                draw_text(f'{cd}s', font_sm, AMBER, cx + 14, cooldown_y + 34)
 
     draw_histogram(peak, 228)
     draw_data_age(last_fetch, 306)
@@ -413,7 +388,7 @@ def render_page_dashboard(stats, status, peak, page):
 
 # ── Main loop ────────────────────────────────────────────
 
-stats_data, peak_data, flights_raw, status_data = None, None, None, None
+stats_data, peak_data, flights_raw = None, None, None
 weather_data      = None
 processed_flights = []
 flights_ok        = True
@@ -426,7 +401,7 @@ while True:
     now = time.time()
 
     if now - last_fetch >= REFRESH:
-        stats_data, peak_data, flights_raw, status_data = fetch_all()
+        stats_data, peak_data, flights_raw = fetch_all()
         if flights_raw is FETCH_FAILED:
             flights_ok = False
         else:
@@ -448,6 +423,6 @@ while True:
     if current_page == 0:
         render_page_flights(processed_flights, weather_data, peak_data, current_page, flights_ok)
     else:
-        render_page_dashboard(stats_data, status_data, peak_data, current_page)
+        render_page_dashboard(stats_data, peak_data, current_page)
 
     time.sleep(1)
