@@ -1692,13 +1692,14 @@
     setInterval(() => { if (locationLat || locationLon) fetchWeather(); }, 15 * 60 * 1000);
 
     // ── Fetch flights ────────────────────────────────────────────────
-    // Queries proxy first, falls back to airplanes.live directly if proxy is down.
-    // Aborts any in-progress request first to prevent stale data overwrites.
+    // Races direct ADS-B APIs first (each user's browser IP avoids shared rate limits).
+    // Falls back to proxy if all direct APIs fail. Aborts in-progress requests.
     const PROXY_URL   = 'https://api.overheadtracker.com/flights?lat={LAT}&lon={LON}&radius={R}';
     const DIRECT_APIS = [
       { name: 'adsb.lol',       url: 'https://api.adsb.lol/v2/point/{LAT}/{LON}/{R}' },
       { name: 'adsb.fi',        url: 'https://opendata.adsb.fi/api/v3/lat/{LAT}/lon/{LON}/dist/{R}' },
       { name: 'airplanes.live', url: 'https://api.airplanes.live/v2/point/{LAT}/{LON}/{R}' },
+      { name: 'adsb-one',       url: 'https://api.adsb-one.com/v2/point/{LAT}/{LON}/{R}' },
     ];
 
     function buildUrl(template) {
@@ -1706,6 +1707,60 @@
         .replace(/{LAT}/g, locationLat)
         .replace(/{LON}/g, locationLon)
         .replace(/{R}/g,   apiRadiusNm());
+    }
+
+    // ── Race direct ADS-B APIs ─────────────────────────────────────
+    const apiCooldowns = new Map();
+    const API_COOLDOWN_MS = 60000;
+    const API_TIMEOUT_MS  = 6000;
+
+    function raceDirectAPIs(parentSignal) {
+      const now = Date.now();
+      const apis = DIRECT_APIS.filter(api => {
+        const exp = apiCooldowns.get(api.name);
+        if (!exp) return true;
+        if (now >= exp) { apiCooldowns.delete(api.name); return true; }
+        return false;
+      });
+      if (!apis.length) return Promise.reject(new Error('All direct APIs on cooldown'));
+
+      return new Promise((resolve, reject) => {
+        let settled = false, errors = [];
+        const controllers = apis.map(() => new AbortController());
+
+        if (parentSignal) parentSignal.addEventListener('abort', () => {
+          controllers.forEach(c => c.abort());
+        }, { once: true });
+
+        apis.forEach((api, i) => {
+          const sig = (AbortSignal.any && AbortSignal.timeout)
+            ? AbortSignal.any([controllers[i].signal, AbortSignal.timeout(API_TIMEOUT_MS)])
+            : controllers[i].signal;
+          fetch(buildUrl(api.url), { signal: sig })
+            .then(async r => {
+              if (r.status === 429) {
+                apiCooldowns.set(api.name, Date.now() + API_COOLDOWN_MS);
+                throw new Error(api.name + ' returned 429');
+              }
+              if (!r.ok) throw new Error(api.name + ' HTTP ' + r.status);
+              return r.json();
+            })
+            .then(d => {
+              if (!settled) {
+                settled = true;
+                controllers.forEach((c, j) => { if (j !== i) c.abort(); });
+                resolve({ data: d, source: api.name });
+              }
+            })
+            .catch(e => {
+              errors.push(e);
+              if (errors.length === apis.length && !settled) {
+                settled = true;
+                reject(new Error('All direct APIs failed'));
+              }
+            });
+        });
+      });
     }
 
     // ── Demo mode (synthetic data) ──────────────────────────────────
@@ -1775,34 +1830,27 @@
           data = demoGenerateFlights();
           document.getElementById('proxy-status').textContent = '[DEMO] ' + (demoScenario || 'busy').toUpperCase();
         } else {
-        // Try proxy first (12s timeout); fall back to direct APIs if it fails
-        let res;
+        // Race direct APIs first (distributed rate limits); fall back to proxy
         try {
-          const proxySignal = (AbortSignal.any && AbortSignal.timeout)
-            ? AbortSignal.any([signal, timeoutSignal(12000)])
-            : signal;
-          res = await fetch(buildUrl(PROXY_URL), { signal: proxySignal });
-          if (!res.ok) throw new Error('proxy HTTP ' + res.status);
-          document.getElementById('proxy-status').textContent = '[OK] VIA PROXY';
-        } catch(proxyErr) {
-          if (signal.aborted) throw proxyErr;
-          console.warn('Proxy failed, trying direct APIs:', proxyErr.message);
-          let directOk = false;
-          for (const api of DIRECT_APIS) {
-            try {
-              res = await fetch(buildUrl(api.url), { signal });
-              if (!res.ok) throw new Error(api.name + ' HTTP ' + res.status);
-              document.getElementById('proxy-status').textContent = '[!] DIRECT VIA ' + api.name.toUpperCase();
-              directOk = true;
-              break;
-            } catch (apiErr) {
-              if (signal.aborted) throw apiErr;
-              console.warn(api.name + ' failed:', apiErr.message);
-            }
+          const result = await raceDirectAPIs(signal);
+          data = result.data;
+          document.getElementById('proxy-status').textContent = '[OK] DIRECT VIA ' + result.source.toUpperCase();
+        } catch(directErr) {
+          if (signal.aborted) throw directErr;
+          console.warn('Direct APIs failed, trying proxy:', directErr.message);
+          try {
+            const proxySignal = (AbortSignal.any && AbortSignal.timeout)
+              ? AbortSignal.any([signal, AbortSignal.timeout(12000)])
+              : signal;
+            const res = await fetch(buildUrl(PROXY_URL), { signal: proxySignal });
+            if (!res.ok) throw new Error('proxy HTTP ' + res.status);
+            data = await res.json();
+            document.getElementById('proxy-status').textContent = '[!] VIA PROXY (FALLBACK)';
+          } catch(proxyErr) {
+            if (signal.aborted) throw proxyErr;
+            throw new Error('All APIs failed');
           }
-          if (!directOk) throw new Error('All APIs failed');
         }
-        data = await res.json();
         }
         let ac = (data.ac || []).filter(f =>
           typeof f.alt_baro === 'number' && f.alt_baro >= altFloorFt &&
