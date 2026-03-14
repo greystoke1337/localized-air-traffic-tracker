@@ -18,7 +18,7 @@ const rateLimit  = require('express-rate-limit');
 
 const app      = express();
 const PORT     = parseInt(process.env.PORT, 10) || 3000;
-const CACHE_MS         = 10000;
+const CACHE_MS         = 30000;
 const ROUTE_CACHE_MS   = 30 * 60 * 1000;
 const ROUTE_CACHE_FILE = process.env.ROUTE_CACHE_FILE || __dirname + '/route-cache.json';
 const MAX_CACHE_ENTRIES    = 500;   // evict oldest when exceeded
@@ -27,9 +27,11 @@ const MAX_UPSTREAM_CONCURRENT = 20; // max simultaneous upstream API calls
 const SEMAPHORE_TIMEOUT_MS    = 10000; // fail fast if queued too long
 const MAX_ROUTE_CONCURRENT    = 5;  // max simultaneous route lookups
 
-const cache      = new Map();
-const inFlight   = new Map();  // key → Promise (dedup concurrent upstream fetches)
-const routeCache = new Map();  // callsign -> { dep, arr, timestamp }
+const cache        = new Map();
+const inFlight     = new Map();  // key → Promise (dedup concurrent upstream fetches)
+const routeCache   = new Map();  // callsign -> { dep, arr, timestamp }
+const apiCooldowns = new Map();  // apiName → cooldownExpiresAt (timestamp)
+const COOLDOWN_MS  = 60000;
 
 // ── Concurrency semaphore ───────────────────────────────────────────
 function semaphore(max) {
@@ -806,19 +808,35 @@ app.get('/flights', async (req, res) => {
     const promise = (async () => {
       await upstreamSem.acquire(SEMAPHORE_TIMEOUT_MS);
       try {
-        const apis = [
+        const allApis = [
           { name: 'adsb.lol',        url: `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}` },
           { name: 'adsb.fi',         url: `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}` },
           { name: 'airplanes.live',  url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}` },
+          { name: 'adsb-one',        url: `https://api.adsb-one.com/v2/point/${lat}/${lon}/${radius}` },
         ];
 
-        // Race all APIs — first successful response wins
+        // Skip APIs on 429 cooldown
+        const now2 = Date.now();
+        const apis = allApis.filter(api => {
+          const expires = apiCooldowns.get(api.name);
+          if (!expires) return true;
+          if (now2 >= expires) { apiCooldowns.delete(api.name); return true; }
+          return false;
+        });
+        if (apis.length === 0) throw new Error('All ADS-B APIs on cooldown');
+
+        // Race all available APIs — first successful response wins
         const data = await new Promise((resolve, reject) => {
           let settled = false, errors = [];
           const controllers = apis.map(() => new AbortController());
           apis.forEach((api, i) => {
             fetch(api.url, { signal: AbortSignal.any([controllers[i].signal, AbortSignal.timeout(6000)]) })
               .then(async r => {
+                if (r.status === 429) {
+                  apiCooldowns.set(api.name, Date.now() + COOLDOWN_MS);
+                  addLog({ type: 'COOLDOWN', client, key, error: `${api.name} → 60s cooldown (429)` });
+                  throw new Error(`${api.name} returned 429`);
+                }
                 if (!r.ok) throw new Error(`${api.name} returned ${r.status}`);
                 const d = await r.json();
                 if (!settled) {
@@ -907,6 +925,7 @@ app.get('/stats', (req, res) => {
     activeUpstream: upstreamSem.active,
     activeRoutes:   routeSem.active,
     inFlightKeys:   inFlight.size,
+    apiCooldowns:   Object.fromEntries([...apiCooldowns].map(([k, v]) => [k, Math.max(0, Math.ceil((v - Date.now()) / 1000))])),
   });
 });
 
