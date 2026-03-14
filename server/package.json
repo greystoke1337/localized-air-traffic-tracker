@@ -15,6 +15,6 @@
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.0",
     "node-fetch": "^3.3.2",
-    "nodemailer": "^6.9.0"
+    "nodemailer": "^8.0.2"
   }
 }
