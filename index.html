@@ -622,6 +622,8 @@
 
     let flights = [], flightIndex = 0;
     let fetchController = null; // AbortController — cancels stale requests
+    let interpState = null;
+    let animFrameId = null;
 
     function timeoutSignal(ms) {
       return typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(ms) : undefined;
@@ -1068,6 +1070,7 @@
     }
 
     function clearAircraftMarker() {
+      interpState = null;
       if (acMarker)    { acMarker.remove();    acMarker = null; }
       if (acLine)      { acLine.remove();      acLine = null; }
       if (acVector)    { acVector.remove();    acVector = null; }
@@ -1136,6 +1139,64 @@
       const fill = document.getElementById('alt-bar-fill');
       if (typeof alt !== 'number') { fill.style.height = '0%'; return; }
       fill.style.height = Math.min(100, Math.max(0, (alt / 45000) * 100)) + '%';
+    }
+
+
+    // ── Position interpolation ─────────────────────────────────────
+    // Dead-reckons the selected aircraft between 15s API polls for smooth ~60fps movement.
+    let _lastPanelUpdate = 0;
+
+    function animateAircraft(timestamp) {
+      animFrameId = requestAnimationFrame(animateAircraft);
+      if (!interpState) return;
+
+      const elapsed = Math.min((timestamp - interpState.baseTime) / 1000, 20);
+      if (elapsed < 0.016) return;
+
+      let lat = interpState.baseLat, lon = interpState.baseLon;
+      if (interpState.gs > 0 && interpState.track != null) {
+        const distKm = (interpState.gs * 1.852 / 3600) * elapsed;
+        const pt = destPoint(interpState.baseLat, interpState.baseLon, interpState.track, distKm);
+        lat = pt[0]; lon = pt[1];
+      }
+
+      let alt = interpState.baseAlt;
+      if (typeof alt === 'number' && typeof interpState.baroRate === 'number') {
+        alt = Math.max(0, alt + (interpState.baroRate / 60) * elapsed);
+      }
+
+      const pos = [lat, lon];
+      if (acMarker) acMarker.setLatLng(pos);
+      if (acLine)   acLine.setLatLngs([pos, [locationLat, locationLon]]);
+
+      if (acVector && interpState.track != null && interpState.gs > 0) {
+        const vectorKm  = Math.max(0.5, Math.min(interpState.gs / 100, 8));
+        const tip       = destPoint(lat, lon, interpState.track, vectorKm);
+        const headKm    = vectorKm * 0.28;
+        const leftWing  = destPoint(tip[0], tip[1], (interpState.track + 180 - 28 + 360) % 360, headKm);
+        const rightWing = destPoint(tip[0], tip[1], (interpState.track + 180 + 28) % 360, headKm);
+        acVector.setLatLngs([pos, tip]);
+        acArrowHead.setLatLngs([leftWing, tip, rightWing]);
+      }
+
+      if (timestamp - _lastPanelUpdate > 250) {
+        _lastPanelUpdate = timestamp;
+        const distLoc = haversineKm(locationLat, locationLon, lat, lon);
+        document.getElementById('d-dist').textContent = distLoc.toFixed(1) + ' KM';
+        if (typeof alt === 'number') {
+          document.getElementById('d-alt').textContent = formatAlt(alt);
+          updateAltBar(alt);
+        }
+      }
+    }
+
+    function startAnimation() {
+      if (animFrameId == null) animFrameId = requestAnimationFrame(animateAircraft);
+    }
+
+    function stopAnimation() {
+      interpState = null;
+      if (animFrameId != null) { cancelAnimationFrame(animFrameId); animFrameId = null; }
     }
 
 
@@ -1569,6 +1630,14 @@
       logFlight(f, phase, distLoc);
       fetchPhoto(reg, f.hex || '', (f.t || '').toUpperCase());
       updateMap(f.lat, f.lon, call, f.gs, f.track, phase.color);
+      interpState = {
+        hex: f.hex, baseLat: f.lat, baseLon: f.lon,
+        baseAlt: typeof f.alt_baro === 'number' ? f.alt_baro : null,
+        gs: typeof f.gs === 'number' ? f.gs : 0,
+        track: typeof f.track === 'number' ? f.track : null,
+        baroRate: typeof f.baro_rate === 'number' ? f.baro_rate : null,
+        baseTime: performance.now(), phaseColor: phase.color, callsign: call
+      };
       updateInterestingBadge(f);
       updateIntercept(f, distLoc);
     }
@@ -1962,7 +2031,11 @@
 
 
     // ── Start ────────────────────────────────────────────────────────
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && interpState) interpState.baseTime = performance.now();
+    });
     initMap();
+    startAnimation();
     if (DEMO_MODE && locationLat === 0 && locationLon === 0) {
       locationName = 'DEMO — SYDNEY';
       locationLat = -33.8688; locationLon = 151.2093;
