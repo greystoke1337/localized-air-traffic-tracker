@@ -365,14 +365,12 @@ void fetchFlights() {
       dataSource = 2;
       Serial.println("Using cached data.");
     } else {
-      renderMessage("NO DATA", "ALL SOURCES FAILED");
       isFetching = false;
       return;
     }
   }
 
   if (newCount < 0) {
-    renderMessage("JSON ERROR", fromCache ? "CACHE CORRUPT" : "BAD RESPONSE");
     isFetching = false;
     return;
   }
@@ -385,14 +383,6 @@ void fetchFlights() {
 
   for (int i = 0; i < flightCount; i++) logFlight(flights[i]);
   esp_task_wdt_reset();
-  if (flightCount == 0) {
-    logTs("FETCH", "No flights, switching to weather");
-    currentScreen = SCREEN_WEATHER;
-    renderWeather();
-  } else {
-    currentScreen = SCREEN_FLIGHT;
-    renderFlight(flights[0]);
-  }
   logTs("HEAP", "Free:%d MaxBlock:%d", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 }
 
