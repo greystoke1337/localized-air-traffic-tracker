@@ -180,6 +180,9 @@ void setup() {
   Serial.println();
   Serial.println("=== FOXTROT ===");
 
+  ch422gInit();
+  ch422gResetTouch();
+
   tft.init();
   tft.setRotation(0);
   Serial.println("LovyanGFX initialized");
@@ -208,8 +211,7 @@ void setup() {
   Serial.printf("DIAG_STEP = %d\n", DIAG_STEP);
 
 #if DIAG_STEP >= 2
-  Serial.println("DIAG: CH422G + SPI + SD init");
-  ch422gInit();
+  Serial.println("DIAG: SPI + SD init");
   ch422gSetPin(EXIO_SD_CS, false);
   SPI.begin(12, 13, 11);
   if (SD.begin(6, SPI)) {
@@ -268,7 +270,6 @@ void setup() {
 #endif
 
 #else
-  ch422gInit();
   ch422gSetPin(EXIO_SD_CS, false);  // Assert real CS via expander
   SPI.begin(12, 13, 11);  // SCK, MISO, MOSI — GPIO 10 NOT touched
   if (SD.begin(6, SPI)) {

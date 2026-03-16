@@ -38,3 +38,10 @@ static void ch422gSetPin(uint8_t mask, bool high) {
   Wire.write(_ch422g_io);
   Wire.endTransmission();
 }
+
+static void ch422gResetTouch() {
+  ch422gSetPin(EXIO_TP_RST, false);
+  delay(10);
+  ch422gSetPin(EXIO_TP_RST, true);
+  delay(50);
+}
