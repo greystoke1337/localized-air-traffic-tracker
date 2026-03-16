@@ -1,7 +1,6 @@
 ---
 name: ota-update
 description: Compile and OTA flash ESP32 firmware over WiFi. Use when the user says "OTA", "OTA update", "OTA flash", "wireless update", or wants to update the ESP32 without USB.
-allowed-tools: Bash, Read, Grep, Glob
 ---
 
 # OTA Update ESP32

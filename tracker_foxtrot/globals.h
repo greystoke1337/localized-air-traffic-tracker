@@ -7,8 +7,9 @@
 #include "config.h"
 #include "types.h"
 
+extern LGFX tft;
+
 // ─── Hardware ─────────────────────────────────────────
-extern LGFX       tft;
 extern WebServer  setupServer;
 extern DNSServer  dnsServer;
 
@@ -80,6 +81,10 @@ extern int  loggedUnknownCount;
 // ─── Diagnostics ──────────────────────────────────────
 extern unsigned long lastDiagMs;
 
+// ─── Cross-task trigger flags ─────────────────────────
+extern volatile bool triggerPortal;
+extern volatile bool triggerGeoFetch;
+
 // ─── Forward declarations ─────────────────────────────
 // helpers.ino
 bool wifiOk();
@@ -101,6 +106,7 @@ void formatAlt(int alt, char* buf, int len);
 void diagReport();
 
 // display.ino
+void initUI();
 void drawHeader();
 void drawNavBar();
 void drawStatusBar();
@@ -120,7 +126,7 @@ bool fetchWeather();
 
 // touch.ino
 void initTouch();
-void handleTouch(uint16_t tx, uint16_t ty);
+void pollTouch();
 
 // wifi_setup.ino
 bool loadWiFiConfig();

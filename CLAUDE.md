@@ -12,7 +12,7 @@ Five components:
 | Web app | — | Single-file HTML + vanilla JS | GitHub Pages (auto-deploy on push to `master`) |
 | Proxy server | — | Node.js / Express | Railway (`api.overheadtracker.com`) |
 | ESP32 firmware (4.0") | **Echo** | Arduino C++ on Freenove FNK0103S | Physical device (USB via `build.sh`, COM4) |
-| ESP32-S3 firmware (4.3") | **Foxtrot** | Arduino C++ on Waveshare ESP32-S3-Touch-LCD-4.3B | Physical device (USB via `arduino-cli`, COM7) |
+| ESP32-S3 firmware (4.3") | **Foxtrot** | Arduino C++ on Waveshare ESP32-S3-Touch-LCD-4.3 | Physical device (USB via `arduino-cli`, COM7) |
 | Pi display | — | Python / Pygame on Raspberry Pi 3B+ | Physical device (3.5" TFT on `/dev/fb1`) |
 
 Live URL: https://greystoke1337.github.io/localized-air-traffic-tracker/
@@ -24,63 +24,17 @@ Custom domain: https://overheadtracker.com
 
 ```
 index.html                  # Entire web app (single file, ~120 KB)
-build.sh                    # ESP32 build/upload/test/debug helper
+build.sh                    # Echo build/upload/test/debug helper (not for Foxtrot)
 tft-preview.html            # TFT display simulator (preview firmware UI in browser)
-PI_PROXY_SETUP.md           # Raspberry Pi proxy setup guide
-SPEC.md                     # Product specification and feature matrix
-README.md                   # User-facing documentation
-CNAME                       # GitHub Pages custom domain
-server/                     # Railway-hosted proxy server
-  server.js                 # Node.js caching proxy + dashboard (deployed to Railway)
-  Procfile                  # Railway start command
-  .dockerignore             # Railway build exclusions
-  dashboard.html            # Legacy dashboard UI (used by older server)
-  package.json              # Node deps (express, node-fetch)
-pi-display/                 # Raspberry Pi TFT display
-  display.py                # Pygame TFT display (480×320, writes to /dev/fb1, runs on Pi)
-  watchdog.sh               # Undervoltage watchdog (cron, restarts PM2, Pi only)
-tracker_live_fnk0103s/      # Echo — Freenove FNK0103S 4.0" (ESP32, SPI, 480×320)
-  tracker_live_fnk0103s.ino # setup() + loop() + global state
-  config.h                  # #defines: layout, colours, pins, timing
-  types.h                   # Flight, WeatherData, enums
-  globals.h                 # extern declarations + forward declarations
-  lookup_tables.h           # airline + aircraft type arrays
-  helpers.ino               # pure logic (haversine, deriveStatus, formatters)
-  display.ino               # all TFT drawing functions
-  network.ino               # HTTP fetching, JSON parsing, flight extraction
-  touch.ino                 # touch calibration + input handling
-  wifi_setup.ino            # WiFi config, captive portal, geocoding
-  sd_config.ino             # SD card config, cache, flight logging
-  serial_cmd.ino            # serial debug console (9 commands)
-  secrets.h                 # WiFi credential defaults (gitignored)
-  enclosure/                # 3D-printable case files (STL/STEP)
-tracker_foxtrot/            # Foxtrot — Waveshare 4.3B (ESP32-S3, parallel RGB, 800×480)
-  tracker_foxtrot.ino       # setup() + loop() + CH422G init + global state
-  config.h                  # #defines: layout (800×480), colours, pins, timing
-  types.h                   # Flight, WeatherData, enums (shared with Echo)
-  globals.h                 # extern declarations + forward declarations
-  lookup_tables.h           # airline + aircraft type arrays (shared with Echo)
-  lgfx_config.h             # LovyanGFX Bus_RGB + Panel_RGB + Touch_GT911
-  helpers.ino               # pure logic (haversine, deriveStatus, formatters)
-  display.ino               # all TFT drawing functions (scaled for 800×480)
-  network.ino               # HTTP fetching, JSON parsing, flight extraction
-  touch.ino                 # GT911 capacitive touch input (no calibration needed)
-  wifi_setup.ino            # WiFi config, captive portal, geocoding
-  sd_config.ino             # SD card config, cache, flight logging
-  serial_cmd.ino            # serial debug console (9 commands)
-  secrets.h                 # WiFi credential defaults (gitignored)
-tools/                      # Development utilities
-  synthetic-data.js         # flight + weather data generator (8 scenarios, any lat/lon)
-  mock-proxy.js             # mock proxy for firmware resilience testing (uses synthetic-data)
-tests/                      # Desktop logic tests (no hardware needed)
-  test_flight_logic.c       # C tests for flight logic
-  test_parsing.cpp          # C++ tests for JSON parsing
-  fixtures/                 # test data
-.claude/agents/             # Specialist sub-agents
-  backend-specialist.md
-  technical-writer.md
-  ux-designer.md
+server/                     # Railway-hosted proxy (server.js, package.json)
+pi-display/                 # Raspberry Pi TFT display (display.py, watchdog.sh)
+tracker_live_fnk0103s/      # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
+tracker_foxtrot/            # Foxtrot — Waveshare 4.3 (ESP32-S3, RGB, 800×480, LovyanGFX immediate-mode)
+tools/                      # synthetic-data.js, mock-proxy.js, serial_monitor.ps1
+tests/                      # Desktop logic tests (test_flight_logic.c, test_parsing.cpp)
 ```
+
+Both firmware dirs share the same file split: `.ino` (setup/loop), `config.h`, `types.h`, `globals.h`, `lookup_tables.h`, `helpers.ino`, `display.ino`, `network.ino`, `touch.ino`, `wifi_setup.ino`, `sd_config.ino`, `serial_cmd.ino`, `secrets.h` (gitignored). Foxtrot adds `lgfx_config.h` and `esp_panel_board_supported_conf.h`. `lvgl_v8_port.h/.cpp` are present but stubbed out — do not restore them.
 
 ---
 
@@ -120,38 +74,22 @@ The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B
 ## Common Tasks
 
 ### Web app change
-1. Edit `index.html`.
-2. Test by opening the file in a browser (`file://` works — no server needed).
-3. `git add index.html && git commit -m "..." && git push origin master`
-4. Verify at the live URL after ~60 s.
+Edit `index.html`, test via `file://`, push to `master` (auto-deploys to GitHub Pages in ~60 s).
 
 ### Proxy server change
-1. Edit files in `server/`.
-2. Deploy to Railway: `eval "$(/opt/homebrew/bin/brew shellenv)" && cd server && railway up` (or use the `/railway` skill).
-3. Verify at `https://api.overheadtracker.com/status`.
-4. Full setup details in `PI_PROXY_SETUP.md`.
+Edit `server/`, deploy via `/railway` skill or `cd server && railway up`. Verify at `https://api.overheadtracker.com/status`.
 
 ### Echo firmware change (Freenove 4.0", COM4)
-1. Edit the relevant file in `tracker_live_fnk0103s/` — the firmware is split by concern (see repo layout above).
-2. Preview layout changes by opening `tft-preview.html` in a browser — it mirrors the firmware's rendering logic with interactive controls.
-3. First flash (or if OTA is unavailable): run `./build.sh` to compile and upload via USB (requires Arduino IDE + `arduino-cli` on Windows).
-4. Subsequent flashes: compile with `./build.sh compile`, then upload via Arduino IDE using the `overhead-tracker` network port (OTA over WiFi).
-5. Serial monitor: `./build.sh monitor`.
-6. Send a debug command: `./build.sh send <cmd>` (commands: help, heap, state, wifi, config, diag, fetch, weather, restart).
-7. Pre-push safety check: `./build.sh safe` (runs desktop tests + compile with all warnings).
-8. Stress test: `./build.sh proxy-host <dev-ip>` to point at dev machine, `./build.sh stress 10 COM4` for 10-min chaos test, then `./build.sh proxy-host api.overheadtracker.com` to restore.
+Edit files in `tracker_live_fnk0103s/`. Use `./build.sh` to compile+flash, or `/flash-and-log echo`. Preview layout with `tft-preview.html`. Pre-push: `./build.sh safe`.
 
-### Foxtrot firmware change (Waveshare 4.3B, COM7)
-1. Edit files in `tracker_foxtrot/`.
-2. Compile: `arduino-cli compile --fqbn "esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB" --build-path /tmp/tracker-foxtrot-build tracker_foxtrot/tracker_foxtrot.ino`
-3. Flash: `arduino-cli upload --fqbn "..." --port COM7 --input-dir /tmp/tracker-foxtrot-build tracker_foxtrot/tracker_foxtrot.ino`
-4. Serial monitor: `arduino-cli monitor --port COM7 --config "baudrate=115200"`
-5. **Do not use `build.sh`** for Foxtrot — it only targets Echo.
+### Foxtrot firmware change (Waveshare 4.3 non-B, COM7)
+Edit files in `tracker_foxtrot/`. Use `/flash-and-log foxtrot` to compile+flash. **Do not use `build.sh`** for Foxtrot. Rendering is LovyanGFX immediate-mode (`tft.fillRect`, `tft.drawString`) — no LVGL, no lock/unlock needed. **Do not restore `lvgl_v8_port.cpp`** — it must stay stubbed or it re-introduces an I2C driver conflict that crashes on boot.
+
+### Foxtrot demo mode
+Set `#define DEMO_MODE 1` in `tracker_foxtrot/config.h` to boot with 3 fake Sydney flights, skipping all WiFi/network code.
 
 ### Testing with synthetic data
-- **Web app demo mode**: open `index.html?demo=true` (or `?demo=true&scenario=emergency`). Uses generated flights with no API calls. Scenarios: busy, quiet, crowded, emergency, approach_rush, single, mixed.
-- **Mock proxy for ESP32**: `node tools/mock-proxy.js normal 3000 --scenario crowded`. Supports all 10 modes × 8 scenarios.
-- **Generate fixture JSON**: `node tools/synthetic-data.js --scenario emergency` (prints to stdout). Pre-generated fixtures live in `tests/fixtures/synthetic-flights.json`.
+Web app: `index.html?demo=true&scenario=emergency`. Mock proxy: `node tools/mock-proxy.js normal 3000 --scenario crowded`.
 
 ---
 

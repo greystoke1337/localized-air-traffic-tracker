@@ -1,8 +1,19 @@
 #pragma once
 
 // ─── Feature flags ───────────────────────────────────
-#define HAS_TOUCH 1
-#define HAS_SD    1
+#define HAS_TOUCH  1
+#define HAS_SD     1
+#define DEMO_MODE  0
+
+// ─── Blue-tint diagnostic (0 = off, 1–6 = progressive live init) ──────────
+// 0: normal DEMO_MODE / live mode
+// 1: live mode, no hardware init (SPI/touch/WiFi all skipped) — renders demo flights
+// 2: + SPI/SD init
+// 3: + initTouch()
+// 4: + WiFi.begin() then immediate disconnect (radio init only, no connection)
+// 5: + full WiFi connect, then tft.init()+setRotation(0) reinit before render
+// 6: + fetchFlights() (full live mode, no tft reinit — baseline for comparison)
+#define DIAG_STEP  0
 
 // ─── SD pin ───────────────────────────────────────────
 #define SD_CS 10  // CH422G EXIO4 — verify on hardware
@@ -16,9 +27,9 @@
 #define H 480
 
 // ─── Layout ───────────────────────────────────────────
-#define HDR_H      40
-#define NAV_H      50
-#define FOOT_H     28
+#define HDR_H      52
+#define NAV_H      56
+#define FOOT_H     32
 #define CONTENT_Y  (HDR_H + NAV_H)
 #define CONTENT_H  (H - HDR_H - NAV_H - FOOT_H)
 
@@ -49,7 +60,7 @@
 // ─── Touch ────────────────────────────────────────────
 #define TOUCH_DEBOUNCE_MS  350
 #define NAV_Y       HDR_H
-#define NAV_BTN_W   100
+#define NAV_BTN_W   120
 #define NAV_BTN_H   (NAV_H - 4)
 #define NAV_BTN_GAP 6
 #define CFG_BTN_X1  (W - NAV_BTN_W)

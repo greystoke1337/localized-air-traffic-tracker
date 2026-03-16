@@ -52,7 +52,7 @@ public:
       cfg.vsync_pulse_width = 3;
       cfg.vsync_back_porch  = 32;
 
-      cfg.pclk_active_neg = 1;
+      cfg.pclk_active_neg = 0;
       cfg.de_idle_high    = 0;
       cfg.pclk_idle_high  = 0;
 
@@ -69,6 +69,7 @@ public:
       cfg.panel_height  = 480;
       cfg.offset_x = 0;
       cfg.offset_y = 0;
+      cfg.rgb_order = true;
       _panel_instance.config(cfg);
     }
 

@@ -2,7 +2,6 @@
 name: flash-and-log
 description: Compile and flash ESP32 firmware via USB, then start a timed serial log capture for crash debugging. Use when the user says "flash", "upload firmware", "flash and log", or wants to test new firmware changes on the device.
 argument-hint: "[device] [log_minutes] [log_label]"
-allowed-tools: Bash, Read, Grep, Glob
 ---
 
 # Flash ESP32 + Serial Log Capture

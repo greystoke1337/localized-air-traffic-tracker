@@ -7,12 +7,21 @@ description: Take Playwright screenshots of all TFT preview scenarios. Use when 
 
 Serve `tft-preview.html` locally and use Playwright MCP to screenshot every scenario and flight phase.
 
+## Platform Detection
+
+```bash
+uname -s
+```
+
+- **Darwin** → use `python3`
+- **MINGW/MSYS/CYGWIN** → use `python` or `/c/python314/python.exe`
+
 ## Steps
 
 ### 1. Start a local HTTP server
 
 ```bash
-cd /Users/maximecazaly/localized-air-traffic-tracker && python3 -m http.server 8765
+python3 -m http.server 8765
 ```
 
 Run this in the background. The server must stay alive for the entire screenshot session.
@@ -27,8 +36,6 @@ http://localhost:8765/tft-preview.html
 ### 3. Screenshot all scenarios
 
 The scenario dropdown is `#ctl-scenario`. Cycle through each value and take a screenshot.
-
-**Scenario list** (read from the `<select>` or use these known values):
 
 | Scenario Key | Filename |
 |---|---|
@@ -47,15 +54,13 @@ The scenario dropdown is `#ctl-scenario`. Cycle through each value and take a sc
 | `weather-loading` | `tft-preview-weather-loading.png` |
 
 For each scenario:
-1. Use `browser_evaluate` or `browser_select_option` to set the dropdown value and dispatch a `change` event
+1. Use `browser_select_option` to set the dropdown value
 2. Wait briefly for render
-3. Use `browser_take_screenshot` targeting the canvas element, saving to the project root with the filename above
+3. Use `browser_take_screenshot` targeting the canvas element
 
 ### 4. Screenshot all 8 flight phases
 
-After scenarios, cycle through each flight phase to verify unique colors.
-
-Set the scenario to `normal` first, then for each phase (0-7), change the `#ctl-phase` dropdown:
+Set scenario to `normal` first, then for each phase (0-7), change `#ctl-phase`:
 
 | Phase Index | Label | Filename |
 |---|---|---|
@@ -68,13 +73,9 @@ Set the scenario to `normal` first, then for each phase (0-7), change the `#ctl-
 | 6 | OVERHEAD | `tft-preview-phase-overhead.png` |
 | 7 | UNKNOWN | `tft-preview-phase-unknown.png` |
 
-For each phase:
-1. Use `browser_evaluate` to set `document.getElementById('ctl-phase').value = '<index>'; document.getElementById('ctl-phase').dispatchEvent(new Event('change'));`
-2. Take a screenshot of the canvas, saving with the filename above
-
 ### 5. Clean up
 
-- Stop the local HTTP server (kill the background Python process)
+- Stop the local HTTP server
 - Close the Playwright browser with `browser_close`
 
 ### 6. Report summary
@@ -82,5 +83,4 @@ For each phase:
 Tell the user:
 - Total screenshots taken (should be 13 scenarios + 8 phases = 21)
 - List the filenames
-- Flag any screenshots that look wrong (empty canvas, error states)
-- Note which phases now have unique colors for visual verification
+- Flag any screenshots that look wrong

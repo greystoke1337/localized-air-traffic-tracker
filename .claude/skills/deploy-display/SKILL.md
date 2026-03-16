@@ -1,7 +1,6 @@
 ---
 name: deploy-display
 description: Deploy display.py to the Pi TFT display. Use when the user says "deploy display", "push display", "update display", or after making changes to pi-display/display.py.
-allowed-tools: Bash, Read
 ---
 
 # Deploy Pi TFT Display

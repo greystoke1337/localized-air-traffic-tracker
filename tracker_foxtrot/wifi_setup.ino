@@ -159,40 +159,29 @@ static void handleSetupSave() {
 void startCaptivePortal() {
   tft.fillScreen(C_BG);
   tft.fillRect(0, 0, W, HDR_H, C_AMBER);
+  tft.setFont(&lgfx::fonts::DejaVu12);
   tft.setTextColor(C_BG, C_AMBER);
-  tft.setTextSize(2);
-  tft.setCursor(10, 10);
-  tft.print("OVERHEAD TRACKER");
+  tft.setTextDatum(lgfx::top_left);
+  tft.drawString("OVERHEAD TRACKER", 10, 10);
 
-  int sy = HDR_H + 16;
-  tft.setTextColor(C_AMBER, C_BG);
-  tft.setTextSize(2);
-  tft.setCursor(20, sy);
-  tft.print("SETUP MODE");
+  tft.setFont(&lgfx::fonts::DejaVu12);
+  tft.setTextColor(C_AMBER);
+  tft.drawString("SETUP MODE", 20, HDR_H + 16);
 
-  sy += 32;
-  tft.setTextColor(C_DIM, C_BG);
-  tft.setTextSize(1);
-  tft.setCursor(20, sy);
-  tft.print("ON YOUR PHONE:");
-  sy += 16;
-  tft.setCursor(20, sy);
-  tft.print("1. CONNECT TO WI-FI:");
-  sy += 16;
-  tft.setTextColor(C_AMBER, C_BG);
-  tft.setCursor(36, sy);
-  tft.print("OVERHEAD-SETUP");
-  sy += 20;
-  tft.setTextColor(C_DIM, C_BG);
-  tft.setCursor(20, sy);
-  tft.print("2. OPEN ANY BROWSER");
-  sy += 16;
-  tft.setCursor(36, sy);
-  tft.print("(PAGE OPENS AUTOMATICALLY)");
-  sy += 18;
-  tft.setTextColor(C_DIMMER, C_BG);
-  tft.setCursor(36, sy);
-  tft.print("OR: 192.168.4.1");
+  const char* instrLines[] = {
+    "ON YOUR PHONE:",
+    "1. CONNECT TO WI-FI:  OVERHEAD-SETUP",
+    "2. OPEN ANY BROWSER",
+    "   (PAGE OPENS AUTOMATICALLY)",
+    "   OR: 192.168.4.1",
+  };
+  tft.setFont(&lgfx::fonts::DejaVu9);
+  tft.setTextColor(C_DIM);
+  int sy = HDR_H + 48;
+  for (int i = 0; i < 5; i++) {
+    tft.drawString(instrLines[i], 20, sy);
+    sy += 18;
+  }
 
   WiFi.mode(WIFI_AP);
   WiFi.softAP("OVERHEAD-SETUP");
@@ -212,5 +201,6 @@ void startCaptivePortal() {
   while (true) {
     dnsServer.processNextRequest();
     setupServer.handleClient();
+    esp_task_wdt_reset();
   }
 }

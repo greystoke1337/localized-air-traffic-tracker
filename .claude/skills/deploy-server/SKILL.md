@@ -1,30 +1,56 @@
 ---
 name: deploy-server
 description: Deploy server.js to Railway. Use when the user says "deploy server", "push server", "update proxy", or after making changes to server/server.js.
-allowed-tools: Bash, Read
 ---
 
 # Deploy Proxy Server to Railway
 
 Deploy the proxy server to Railway hosting.
 
-## Steps
+## Platform Detection
+
+```bash
+uname -s
+```
+
+- **Darwin** → macOS flow
+- **MINGW/MSYS/CYGWIN** → Windows/Git Bash flow
+
+---
+
+## macOS Steps
 
 ### 1. Syntax check
 
 ```bash
-eval "$(/opt/homebrew/bin/brew shellenv)" && node --check /Users/maximecazaly/localized-air-traffic-tracker/server/server.js
+eval "$(/opt/homebrew/bin/brew shellenv)" && node --check server/server.js
 ```
 
-If this fails, stop and report the syntax error. Do NOT deploy broken code.
-
-### 2. Deploy via Railway CLI
+### 2. Deploy
 
 ```bash
-eval "$(/opt/homebrew/bin/brew shellenv)" && cd /Users/maximecazaly/localized-air-traffic-tracker/server && railway up
+eval "$(/opt/homebrew/bin/brew shellenv)" && cd server && railway up
 ```
 
-### 3. Wait for deployment and verify
+---
+
+## Windows Steps
+
+### 1. Syntax check
+
+```bash
+node --check server/server.js
+```
+
+### 2. Deploy
+
+```bash
+cd server && railway up
+```
+
+---
+
+## Verify (both platforms)
 
 Wait 30 seconds, then:
 
@@ -32,17 +58,7 @@ Wait 30 seconds, then:
 curl -s https://api.overheadtracker.com/status | head -c 300
 ```
 
-This confirms the proxy is up and serving requests.
-
-### 4. Check logs for errors
-
-```bash
-eval "$(/opt/homebrew/bin/brew shellenv)" && railway service logs --service overhead-tracker-proxy
-```
-
-Look for any errors or crash messages in the output.
-
-### 5. Report summary
+## Report summary
 
 Tell the user:
 - Whether the syntax check passed

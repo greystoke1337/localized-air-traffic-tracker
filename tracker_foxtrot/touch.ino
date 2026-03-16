@@ -1,104 +1,75 @@
-// ─── Touch input handling (GT911 capacitive — no calibration needed) ──
+// ─── Touch input — GT911 polled via LovyanGFX, manual hit-testing ──────────
+
+// Declared in display.ino
+extern bool          cfgConfirming;
+extern unsigned long cfgConfirmStart;
 
 void initTouch() {
   touchReady = true;
-  Serial.println("GT911 touch ready (factory calibrated).");
+  Serial.println("Touch ready (GT911 via LovyanGFX).");
 }
 
-void handleTouch(uint16_t tx, uint16_t ty) {
-  uint32_t now = millis();
-  if (now - lastTouchMs < TOUCH_DEBOUNCE_MS) return;
-  lastTouchMs = now;
+void pollTouch() {
+  // CFG confirm timeout (3 s)
+  if (cfgConfirming && millis() - cfgConfirmStart >= 3000) {
+    cfgConfirming = false;
+    drawNavBar();
+  }
 
-  // ── Nav bar buttons ──
+  lgfx::touch_point_t tp;
+  if (!tft.getTouch(&tp)) return;
+  if (millis() - lastTouchMs < TOUCH_DEBOUNCE_MS) return;
+  lastTouchMs = millis();
+
+  int tx = tp.x, ty = tp.y;
+
+  // ── Nav bar ──
   if (ty >= NAV_Y && ty < NAV_Y + NAV_H) {
-
-    // WX button
     if (tx >= WX_BTN_X1 && tx < WX_BTN_X1 + NAV_BTN_W) {
-      tft.fillRect(WX_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, C_AMBER);
-      tft.setTextColor(C_BG, C_AMBER);
-      tft.setTextSize(2);
-      tft.setCursor(WX_BTN_X1 + (NAV_BTN_W - 24) / 2, NAV_Y + 14);
-      tft.print("WX");
-      delay(100);
       if (currentScreen == SCREEN_WEATHER) {
         currentScreen = SCREEN_FLIGHT;
         if (flightCount > 0) renderFlight(flights[flightIndex]);
-        else renderMessage("NO AIRCRAFT", "IN RANGE");
+        else                 renderMessage("NO AIRCRAFT", "IN RANGE");
       } else {
         currentScreen = SCREEN_WEATHER;
         renderWeather();
       }
       return;
     }
-
-    // GEO button
     if (tx >= GEO_BTN_X1 && tx < GEO_BTN_X1 + NAV_BTN_W) {
-      tft.fillRect(GEO_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, C_AMBER);
-      tft.setTextColor(C_BG, C_AMBER);
-      tft.setTextSize(2);
-      tft.setCursor(GEO_BTN_X1 + 12, NAV_Y + 14);
-      tft.print(geoIndex == 0 ? "5km" : geoIndex == 1 ? "10km" : "20km");
-      delay(100);
+      if (isFetching) return;
       geoIndex = (geoIndex + 1) % GEO_COUNT;
       GEOFENCE_KM = GEO_PRESETS[geoIndex];
       saveGeoIndex();
-      Serial.printf("Geofence: %.0f km\n", GEOFENCE_KM);
       drawNavBar();
-      if (!isFetching) {
-        flightCount = 0;
-        flightIndex = 0;
-        fetchFlights();
-        countdown = REFRESH_SECS;
-        lastCycle  = millis();
-      }
+      flightCount = 0;
+      flightIndex = 0;
+      triggerGeoFetch = true;
       return;
     }
-
-    // CFG button (two-tap confirmation)
     if (tx >= CFG_BTN_X1 && tx < CFG_BTN_X1 + NAV_BTN_W) {
       if (isFetching) return;
-      tft.fillRect(CFG_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, C_RED);
-      tft.setTextColor(C_BG, C_RED);
-      tft.setTextSize(1);
-      tft.setCursor(CFG_BTN_X1 + 8, NAV_Y + 10);
-      tft.print("REBOOT?");
-      tft.setCursor(CFG_BTN_X1 + 4, NAV_Y + 26);
-      tft.print("TAP AGAIN");
-      uint32_t confirmDeadline = millis() + 3000;
-      bool confirmed = false;
-      while (millis() < confirmDeadline) {
-        lgfx::touch_point_t tp;
-        if (tft.getTouch(&tp)) {
-          if (tp.x >= CFG_BTN_X1 && tp.y >= NAV_Y && tp.y < NAV_Y + NAV_H) {
-            confirmed = true;
-            break;
-          } else {
-            break;
-          }
-        }
-        delay(30);
-      }
-      if (confirmed) {
-        startCaptivePortal();
-      } else {
+      if (!cfgConfirming) {
+        cfgConfirming   = true;
+        cfgConfirmStart = millis();
         drawNavBar();
+      } else {
+        cfgConfirming = false;
+        triggerPortal = true;
       }
       return;
     }
-    return;
   }
 
-  // ── Content area: tap left/right to cycle flights ──
-  if (ty >= CONTENT_Y && ty < (H - FOOT_H) &&
-      currentScreen == SCREEN_FLIGHT && flightCount > 1) {
-    if (tx < W / 2) {
-      flightIndex = (flightIndex - 1 + flightCount) % flightCount;
-    } else {
-      flightIndex = (flightIndex + 1) % flightCount;
+  // ── Content area — left/right tap to cycle flights ──
+  if (currentScreen == SCREEN_FLIGHT && flightCount > 1) {
+    int dashY = CONTENT_Y + CONTENT_H - 130;
+    if (ty >= CONTENT_Y && ty < dashY) {
+      flightIndex = (tx < W / 2)
+        ? (flightIndex - 1 + flightCount) % flightCount
+        : (flightIndex + 1) % flightCount;
+      lastCycle = millis();
+      renderFlight(flights[flightIndex]);
     }
-    lastCycle = millis();
-    renderFlight(flights[flightIndex]);
-    return;
   }
 }

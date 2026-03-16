@@ -371,6 +371,27 @@ function formatRouteString(dep, arr) {
   return depName + ' > ' + arrName;
 }
 
+function enrichRoutes(data) {
+  const unrouted = [];
+  for (const ac of (data.ac || [])) {
+    const cs = (ac.flight || '').trim();
+    if (cs && !ac.dep && !ac.arr) {
+      const hit = routeCache.get(cs);
+      if (hit && (Date.now() - hit.timestamp) < ROUTE_CACHE_MS) {
+        if (hit.dep) ac.dep = hit.dep;
+        if (hit.arr) ac.arr = hit.arr;
+      } else if (!unrouted.includes(cs)) {
+        unrouted.push(cs);
+      }
+    }
+    const dep = ac.dep || ac.orig_iata || null;
+    const arr = ac.arr || ac.dest_iata || null;
+    const routeStr = formatRouteString(dep, arr);
+    if (routeStr) ac.route = routeStr;
+  }
+  return unrouted;
+}
+
 try {
   const saved = JSON.parse(fs.readFileSync(ROUTE_CACHE_FILE, 'utf8'));
   for (const [cs, entry] of Object.entries(saved)) routeCache.set(cs, entry);
@@ -801,6 +822,7 @@ app.get('/flights', async (req, res) => {
   if (hit && (now - hit.timestamp) < CACHE_MS) {
     stats.cacheHits++;
     addLog({ type: 'HIT', client, key });
+    enrichRoutes(hit.data);
     return res.json(hit.data);
   }
 
@@ -858,23 +880,7 @@ app.get('/flights', async (req, res) => {
         });
 
         // Attach cached routes immediately, fire background lookups for misses
-        const unrouted = [];
-        for (const ac of (data.ac || [])) {
-          const cs = (ac.flight || '').trim();
-          if (cs && !ac.dep && !ac.arr) {
-            const hit = routeCache.get(cs);
-            if (hit && (Date.now() - hit.timestamp) < ROUTE_CACHE_MS) {
-              if (hit.dep) ac.dep = hit.dep;
-              if (hit.arr) ac.arr = hit.arr;
-            } else {
-              unrouted.push(cs);
-            }
-          }
-          const dep = ac.dep || ac.orig_iata || null;
-          const arr = ac.arr || ac.dest_iata || null;
-          const routeStr = formatRouteString(dep, arr);
-          if (routeStr) ac.route = routeStr;
-        }
+        const unrouted = enrichRoutes(data);
 
         // Fire-and-forget route lookups so they're cached for next request
         if (unrouted.length > 0) {
@@ -1386,7 +1392,7 @@ if (require.main === module) {
 module.exports = {
   app, cache, inFlight, routeCache, stats, requestLog,
   haversine, airlineName, airlinePrefix, airportName,
-  formatRouteString, validateCoord, escapeHtml, formatUptime,
+  formatRouteString, enrichRoutes, validateCoord, escapeHtml, formatUptime,
   windCardinal, addLog, cacheSet, routeCacheSet,
   semaphore, upstreamSem, routeSem,
   bucketCoord, bucketKey,
