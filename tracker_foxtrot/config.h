@@ -15,8 +15,9 @@
 // 6: + fetchFlights() (full live mode, no tft reinit — baseline for comparison)
 #define DIAG_STEP  0
 
-// ─── SD pin ───────────────────────────────────────────
-#define SD_CS 10  // CH422G EXIO4 — verify on hardware
+// ─── SD ──────────────────────────────────────────────
+// Real SD_CS is on CH422G EXIO4 (I2C expander), NOT a direct GPIO.
+// GPIO 10 is part of the RGB display bus (blue B7) — never use it for SD.
 
 // ─── Refresh ──────────────────────────────────────────
 #define REFRESH_SECS 15

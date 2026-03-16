@@ -354,75 +354,29 @@ void renderWeather() {
 // ─── Boot sequence ──────────────────────────────────
 void bootSequence() {
   tft.fillScreen(C_BG);
-  tft.fillRect(0, 0, W, HDR_H, C_AMBER);
-  dlbl(10, 12, FONT_SM, C_BG, "OVERHEAD TRACKER");
 
-  // Dense diagnostic rows keep DejaVu12 so all 16 lines fit
-  dlbl(14, HDR_H + 6, &lgfx::fonts::DejaVu12, C_DIM, "ADS-B AIRSPACE SURVEILLANCE  REV 5.0  FOXTROT");
-  tft.drawFastHLine(0, HDR_H + 24, W, C_DIM);
+  // Title — large, centered
+  tft.setFont(FONT_XL);
+  tft.setTextColor(C_AMBER);
+  tft.setTextDatum(lgfx::middle_center);
+  tft.drawString("OVERHEAD", W / 2, H / 2 - 50);
+  tft.drawString("TRACKER", W / 2, H / 2 + 10);
 
-  int bootY = HDR_H + 32;
-  char cpuBuf[48], heapBuf[32], flashBuf[32], psramBuf[32], sdkBuf[32];
-  char macBuf[24], proxyBuf[48], coordBuf[32], geoBuf[16], pollBuf[16];
+  // Subtitle
+  tft.setFont(FONT_SM);
+  tft.setTextColor(C_DIM);
+  tft.drawString("FOXTROT", W / 2, H / 2 + 70);
+  tft.setTextDatum(lgfx::top_left);
 
-  snprintf(cpuBuf,   sizeof(cpuBuf),   "240 MHz  DUAL CORE  ESP32-S3");
-  snprintf(heapBuf,  sizeof(heapBuf),  "%d KB FREE", (int)ESP.getFreeHeap() / 1024);
-  snprintf(flashBuf, sizeof(flashBuf), "%d KB", (int)ESP.getFlashChipSize() / 1024);
-  snprintf(psramBuf, sizeof(psramBuf), "%d KB PSRAM", (int)ESP.getPsramSize() / 1024);
-  snprintf(sdkBuf,   sizeof(sdkBuf),   "%s", ESP.getSdkVersion());
-  uint8_t mac[6]; WiFi.macAddress(mac);
-  snprintf(macBuf,   sizeof(macBuf),   "%02X:%02X:%02X:%02X:%02X:%02X",
-           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  snprintf(proxyBuf, sizeof(proxyBuf), "%s:%d", PROXY_HOST, PROXY_PORT);
-  snprintf(coordBuf, sizeof(coordBuf), "%.4f, %.4f", HOME_LAT, HOME_LON);
-  snprintf(geoBuf,   sizeof(geoBuf),   "%.0f KM RADIUS", GEOFENCE_KM);
-  snprintf(pollBuf,  sizeof(pollBuf),  "%d SEC AUTO-REFRESH", REFRESH_SECS);
-
-  struct { const char* label; const char* result; uint16_t col; } lines[] = {
-    {"CPU",            cpuBuf,                   C_GREEN },
-    {"HEAP MEMORY",    heapBuf,                  C_GREEN },
-    {"FLASH SIZE",     flashBuf,                 C_AMBER },
-    {"EXT MEMORY",     psramBuf,                 C_GREEN },
-    {"ESP-IDF SDK",    sdkBuf,                   C_DIM   },
-    {"RGB BUS",        "16-BIT PARALLEL  OK",    C_GREEN },
-    {"DISPLAY",        "ST7262 800x480 IPS",     C_GREEN },
-    {"TOUCH",          "GT911 CAPACITIVE",       C_GREEN },
-    {"WIFI MAC",       macBuf,                   C_AMBER },
-    {"WIFI MODE",      "STA  802.11 B/G/N",      C_AMBER },
-    {"SD CARD",        "SEARCHING...",           C_YELLOW},
-    {"PROXY TARGET",   proxyBuf,                 C_AMBER },
-    {"HOME COORDS",    coordBuf,                 C_AMBER },
-    {"GEOFENCE",       geoBuf,                   C_AMBER },
-    {"ADS-B PIPELINE", "DECODER READY",          C_GREEN },
-    {"POLL INTERVAL",  pollBuf,                  C_GREEN },
-  };
-
-  for (int i = 0; i < 16; i++) {
-    dlbl(14,  bootY, &lgfx::fonts::DejaVu12, C_DIMMER, lines[i].label);
-    dlbl(340, bootY, &lgfx::fonts::DejaVu12, lines[i].col, lines[i].result);
-    bootY += 20;
-    delay(30);
+  // Progress bar
+  int barX = W / 4, barY = H / 2 + 110, barW = W / 2, barH = 6;
+  tft.drawRect(barX, barY, barW, barH, C_DIMMER);
+  for (int i = 0; i <= 10; i++) {
+    tft.fillRect(barX + 1, barY + 1, (barW - 2) * i / 10, barH - 2, C_AMBER);
+    delay(40);
   }
 
-  tft.drawFastHLine(0, bootY + 4, W, C_DIM);
-  tft.fillRect(10, bootY + 10, W - 20, 30, C_GREEN);
-  tft.setFont(FONT_SM);
-  tft.setTextColor(C_BG, C_GREEN);
-  tft.setTextDatum(lgfx::middle_center);
-  tft.drawString("SYSTEM ONLINE", W / 2, bootY + 25);
-  tft.setTextDatum(lgfx::top_left);
-  delay(150);
-
-  // Blink banner
-  tft.fillRect(10, bootY + 10, W - 20, 30, C_BG);
-  delay(80);
-  tft.fillRect(10, bootY + 10, W - 20, 30, C_GREEN);
-  tft.setFont(FONT_SM);
-  tft.setTextColor(C_BG, C_GREEN);
-  tft.setTextDatum(lgfx::middle_center);
-  tft.drawString("SYSTEM ONLINE", W / 2, bootY + 25);
-  tft.setTextDatum(lgfx::top_left);
-  delay(400);
+  delay(200);
 }
 
 // ─── OTA progress ───────────────────────────────────

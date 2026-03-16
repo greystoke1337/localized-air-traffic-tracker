@@ -11,6 +11,7 @@
 */
 
 #include "lgfx_config.h"
+#include "ch422g.h"
 #include <SPI.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -124,23 +125,10 @@ static void drawTempMsg(int y, const lgfx::IFont* f, uint16_t col, const char* t
   tft.drawString(txt, 20, y);
 }
 
-// ─── Setup ────────────────────────────────────────────
-void setup() {
-  Serial.begin(115200);
-  delay(500);
-  Serial.println();
-  Serial.println("=== FOXTROT ===");
-
-  tft.init();
-  tft.setRotation(0);
-  Serial.println("LovyanGFX initialized");
-
-  bootSequence();
-
-#if DEMO_MODE
+// ─── Load demo flights (shared by DEMO_MODE and DIAG_STEP) ──
+static void loadDemoFlights() {
   strlcpy(LOCATION_NAME, "SYDNEY", sizeof(LOCATION_NAME));
   GEOFENCE_KM = 10.0f;
-
   memset(flights, 0, sizeof(flights));
   flightCount = 3;
   flightIndex = 0;
@@ -168,7 +156,38 @@ void setup() {
   strlcpy(flights[2].squawk,   "2501",   sizeof(flights[2].squawk));
   flights[2].alt = 12000; flights[2].speed = 340; flights[2].vs = -800;
   flights[2].dist = 8.1f; flights[2].status = STATUS_DESCENDING;
+}
 
+// ─── DIAG_STEP finish: render demo flights and stop ──
+static void diagFinish(int step) {
+  Serial.printf("DIAG_STEP %d complete — rendering demo flights\n", step);
+  loadDemoFlights();
+  dataSource = 0;
+  countdown  = REFRESH_SECS;
+  isFetching = false;
+  const esp_task_wdt_config_t wdt_cfg = { .timeout_ms = 30000, .idle_core_mask = 0, .trigger_panic = true };
+  esp_err_t wdtErr = esp_task_wdt_init(&wdt_cfg);
+  if (wdtErr == ESP_ERR_INVALID_STATE) esp_task_wdt_reconfigure(&wdt_cfg);
+  esp_task_wdt_add(NULL);
+  initUI();
+  renderFlight(flights[0]);
+}
+
+// ─── Setup ────────────────────────────────────────────
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Serial.println();
+  Serial.println("=== FOXTROT ===");
+
+  tft.init();
+  tft.setRotation(0);
+  Serial.println("LovyanGFX initialized");
+
+  bootSequence();
+
+#if DEMO_MODE
+  loadDemoFlights();
   dataSource = 0;
   countdown  = REFRESH_SECS;
   isFetching = false;
@@ -182,9 +201,77 @@ void setup() {
   renderFlight(flights[0]);
   lastCycle = millis();
 
+#elif DIAG_STEP
+  // Progressive hardware init for blue-tint diagnosis.
+  // Each step adds one subsystem. All steps render demo flights at the end.
+  // Compare display quality at each step to isolate the culprit.
+  Serial.printf("DIAG_STEP = %d\n", DIAG_STEP);
+
+#if DIAG_STEP >= 2
+  Serial.println("DIAG: CH422G + SPI + SD init");
+  ch422gInit();
+  ch422gSetPin(EXIO_SD_CS, false);
+  SPI.begin(12, 13, 11);
+  if (SD.begin(6, SPI)) {
+    sdAvailable = true;
+    Serial.println("DIAG: SD card ready");
+  } else {
+    Serial.println("DIAG: SD card not found");
+  }
+#endif
+
+#if DIAG_STEP >= 3
+  Serial.println("DIAG: initTouch()");
+  initTouch();
+#endif
+
+#if DIAG_STEP >= 4
+  Serial.println("DIAG: WiFi.begin() — radio init only");
+  if (!loadWiFiConfig()) {
+    Serial.println("DIAG: No WiFi config in NVS");
+  } else {
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+#if DIAG_STEP == 4
+    delay(2000);
+    WiFi.disconnect(true);
+    Serial.println("DIAG: WiFi disconnected after 2s radio init");
 #else
-  SPI.begin(12, 13, 11);  // SCK, MISO, MOSI
-  if (SD.begin(SD_CS, SPI)) {
+    // Steps 5–6: full connect
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+      delay(500);
+      attempts++;
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("DIAG: WiFi connected (%d attempts)\n", attempts);
+    } else {
+      Serial.println("DIAG: WiFi failed to connect");
+    }
+#endif
+  }
+#endif
+
+#if DIAG_STEP == 5
+  Serial.println("DIAG: Re-initializing display after WiFi");
+  tft.init();
+  tft.setRotation(0);
+  Serial.println("DIAG: Display re-init complete");
+#endif
+
+  diagFinish(DIAG_STEP);
+  lastCycle = millis();
+
+#if DIAG_STEP == 6
+  Serial.println("DIAG: fetchFlights() — full live fetch");
+  fetchFlights();
+  if (flightCount > 0) renderFlight(flights[0]);
+#endif
+
+#else
+  ch422gInit();
+  ch422gSetPin(EXIO_SD_CS, false);  // Assert real CS via expander
+  SPI.begin(12, 13, 11);  // SCK, MISO, MOSI — GPIO 10 NOT touched
+  if (SD.begin(6, SPI)) {
     sdAvailable = true;
     Serial.println("SD card ready");
     loadConfig();
@@ -383,7 +470,7 @@ void loop() {
   esp_task_wdt_reset();
   unsigned long now = millis();
 
-#if DEMO_MODE
+#if DEMO_MODE || (DIAG_STEP > 0 && DIAG_STEP < 6)
   if (flightCount > 1 && currentScreen == SCREEN_FLIGHT &&
       now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
     lastCycle = now;
