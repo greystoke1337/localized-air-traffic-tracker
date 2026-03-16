@@ -112,10 +112,11 @@ volatile bool triggerGeoFetch = false;
 // ─── Temp WiFi screen helpers (tft direct) ────────────
 static void drawTempHeader() {
   tft.fillRect(0, 0, W, HDR_H, C_AMBER);
-  tft.setFont(&lgfx::fonts::DejaVu12);
+  tft.setFont(&lgfx::fonts::DejaVu24);
   tft.setTextColor(C_BG, C_AMBER);
+  tft.setTextDatum(lgfx::middle_left);
+  tft.drawString("OVERHEAD TRACKER", 16, HDR_H / 2);
   tft.setTextDatum(lgfx::top_left);
-  tft.drawString("OVERHEAD TRACKER", 10, 10);
 }
 
 static void drawTempMsg(int y, const lgfx::IFont* f, uint16_t col, const char* txt) {
@@ -289,32 +290,33 @@ void setup() {
   // WiFi connecting screen
   tft.fillScreen(C_BG);
   drawTempHeader();
-  int yBase = HDR_H + 14;
-  drawTempMsg(yBase,      &lgfx::fonts::DejaVu12, C_AMBER, "CONNECTING TO WIFI");
+  int yBase = HDR_H + 24;
+  drawTempMsg(yBase,      &lgfx::fonts::DejaVu40, C_AMBER, "CONNECTING TO WIFI");
   char netBuf[80];
   snprintf(netBuf, sizeof(netBuf), "NETWORK: %s", WIFI_SSID);
-  drawTempMsg(yBase + 28, &lgfx::fonts::DejaVu9,  C_DIM,   netBuf);
+  drawTempMsg(yBase + 52, &lgfx::fonts::DejaVu24, C_DIM,   netBuf);
 
   // Progress bar
-  tft.drawRect(20, yBase + 56, W - 40, 8, C_DIMMER);
+  int barY = yBase + 100;
+  tft.drawRect(20, barY, W - 40, 14, C_DIMMER);
 
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 40) {
     int barW = (int)((W - 40) * (attempts + 1) / 40);
-    tft.fillRect(20, yBase + 56, barW, 8, C_AMBER);
+    tft.fillRect(20, barY, barW, 14, C_AMBER);
     char countBuf[24];
     snprintf(countBuf, sizeof(countBuf), "ATTEMPT %d / 40", attempts + 1);
-    tft.fillRect(20, yBase + 80, W - 40, 14, C_BG);
-    drawTempMsg(yBase + 80, &lgfx::fonts::DejaVu9, C_DIMMER, countBuf);
+    tft.fillRect(20, barY + 24, W - 40, 24, C_BG);
+    drawTempMsg(barY + 24, &lgfx::fonts::DejaVu18, C_DIMMER, countBuf);
     delay(500);
     attempts++;
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    tft.fillRect(20, yBase + 56, W - 40, 8, C_GREEN);
-    tft.fillRect(20, yBase + 80, W - 40, 14, C_BG);
-    drawTempMsg(yBase + 80, &lgfx::fonts::DejaVu9, C_GREEN, "CONNECTED");
+    tft.fillRect(20, barY, W - 40, 14, C_GREEN);
+    tft.fillRect(20, barY + 24, W - 40, 24, C_BG);
+    drawTempMsg(barY + 24, &lgfx::fonts::DejaVu18, C_GREEN, "CONNECTED");
     delay(500);
 
     configTime(0, 0, "pool.ntp.org");
@@ -326,14 +328,14 @@ void setup() {
       drawOtaProgress(progress * 100 / total);
     });
     ArduinoOTA.onEnd([]() {
-      tft.setFont(&lgfx::fonts::DejaVu12);
+      tft.setFont(&lgfx::fonts::DejaVu40);
       tft.setTextColor(C_GREEN);
       tft.setTextDatum(lgfx::middle_center);
       tft.drawString("Restarting...", W / 2, H / 2);
       tft.setTextDatum(lgfx::top_left);
     });
     ArduinoOTA.onError([](ota_error_t error) {
-      tft.setFont(&lgfx::fonts::DejaVu12);
+      tft.setFont(&lgfx::fonts::DejaVu40);
       tft.setTextColor(C_RED);
       tft.setTextDatum(lgfx::middle_center);
       char buf[32]; snprintf(buf, sizeof(buf), "OTA Error [%u]", error);
@@ -374,30 +376,30 @@ void setup() {
 
     tft.fillScreen(C_BG);
     drawTempHeader();
-    drawTempMsg(HDR_H + 24, &lgfx::fonts::DejaVu12, C_RED,   "WIFI FAILED");
+    drawTempMsg(HDR_H + 24, &lgfx::fonts::DejaVu40, C_RED,   "WIFI FAILED");
     char ssidBuf[80];
     snprintf(ssidBuf, sizeof(ssidBuf), "Could not connect to: %s", WIFI_SSID);
-    drawTempMsg(HDR_H + 56, &lgfx::fonts::DejaVu9, C_DIM, ssidBuf);
+    drawTempMsg(HDR_H + 76, &lgfx::fonts::DejaVu24, C_DIM, ssidBuf);
 
-    int btnY = HDR_H + 90;
+    int btnY = HDR_H + 130;
     // RECONFIGURE button
-    tft.fillRect(20, btnY, 320, 56, C_DIMMER);
-    tft.setFont(&lgfx::fonts::DejaVu9);
+    tft.fillRect(20, btnY, 340, 70, C_DIMMER);
+    tft.setFont(&lgfx::fonts::DejaVu24);
     tft.setTextColor(C_AMBER, C_DIMMER);
     tft.setTextDatum(lgfx::middle_center);
-    tft.drawString("RECONFIGURE", 20 + 160, btnY + 28);
+    tft.drawString("RECONFIGURE", 20 + 170, btnY + 35);
     // RETRY button
-    tft.fillRect(460, btnY, 320, 56, C_DIMMER);
-    tft.drawString("RETRY", 460 + 160, btnY + 28);
+    tft.fillRect(440, btnY, 340, 70, C_DIMMER);
+    tft.drawString("RETRY", 440 + 170, btnY + 35);
     tft.setTextDatum(lgfx::top_left);
 
     while (true) {
       lgfx::touch_point_t tp;
       if (tft.getTouch(&tp) && millis() - lastTouchMs > TOUCH_DEBOUNCE_MS) {
         lastTouchMs = millis();
-        if (tp.y >= btnY && tp.y < btnY + 56) {
-          if (tp.x >= 20 && tp.x < 340)  wifiReconfigFlag = true;
-          if (tp.x >= 460 && tp.x < 780) wifiRetryFlag    = true;
+        if (tp.y >= btnY && tp.y < btnY + 70) {
+          if (tp.x >= 20 && tp.x < 360)  wifiReconfigFlag = true;
+          if (tp.x >= 440 && tp.x < 780) wifiRetryFlag    = true;
         }
       }
       if (wifiRetryFlag) ESP.restart();
@@ -414,8 +416,8 @@ void setup() {
   if (needsGeocode && HOME_QUERY[0]) {
     tft.fillScreen(C_BG);
     drawTempHeader();
-    drawTempMsg(HDR_H + 24, &lgfx::fonts::DejaVu12, C_AMBER, "LOCATING...");
-    drawTempMsg(HDR_H + 56, &lgfx::fonts::DejaVu9,  C_DIM,   HOME_QUERY);
+    drawTempMsg(HDR_H + 24, &lgfx::fonts::DejaVu40, C_AMBER, "LOCATING...");
+    drawTempMsg(HDR_H + 76, &lgfx::fonts::DejaVu24, C_DIM,   HOME_QUERY);
 
     if (!geocodeLocation(HOME_QUERY)) {
       static volatile bool geoReconfigFlag = false;
@@ -423,25 +425,25 @@ void setup() {
 
       tft.fillScreen(C_BG);
       drawTempHeader();
-      drawTempMsg(HDR_H + 24, &lgfx::fonts::DejaVu12, C_RED, "LOCATION NOT FOUND");
+      drawTempMsg(HDR_H + 24, &lgfx::fonts::DejaVu40, C_RED, "LOCATION NOT FOUND");
 
-      int btnY2 = HDR_H + 100;
-      tft.fillRect(20,  btnY2, 320, 56, C_DIMMER);
-      tft.fillRect(460, btnY2, 320, 56, C_DIMMER);
-      tft.setFont(&lgfx::fonts::DejaVu9);
+      int btnY2 = HDR_H + 130;
+      tft.fillRect(20,  btnY2, 340, 70, C_DIMMER);
+      tft.fillRect(440, btnY2, 340, 70, C_DIMMER);
+      tft.setFont(&lgfx::fonts::DejaVu24);
       tft.setTextColor(C_AMBER);
       tft.setTextDatum(lgfx::middle_center);
-      tft.drawString("RECONFIGURE", 20 + 160,  btnY2 + 28);
-      tft.drawString("CONTINUE",    460 + 160, btnY2 + 28);
+      tft.drawString("RECONFIGURE", 20 + 170,  btnY2 + 35);
+      tft.drawString("CONTINUE",    440 + 170, btnY2 + 35);
       tft.setTextDatum(lgfx::top_left);
 
       while (true) {
         lgfx::touch_point_t tp;
         if (tft.getTouch(&tp) && millis() - lastTouchMs > TOUCH_DEBOUNCE_MS) {
           lastTouchMs = millis();
-          if (tp.y >= btnY2 && tp.y < btnY2 + 56) {
-            if (tp.x >= 20  && tp.x < 340) geoReconfigFlag = true;
-            if (tp.x >= 460 && tp.x < 780) geoContinueFlag = true;
+          if (tp.y >= btnY2 && tp.y < btnY2 + 70) {
+            if (tp.x >= 20  && tp.x < 360) geoReconfigFlag = true;
+            if (tp.x >= 440 && tp.x < 780) geoContinueFlag = true;
           }
         }
         if (geoContinueFlag) break;
@@ -457,8 +459,10 @@ void setup() {
 
   initUI();
   fetchFlights();
-  if (flightCount == 0) renderMessage("CLEAR SKIES", "NO AC IN RANGE");
-  else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
+  if (flightCount == 0) {
+    if (wxReady) renderWeather();
+    else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
+  } else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
 
   countdown = REFRESH_SECS;
   fetchWeather();
@@ -499,8 +503,10 @@ void loop() {
   if (triggerGeoFetch) {
     triggerGeoFetch = false;
     fetchFlights();
-    if (flightCount == 0) renderMessage("CLEAR SKIES", "NO AC IN RANGE");
-    else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
+    if (flightCount == 0) {
+      if (wxReady) renderWeather();
+      else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
+    } else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
     countdown = REFRESH_SECS;
     lastCycle  = millis();
   }
@@ -539,8 +545,10 @@ void loop() {
 
     if (countdown <= 0) {
       fetchFlights();
-      if (flightCount == 0) renderMessage("CLEAR SKIES", "NO AC IN RANGE");
-      else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
+      if (flightCount == 0) {
+        if (wxReady) renderWeather();
+        else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
+      } else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
       countdown = REFRESH_SECS;
       lastCycle  = millis();
     }
@@ -549,6 +557,7 @@ void loop() {
       bool wxOk = fetchWeather();
       wxCountdown = wxOk ? WX_REFRESH_SECS : 60;
       if (currentScreen == SCREEN_WEATHER) renderWeather();
+      else if (wxOk && flightCount == 0) renderWeather();
     }
   }
 

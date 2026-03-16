@@ -148,18 +148,18 @@ void renderFlight(const Flight& f) {
     yOff = 44;
   }
 
-  // Callsign (DejaVu40, ~42px)
-  dlbl(20, CY + yOff + 8, FONT_LG, C_AMBER, f.callsign[0] ? f.callsign : "SEARCHING");
+  // Callsign (DejaVu56, ~60px)
+  dlbl(20, CY + yOff + 8, FONT_XL, C_AMBER, f.callsign[0] ? f.callsign : "SEARCHING");
 
   // Airline (DejaVu24, ~26px)
-  int alY = CY + yOff + 58;
+  int alY = CY + yOff + 72;
   if (!hasEmergency) {
     const Airline* al = getAirline(f.callsign);
     dlbl(20, alY, FONT_SM, al ? al->color : C_DIM, al ? al->name : "UNKNOWN AIRLINE");
   }
 
   // Divider + type/reg
-  int divY = alY + (hasEmergency ? 6 : 32);
+  int divY = alY + (hasEmergency ? 6 : 34);
   tft.drawFastHLine(14, divY, W - 28, C_DIMMER);
 
   const char* acCat = getAircraftCategory(f.type);
@@ -177,58 +177,58 @@ void renderFlight(const Flight& f) {
   else
     dlbl(20, routeDivY + 30, FONT_SM, C_DIMMER, "NO ROUTE DATA");
 
-  // Dashboard
-  int dashY  = CY + CONTENT_H - 130;
+  // Dashboard (compact 90px)
+  int dashY  = CY + CONTENT_H - 90;
   int COL_W  = W / 4;
   tft.drawFastHLine(0, dashY, W, C_DIM);
 
   uint16_t sCol = statusColor(f.status);
-  tft.fillRect(0, dashY + 1, 5, 129, sCol);
+  tft.fillRect(0, dashY + 1, 5, 89, sCol);
 
-  dlbl(10, dashY + 6, FONT_XS, C_DIM, "PHASE");
-  dlbl(14, dashY + 28, FONT_SM, sCol, statusLabel(f.status));
+  dlbl(10, dashY + 4, FONT_XS, C_DIM, "PHASE");
+  dlbl(14, dashY + 22, FONT_SM, sCol, statusLabel(f.status));
 
   const char* sqLabel = strcmp(f.squawk,"7700")==0 ? "MAYDAY" :
                         strcmp(f.squawk,"7600")==0 ? "NORDO"  :
                         strcmp(f.squawk,"7500")==0 ? "HIJACK" : f.squawk;
   char sqBuf[24];
   snprintf(sqBuf, sizeof(sqBuf), "SQK %s", sqLabel);
-  dlbl(14, dashY + 62, FONT_XS, hasEmergency ? C_RED : C_DIM, sqBuf);
+  dlbl(14, dashY + 48, FONT_XS, hasEmergency ? C_RED : C_DIM, sqBuf);
 
-  tft.fillRect(COL_W, dashY + 6, 1, 118, C_DIMMER);
-  dlbl(COL_W + 10, dashY + 6, FONT_XS, C_DIM, "ALT");
+  tft.fillRect(COL_W, dashY + 4, 1, 78, C_DIMMER);
+  dlbl(COL_W + 10, dashY + 4, FONT_XS, C_DIM, "ALT");
   char altBuf[20];
   formatAlt(f.alt, altBuf, sizeof(altBuf));
-  dlbl(COL_W + 14, dashY + 28, FONT_SM, C_AMBER, altBuf);
+  dlbl(COL_W + 14, dashY + 22, FONT_SM, C_AMBER, altBuf);
   if (abs(f.vs) >= 50) {
     char vsBuf[16];
     if (f.vs > 0) snprintf(vsBuf, sizeof(vsBuf), "+%d", f.vs);
     else          snprintf(vsBuf, sizeof(vsBuf), "%d",  f.vs);
-    dlbl(COL_W + 14, dashY + 62, FONT_XS, f.vs > 0 ? C_GREEN : C_RED, vsBuf);
+    dlbl(COL_W + 14, dashY + 48, FONT_XS, f.vs > 0 ? C_GREEN : C_RED, vsBuf);
   } else {
-    dlbl(COL_W + 14, dashY + 62, FONT_XS, C_AMBER, "LEVEL");
+    dlbl(COL_W + 14, dashY + 48, FONT_XS, C_AMBER, "LEVEL");
   }
 
-  tft.fillRect(COL_W * 2, dashY + 6, 1, 118, C_DIMMER);
-  dlbl(COL_W * 2 + 10, dashY + 6, FONT_XS, C_DIM, "SPD");
+  tft.fillRect(COL_W * 2, dashY + 4, 1, 78, C_DIMMER);
+  dlbl(COL_W * 2 + 10, dashY + 4, FONT_XS, C_DIM, "SPD");
   if (f.speed > 0) {
     char spdBuf[16];
     snprintf(spdBuf, sizeof(spdBuf), "%d KT", f.speed);
-    dlbl(COL_W * 2 + 14, dashY + 28, FONT_SM, C_AMBER, spdBuf);
+    dlbl(COL_W * 2 + 14, dashY + 22, FONT_SM, C_AMBER, spdBuf);
   } else {
-    dlbl(COL_W * 2 + 14, dashY + 28, FONT_SM, C_AMBER, "---");
+    dlbl(COL_W * 2 + 14, dashY + 22, FONT_SM, C_AMBER, "---");
   }
 
-  tft.fillRect(COL_W * 3, dashY + 6, 1, 118, C_DIMMER);
-  dlbl(COL_W * 3 + 10, dashY + 6, FONT_XS, C_DIM, "DIST");
+  tft.fillRect(COL_W * 3, dashY + 4, 1, 78, C_DIMMER);
+  dlbl(COL_W * 3 + 10, dashY + 4, FONT_XS, C_DIM, "DIST");
   uint16_t dCol = distanceColor(f.dist, GEOFENCE_KM);
   if (f.dist > 0) {
     char distBuf[16];
     if (f.dist >= 10.0f) snprintf(distBuf, sizeof(distBuf), "%.0f KM", f.dist);
     else                 snprintf(distBuf, sizeof(distBuf), "%.1f KM", f.dist);
-    dlbl(COL_W * 3 + 14, dashY + 28, FONT_SM, dCol, distBuf);
+    dlbl(COL_W * 3 + 14, dashY + 22, FONT_SM, dCol, distBuf);
   } else {
-    dlbl(COL_W * 3 + 14, dashY + 28, FONT_SM, C_AMBER, "---");
+    dlbl(COL_W * 3 + 14, dashY + 22, FONT_SM, C_AMBER, "---");
   }
 
   drawStatusBar();

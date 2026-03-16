@@ -159,14 +159,15 @@ static void handleSetupSave() {
 void startCaptivePortal() {
   tft.fillScreen(C_BG);
   tft.fillRect(0, 0, W, HDR_H, C_AMBER);
-  tft.setFont(&lgfx::fonts::DejaVu12);
+  tft.setFont(&lgfx::fonts::DejaVu24);
   tft.setTextColor(C_BG, C_AMBER);
+  tft.setTextDatum(lgfx::middle_left);
+  tft.drawString("OVERHEAD TRACKER", 16, HDR_H / 2);
   tft.setTextDatum(lgfx::top_left);
-  tft.drawString("OVERHEAD TRACKER", 10, 10);
 
-  tft.setFont(&lgfx::fonts::DejaVu12);
+  tft.setFont(&lgfx::fonts::DejaVu40);
   tft.setTextColor(C_AMBER);
-  tft.drawString("SETUP MODE", 20, HDR_H + 16);
+  tft.drawString("SETUP MODE", 20, HDR_H + 24);
 
   const char* instrLines[] = {
     "ON YOUR PHONE:",
@@ -175,12 +176,12 @@ void startCaptivePortal() {
     "   (PAGE OPENS AUTOMATICALLY)",
     "   OR: 192.168.4.1",
   };
-  tft.setFont(&lgfx::fonts::DejaVu9);
+  tft.setFont(&lgfx::fonts::DejaVu18);
   tft.setTextColor(C_DIM);
-  int sy = HDR_H + 48;
+  int sy = HDR_H + 80;
   for (int i = 0; i < 5; i++) {
     tft.drawString(instrLines[i], 20, sy);
-    sy += 18;
+    sy += 28;
   }
 
   WiFi.mode(WIFI_AP);
