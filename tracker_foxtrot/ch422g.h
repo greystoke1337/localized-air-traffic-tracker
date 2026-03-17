@@ -45,3 +45,10 @@ static void ch422gResetTouch() {
   ch422gSetPin(EXIO_TP_RST, true);
   delay(50);
 }
+
+static void ch422gResetLCD() {
+  ch422gSetPin(EXIO_LCD_RST, false);
+  delay(10);
+  ch422gSetPin(EXIO_LCD_RST, true);
+  delay(120);  // ST7262 needs ~120 ms after reset before tft.init()
+}

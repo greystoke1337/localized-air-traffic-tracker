@@ -183,6 +183,7 @@ void setup() {
 
   ch422gInit();
   ch422gResetTouch();
+  ch422gResetLCD();
 
   tft.init();
   tft.setRotation(0);
