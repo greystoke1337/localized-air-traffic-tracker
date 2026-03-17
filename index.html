@@ -1686,11 +1686,22 @@
     function go(n) { if (flights.length) { flightIndex = (n + flights.length) % flights.length; render(flights[flightIndex]); } }
     function next() { go(flightIndex + 1); }
     function prev() { go(flightIndex - 1); }
-    function manualRefresh() { secs = 15; fetchFlights(); }
+    let lastManualRefresh = 0;
+    function manualRefresh() {
+      const now = Date.now();
+      if (now - lastManualRefresh < 5000) return;
+      lastManualRefresh = now;
+      consecutiveFailures = 0;
+      secs = BASE_INTERVAL;
+      fetchFlights();
+    }
 
 
     // ── Auto-refresh timer ───────────────────────────────────────────
-    let secs = 15;
+    let consecutiveFailures = 0;
+    const BASE_INTERVAL = 15;
+    const MAX_INTERVAL = 120;
+    let secs = BASE_INTERVAL;
     setInterval(() => {
       if (!locationLat && !locationLon) return;
       secs--;
@@ -1943,13 +1954,15 @@
         checkEmergencySquawks();
         render(flights[flightIndex]);
         updateStats(flights);
+        consecutiveFailures = 0;
       } catch(e) {
         if (e.name === 'AbortError') return;
+        consecutiveFailures++;
         console.error(e);
         document.getElementById('error').textContent = 'ERR: ' + e.message;
         document.getElementById('info').textContent  = '^ SEE ABOVE';
       } finally {
-        secs = 15;
+        secs = Math.min(BASE_INTERVAL * Math.pow(2, consecutiveFailures), MAX_INTERVAL);
         document.getElementById('info-wrap').classList.remove('fetching');
         document.getElementById('fetch-dot').classList.remove('active');
       }
