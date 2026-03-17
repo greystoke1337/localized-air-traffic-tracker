@@ -564,12 +564,16 @@ app.use((req, res, next) => {
   const origin = req.get('origin');
   if (ALLOWED_ORIGINS.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Max-Age', '86400');
   }
   // Non-browser requests (ESP32, curl, display.py) have no Origin header
   // and are not subject to CORS — no Access-Control header needed
   res.header('X-Frame-Options', 'DENY');
   res.header('X-Content-Type-Options', 'nosniff');
   res.header('Strict-Transport-Security', 'max-age=31536000');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
