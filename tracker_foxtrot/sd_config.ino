@@ -21,7 +21,7 @@ void loadConfig() {
     key.trim(); val.trim();
     if      (key == "lat")       HOME_LAT     = val.toFloat();
     else if (key == "lon")       HOME_LON     = val.toFloat();
-    else if (key == "geofence")  GEOFENCE_KM  = val.toFloat();
+    else if (key == "geofence")  GEOFENCE_MI  = val.toFloat();
     else if (key == "alt_floor") ALT_FLOOR_FT = val.toInt();
     else if (key == "name") {
       val.toUpperCase();

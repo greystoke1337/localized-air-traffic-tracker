@@ -50,10 +50,10 @@ void checkSerialCmd() {
 
   } else if (input == "config") {
     Serial.printf("{\"cmd\":\"config\",\"home_lat\":%.4f,\"home_lon\":%.4f,"
-                  "\"geofence_km\":%.1f,\"alt_floor_ft\":%d,\"location\":\"%s\","
+                  "\"geofence_mi\":%.1f,\"alt_floor_ft\":%d,\"location\":\"%s\","
                   "\"proxy_host\":\"%s\",\"proxy_port\":%d,"
                   "\"refresh_secs\":%d,\"cycle_secs\":%d}\n",
-      HOME_LAT, HOME_LON, GEOFENCE_KM, ALT_FLOOR_FT, LOCATION_NAME,
+      HOME_LAT, HOME_LON, GEOFENCE_MI, ALT_FLOOR_FT, LOCATION_NAME,
       PROXY_HOST, PROXY_PORT, REFRESH_SECS, CYCLE_SECS);
 
   } else if (input == "diag") {

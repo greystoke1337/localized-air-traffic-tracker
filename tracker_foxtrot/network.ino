@@ -191,8 +191,8 @@ int fetchAndParseDirectAPI() {
   auto commitAircraft = [&]() {
     if (newCount >= 20) return;
     if (ac_alt < ALT_FLOOR_FT || ac_lat == 0.0f) return;
-    float dist = haversineKm(HOME_LAT, HOME_LON, ac_lat, ac_lon);
-    if (dist > GEOFENCE_KM) return;
+    float dist = haversineMi(HOME_LAT, HOME_LON, ac_lat, ac_lon);
+    if (dist > GEOFENCE_MI) return;
     Flight& f = newFlights[newCount];
     memset(&f, 0, sizeof(Flight));
     strlcpy(f.callsign, ac_callsign, sizeof(f.callsign));
@@ -290,8 +290,8 @@ int extractFlights(DynamicJsonDocument& doc) {
     float lon = a["lon"] | 0.0f;
     int   alt = a["alt_baro"] | 0;
     if (alt < ALT_FLOOR_FT || lat == 0.0f) continue;
-    float dist = haversineKm(HOME_LAT, HOME_LON, lat, lon);
-    if (dist > GEOFENCE_KM) continue;
+    float dist = haversineMi(HOME_LAT, HOME_LON, lat, lon);
+    if (dist > GEOFENCE_MI) continue;
 
     Flight& f = newFlights[newCount];
     memset(&f, 0, sizeof(Flight));

@@ -5,7 +5,7 @@
 #define FONT_SM  (&lgfx::fonts::DejaVu24)
 #define FONT_MD  (&lgfx::fonts::DejaVu40)
 #define FONT_LG  (&lgfx::fonts::DejaVu40)
-#define FONT_XL  (&lgfx::fonts::DejaVu56)
+#define FONT_XL  (&lgfx::fonts::FreeMonoBold24pt7b)
 
 // ─── CFG button confirmation state ──────────────────
 static bool          cfgConfirming    = false;
@@ -59,7 +59,7 @@ void drawNavBar() {
   uint16_t wxTxt = (currentScreen == SCREEN_WEATHER) ? C_BG     : C_AMBER;
   drawBtn(WX_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, wxBg, FONT_SM, wxTxt, "WX");
 
-  const char* geoLabels[] = {"5km", "10km", "20km"};
+  const char* geoLabels[] = {"5mi", "10mi", "20mi"};
   drawBtn(GEO_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, C_DIMMER, FONT_SM, C_AMBER, geoLabels[geoIndex]);
 
   if (!cfgConfirming) {
@@ -221,11 +221,10 @@ void renderFlight(const Flight& f) {
 
   tft.fillRect(COL_W * 3, dashY + 4, 1, 78, C_DIMMER);
   dlbl(COL_W * 3 + 10, dashY + 4, FONT_XS, C_DIM, "DIST");
-  uint16_t dCol = distanceColor(f.dist, GEOFENCE_KM);
+  uint16_t dCol = distanceColor(f.dist, GEOFENCE_MI);
   if (f.dist > 0) {
     char distBuf[16];
-    if (f.dist >= 10.0f) snprintf(distBuf, sizeof(distBuf), "%.0f KM", f.dist);
-    else                 snprintf(distBuf, sizeof(distBuf), "%.1f KM", f.dist);
+    snprintf(distBuf, sizeof(distBuf), "%.1f MI", f.dist);
     dlbl(COL_W * 3 + 14, dashY + 22, FONT_SM, dCol, distBuf);
   } else {
     dlbl(COL_W * 3 + 14, dashY + 22, FONT_SM, C_AMBER, "---");
@@ -289,9 +288,9 @@ void renderWeather() {
   dlbl(lx, cy, FONT_XS, C_DIM, "TEMPERATURE");
   dlbl(rx, cy, FONT_XS, C_DIM, "FEELS LIKE");
   cy += 22;
-  snprintf(buf, sizeof(buf), "%.1f C", wxData.temp);
+  snprintf(buf, sizeof(buf), "%.0f F", wxData.temp * 9.0f / 5.0f + 32.0f);
   dlbl(lx, cy, FONT_SM, C_AMBER, buf);
-  snprintf(buf, sizeof(buf), "%.1f C", wxData.feels_like);
+  snprintf(buf, sizeof(buf), "%.0f F", wxData.feels_like * 9.0f / 5.0f + 32.0f);
   dlbl(rx, cy, FONT_SM, C_AMBER, buf);
   cy += 30;
   tft.drawFastHLine(14, cy, W - 28, C_DIMMER);
@@ -309,7 +308,7 @@ void renderWeather() {
   cy += 22;
   snprintf(buf, sizeof(buf), "%d%%", wxData.humidity);
   dlbl(lx, cy, FONT_SM, C_AMBER, buf);
-  snprintf(buf, sizeof(buf), "%.0f %s", wxData.wind_speed, wxData.wind_cardinal);
+  snprintf(buf, sizeof(buf), "%.0f MPH %s", wxData.wind_speed * 0.621371f, wxData.wind_cardinal);
   dlbl(rx, cy, FONT_SM, C_AMBER, buf);
   cy += 30;
   tft.drawFastHLine(14, cy, W - 28, C_DIMMER);
@@ -336,14 +335,14 @@ void renderWeather() {
     if (diff > 0 && diff < 24 * 60) {
       int dh = diff / 60, dm = diff % 60;
       if (dh > 0)
-        snprintf(buf, sizeof(buf), "%s %dh%02dm %.1fm",
-          wxData.tide_is_high ? "HI" : "LO", dh, dm, wxData.tide_height);
+        snprintf(buf, sizeof(buf), "%s %dh%02dm %.1fft",
+          wxData.tide_is_high ? "HI" : "LO", dh, dm, wxData.tide_height * 3.28084f);
       else
-        snprintf(buf, sizeof(buf), "%s %dm %.1fm",
-          wxData.tide_is_high ? "HI" : "LO", dm, wxData.tide_height);
+        snprintf(buf, sizeof(buf), "%s %dm %.1fft",
+          wxData.tide_is_high ? "HI" : "LO", dm, wxData.tide_height * 3.28084f);
     } else {
-      snprintf(buf, sizeof(buf), "%s %s %.1fm",
-        wxData.tide_is_high ? "HI" : "LO", wxData.tide_time, wxData.tide_height);
+      snprintf(buf, sizeof(buf), "%s %s %.1fft",
+        wxData.tide_is_high ? "HI" : "LO", wxData.tide_time, wxData.tide_height * 3.28084f);
     }
     dlbl(rx, cy, FONT_SM, tideCol, buf);
   }

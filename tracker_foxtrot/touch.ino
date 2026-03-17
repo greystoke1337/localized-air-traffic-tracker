@@ -39,7 +39,7 @@ void pollTouch() {
     if (tx >= GEO_BTN_X1 && tx < GEO_BTN_X1 + NAV_BTN_W) {
       if (isFetching) return;
       geoIndex = (geoIndex + 1) % GEO_COUNT;
-      GEOFENCE_KM = GEO_PRESETS[geoIndex];
+      GEOFENCE_MI = GEO_PRESETS[geoIndex];
       saveGeoIndex();
       drawNavBar();
       flightCount = 0;

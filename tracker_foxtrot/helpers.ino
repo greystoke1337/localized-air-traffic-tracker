@@ -46,7 +46,7 @@ const char* getAircraftCategory(const char* code) {
 
 FlightStatus deriveStatus(int alt, int vs, float dist) {
   if (alt <= 0) return STATUS_UNKNOWN;
-  if (dist < 2.0f && alt < 8000) return STATUS_OVERHEAD;
+  if (dist < 1.2f && alt < 8000) return STATUS_OVERHEAD;
   if (alt < 3000) {
     if (vs < -200) return STATUS_LANDING;
     if (vs >  200) return STATUS_TAKING_OFF;
@@ -72,8 +72,8 @@ static const StatusInfo STATUS_TABLE[] = {
 const char* statusLabel(FlightStatus s) { return STATUS_TABLE[s].label; }
 uint16_t    statusColor(FlightStatus s) { return STATUS_TABLE[s].color; }
 
-uint16_t distanceColor(float dist_km, float max_km) {
-  float t = dist_km / max_km;
+uint16_t distanceColor(float dist_mi, float max_mi) {
+  float t = dist_mi / max_mi;
   if (t < 0.0f) t = 0.0f;
   if (t > 1.0f) t = 1.0f;
   uint8_t r = (uint8_t)(t * 100.0f);
@@ -82,8 +82,8 @@ uint16_t distanceColor(float dist_km, float max_km) {
   return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
 }
 
-float haversineKm(float lat1, float lon1, float lat2, float lon2) {
-  const float R = 6371.0f;
+float haversineMi(float lat1, float lon1, float lat2, float lon2) {
+  const float R = 3958.8f;
   float dLat = (lat2 - lat1) * M_PI / 180.0f;
   float dLon = (lon2 - lon1) * M_PI / 180.0f;
   float a = sinf(dLat/2)*sinf(dLat/2) +
@@ -92,7 +92,7 @@ float haversineKm(float lat1, float lon1, float lat2, float lon2) {
 }
 
 int apiRadiusNm() {
-  return (int)ceilf((GEOFENCE_KM / 1.852f) * 4.0f);
+  return (int)ceilf((GEOFENCE_MI / 1.15078f) * 4.0f);
 }
 
 void formatAlt(int alt, char* buf, int len) {

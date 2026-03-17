@@ -47,7 +47,7 @@ const int   PROXY_PORT = 443;
 // ─── Location ─────────────────────────────────────────
 float HOME_LAT    = 0.0f;
 float HOME_LON    = 0.0f;
-float GEOFENCE_KM = 10.0f;
+float GEOFENCE_MI = 10.0f;
 int   ALT_FLOOR_FT = 500;
 char  LOCATION_NAME[32] = "NOT SET";
 char  HOME_QUERY[128]   = "";
@@ -129,7 +129,7 @@ static void drawTempMsg(int y, const lgfx::IFont* f, uint16_t col, const char* t
 // ─── Load demo flights (shared by DEMO_MODE and DIAG_STEP) ──
 static void loadDemoFlights() {
   strlcpy(LOCATION_NAME, "SYDNEY", sizeof(LOCATION_NAME));
-  GEOFENCE_KM = 10.0f;
+  GEOFENCE_MI = 10.0f;
   memset(flights, 0, sizeof(flights));
   flightCount = 3;
   flightIndex = 0;
@@ -140,7 +140,7 @@ static void loadDemoFlights() {
   strlcpy(flights[0].route,    "SYD > LHR", sizeof(flights[0].route));
   strlcpy(flights[0].squawk,   "1234",   sizeof(flights[0].squawk));
   flights[0].alt = 35000; flights[0].speed = 485; flights[0].vs = 0;
-  flights[0].dist = 3.2f; flights[0].status = STATUS_CRUISING;
+  flights[0].dist = 2.0f; flights[0].status = STATUS_CRUISING;
 
   strlcpy(flights[1].callsign, "VOZ456", sizeof(flights[1].callsign));
   strlcpy(flights[1].reg,      "VH-YIA", sizeof(flights[1].reg));
@@ -148,7 +148,7 @@ static void loadDemoFlights() {
   strlcpy(flights[1].route,    "MEL > SYD", sizeof(flights[1].route));
   strlcpy(flights[1].squawk,   "3417",   sizeof(flights[1].squawk));
   flights[1].alt = 2800; flights[1].speed = 160; flights[1].vs = -1200;
-  flights[1].dist = 5.7f; flights[1].status = STATUS_LANDING;
+  flights[1].dist = 3.5f; flights[1].status = STATUS_LANDING;
 
   strlcpy(flights[2].callsign, "JST621", sizeof(flights[2].callsign));
   strlcpy(flights[2].reg,      "VH-VKA", sizeof(flights[2].reg));
@@ -156,7 +156,7 @@ static void loadDemoFlights() {
   strlcpy(flights[2].route,    "BNE > SYD", sizeof(flights[2].route));
   strlcpy(flights[2].squawk,   "2501",   sizeof(flights[2].squawk));
   flights[2].alt = 12000; flights[2].speed = 340; flights[2].vs = -800;
-  flights[2].dist = 8.1f; flights[2].status = STATUS_DESCENDING;
+  flights[2].dist = 5.0f; flights[2].status = STATUS_DESCENDING;
 }
 
 // ─── DIAG_STEP finish: render demo flights and stop ──

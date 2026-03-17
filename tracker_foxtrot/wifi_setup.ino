@@ -21,7 +21,7 @@ bool loadWiFiConfig() {
   }
   geoIndex = p.getInt("gfence_idx", 1);
   if (geoIndex < 0 || geoIndex >= GEO_COUNT) geoIndex = 1;
-  GEOFENCE_KM = GEO_PRESETS[geoIndex];
+  GEOFENCE_MI = GEO_PRESETS[geoIndex];
   p.end();
   return true;
 }
