@@ -5,9 +5,6 @@ tft-preview-*.png
 .claude/settings.local.json
 tracker_live_fnk0103s/secrets.h
 tracker_foxtrot/secrets.h
-tracker_foxtrot_step2/secrets.h
-tracker_foxtrot_step3/secrets.h
-tracker_foxtrot_step4/secrets.h
 *.zip
 *.jpg
 *.png
