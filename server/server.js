@@ -18,7 +18,7 @@ const rateLimit  = require('express-rate-limit');
 
 const app      = express();
 const PORT     = parseInt(process.env.PORT, 10) || 3000;
-const CACHE_MS         = 30000;
+const CACHE_MS         = 45000;
 const ROUTE_CACHE_MS   = 30 * 60 * 1000;
 const ROUTE_CACHE_FILE = process.env.ROUTE_CACHE_FILE || __dirname + '/route-cache.json';
 const MAX_CACHE_ENTRIES    = 500;   // evict oldest when exceeded
@@ -435,22 +435,7 @@ async function lookupRoute(callsign) {
     const hit2 = routeCache.get(cs);
     if (hit2 && (Date.now() - hit2.timestamp) < ROUTE_CACHE_MS) return hit2;
 
-    // Source 1: OpenSky Network
-    try {
-      const url = `https://opensky-network.org/api/routes?callsign=${encodeURIComponent(cs)}`;
-      const r   = await fetch(url, { signal: AbortSignal.timeout(4000) });
-      if (r.ok) {
-        const d = await r.json();
-        if (Array.isArray(d.route) && d.route.length >= 2) {
-          const entry = { dep: d.route[0], arr: d.route[d.route.length - 1], timestamp: Date.now() };
-          routeCacheSet(cs, entry);
-          routeCacheDirty = true;
-          return entry;
-        }
-      }
-    } catch { /* timeout or network error */ }
-
-    // Source 2: adsbdb.com fallback
+    // adsbdb.com route lookup
     try {
       const url = `https://api.adsbdb.com/v0/callsign/${encodeURIComponent(cs)}`;
       const r   = await fetch(url, { signal: AbortSignal.timeout(5000) });
@@ -833,7 +818,6 @@ app.get('/flights', async (req, res) => {
         const allApis = [
           { name: 'adsb.lol',        url: `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}` },
           { name: 'adsb.fi',         url: `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}` },
-          { name: 'airplanes.live',  url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}` },
           { name: 'adsb-one',        url: `https://api.adsb-one.com/v2/point/${lat}/${lon}/${radius}` },
         ];
 
