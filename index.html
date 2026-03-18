@@ -1696,10 +1696,10 @@
     function next() { go(flightIndex + 1); }
     function prev() { go(flightIndex - 1); }
 
-    let autoCycleTimer = setInterval(() => { if (flights.length > 1) next(); }, 10000);
+    let autoCycleTimer = setInterval(() => { if (flights.length > 1) next(); }, 15000);
     function resetAutoCycle() {
       clearInterval(autoCycleTimer);
-      autoCycleTimer = setInterval(() => { if (flights.length > 1) next(); }, 10000);
+      autoCycleTimer = setInterval(() => { if (flights.length > 1) next(); }, 15000);
     }
     let lastManualRefresh = 0;
     function manualRefresh() {
