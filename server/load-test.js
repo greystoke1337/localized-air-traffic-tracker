@@ -25,6 +25,7 @@ function randomLocations(n) {
     { name: 'Berlin',    lat: 52.52, lon: 13.40,   weight: 5 },
     { name: 'Singapore', lat: 1.35,  lon: 103.82,  weight: 5 },
     { name: 'LA',        lat: 33.94, lon: -118.41, weight: 5 },
+    { name: 'Chicago',  lat: 41.90, lon: -87.68,  weight: 25 },
   ];
   // 80% of clients are in clusters, 20% random worldwide
   const clusterShare = Math.floor(n * 0.8);

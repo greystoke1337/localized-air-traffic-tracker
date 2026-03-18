@@ -20,6 +20,11 @@ const Airline AIRLINES[] = {
   {"ALK","SRILANKAN",AL_GREEN},  {"ANG","AIR NIUGINI",AL_TEAL}, {"CAL","CHINA AIR",AL_ROSE},
   {"KLM","KLM",AL_SKY},          {"MXD","BATIK AIR",AL_RED},    {"UTY","ALLIANCE",AL_TEAL},
   {"AMX","AEROMEXICO",AL_SKY},   {"FRE","FLYPELICAN",C_AMBER},
+  // US domestic — Chicago O'Hare + Midway
+  {"SWA","SOUTHWEST",AL_ORANGE}, {"NKS","SPIRIT",AL_GOLD},      {"FFT","FRONTIER",AL_GREEN},
+  {"JBU","JETBLUE",AL_SKY},     {"ENY","ENVOY",AL_SKY},         {"SKW","SKYWEST",AL_SKY},
+  {"RPA","REPUBLIC",AL_SKY},    {"EDV","ENDEAVOR",AL_RED},       {"GJS","GOJET",AL_SKY},
+  {"FDX","FEDEX",AL_VIOLET},    {"UPS","UPS",AL_ORANGE},         {"GTI","ATLAS AIR",AL_SKY},
 };
 const int AIRLINE_COUNT = sizeof(AIRLINES) / sizeof(AIRLINES[0]);
 

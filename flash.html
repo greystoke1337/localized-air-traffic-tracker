@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overhead Tracker — Firmware Update</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: #0C1117;
+      color: #c0c0c0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 15px;
+      margin: 0;
+      padding: 24px 16px;
+      min-height: 100dvh;
+    }
+
+    /* CRT scanline overlay */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px, transparent 3px,
+        rgba(0,0,0,0.02) 3px, rgba(0,0,0,0.02) 4px
+      );
+      pointer-events: none;
+      z-index: 99;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: #ffaa00;
+      font-size: 1.3rem;
+      letter-spacing: 0.12em;
+      margin: 0 0 6px 0;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      color: #999;
+      font-size: 0.92rem;
+      letter-spacing: 0.08em;
+      margin-bottom: 24px;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #444;
+      margin: 20px 0;
+    }
+
+    /* Browser warning */
+    .browser-warning {
+      background: rgba(255, 68, 68, 0.12);
+      border: 1px solid #ff4444;
+      color: #ff6666;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      font-size: 1.0rem;
+      line-height: 1.5;
+      display: none;
+    }
+
+    /* Chip info bar */
+    .chip-info {
+      background: #111;
+      border: 1px solid #444;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      display: none;
+      font-size: 1.0rem;
+      line-height: 1.6;
+    }
+    .chip-info .label {
+      color: #999;
+      margin-right: 8px;
+    }
+    .chip-info .value {
+      color: #ffaa00;
+    }
+
+    /* Instructions */
+    .instructions {
+      margin-bottom: 24px;
+    }
+    .instructions h2 {
+      color: #ffaa00;
+      font-size: 0.9rem;
+      letter-spacing: 0.1em;
+      margin: 0 0 14px 0;
+      font-weight: 600;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 16px;
+      font-size: 1.0rem;
+      line-height: 1.6;
+    }
+    .step-num {
+      color: #ffaa00;
+      font-weight: 700;
+      min-width: 28px;
+      flex-shrink: 0;
+    }
+    .step-text {
+      color: #c0c0c0;
+    }
+    .step-text a {
+      color: #ffaa00;
+      text-decoration: none;
+    }
+    .step-text a:hover {
+      text-decoration: underline;
+    }
+
+    /* Action area */
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    button {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      padding: 12px 24px;
+      border: 2px solid #ffaa00;
+      background: transparent;
+      color: #ffaa00;
+      cursor: pointer;
+      min-height: 48px;
+      min-width: 48px;
+      transition: background 0.15s, color 0.15s;
+    }
+    button:hover:not(:disabled) {
+      background: #ffaa00;
+      color: #0C1117;
+    }
+    button:disabled {
+      border-color: #555;
+      color: #777;
+      cursor: not-allowed;
+    }
+    button:focus-visible {
+      outline: 2px solid #ffaa00;
+      outline-offset: 2px;
+    }
+
+    /* File input wrapper */
+    .file-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .file-label {
+      font-size: 1.0rem;
+      color: #999;
+    }
+    input[type="file"] {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.95rem;
+      color: #c0c0c0;
+      max-width: 100%;
+    }
+    input[type="file"]::file-selector-button {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      padding: 8px 16px;
+      border: 1px solid #777;
+      background: #1a1a1a;
+      color: #c0c0c0;
+      cursor: pointer;
+      margin-right: 12px;
+    }
+    input[type="file"]::file-selector-button:hover {
+      background: #2a2a2a;
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      margin-bottom: 20px;
+      display: none;
+    }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+    }
+    .progress-header .label { color: #999; }
+    .progress-header .pct { color: #ffaa00; font-weight: 700; }
+    .progress-bar {
+      width: 100%;
+      height: 16px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #ffaa00;
+      transition: width 0.2s;
+    }
+
+    /* Console log */
+    .console-wrap {
+      margin-top: 20px;
+    }
+    .console-wrap h2 {
+      color: #999;
+      font-size: 0.92rem;
+      letter-spacing: 0.1em;
+      margin: 0 0 8px 0;
+      font-weight: 600;
+    }
+    .console {
+      background: #0a0a0a;
+      border: 1px solid #333;
+      padding: 12px;
+      height: 260px;
+      overflow-y: auto;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      color: #44ff44;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .console .err { color: #ff4444; }
+    .console .warn { color: #ffaa00; }
+    .console .info { color: #4488ff; }
+    .console .dim { color: #888; }
+
+    /* Status indicator */
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+      vertical-align: middle;
+      background: #666;
+    }
+    .status-dot.connected { background: #44ff44; }
+    .status-dot.error { background: #ff4444; }
+    .status-dot.flashing { background: #ffaa00; animation: blink 0.6s infinite; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Disconnect button */
+    .btn-disconnect {
+      border-color: #777;
+      color: #888;
+      font-size: 0.8rem;
+      padding: 8px 16px;
+      min-height: 40px;
+    }
+    .btn-disconnect:hover:not(:disabled) {
+      background: #333;
+      color: #c0c0c0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>OVERHEAD TRACKER // FIRMWARE UPDATE</h1>
+    <div class="subtitle">BROWSER-BASED ESP32-S3 FLASHER VIA WEB SERIAL</div>
+
+    <div class="browser-warning" id="browserWarning">
+      Web Serial API is not supported in this browser. This tool requires
+      <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> version 89+.
+      Please open this page in Chrome.
+    </div>
+
+    <hr>
+
+    <div class="instructions">
+      <h2>INSTRUCTIONS</h2>
+      <div class="step">
+        <span class="step-num">1.</span>
+        <span class="step-text">Download the latest firmware <code>.bin</code> from
+          <a href="https://github.com/greystoke1337/localized-air-traffic-tracker/releases" target="_blank" rel="noopener">GitHub Releases</a></span>
+      </div>
+      <div class="step">
+        <span class="step-num">2.</span>
+        <span class="step-text">Connect the device via USB-C</span>
+      </div>
+      <div class="step">
+        <span class="step-num">3.</span>
+        <span class="step-text">Click <strong>CONNECT</strong>, select the COM port in the browser dialog</span>
+      </div>
+      <div class="step">
+        <span class="step-num">4.</span>
+        <span class="step-text">Select the <code>.bin</code> file and click <strong>FLASH</strong></span>
+      </div>
+      <div class="step">
+        <span class="step-num">5.</span>
+        <span class="step-text">Wait for completion &mdash; the device will reboot automatically</span>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- Connection -->
+    <div class="actions">
+      <button id="btnConnect" onclick="doConnect()">
+        <span class="status-dot" id="statusDot"></span><span id="btnConnectLabel">CONNECT</span>
+      </button>
+      <button id="btnDisconnect" class="btn-disconnect" onclick="doDisconnect()" disabled>
+        DISCONNECT
+      </button>
+    </div>
+
+    <!-- Chip info -->
+    <div class="chip-info" id="chipInfo">
+      <div><span class="label">CHIP:</span><span class="value" id="chipType">--</span></div>
+      <div><span class="label">MAC:</span><span class="value" id="chipMac">--</span></div>
+    </div>
+
+    <!-- File selection -->
+    <div class="file-row">
+      <label class="file-label">FIRMWARE:</label>
+      <input type="file" id="fileInput" accept=".bin" disabled>
+    </div>
+
+    <!-- Flash button -->
+    <div class="actions">
+      <button id="btnFlash" onclick="doFlash()" disabled>FLASH FIRMWARE</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-header">
+        <span class="label">FLASH PROGRESS</span>
+        <span class="pct" id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- Console -->
+    <div class="console-wrap">
+      <h2>CONSOLE LOG</h2>
+      <div class="console" id="console"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { ESPLoader, Transport } from 'https://unpkg.com/esptool-js@0.5.4/lib/index.js';
+
+    let device = null;
+    let transport = null;
+    let esploader = null;
+    let chip = null;
+    let connected = false;
+
+    const BAUD_RATE = 921600;
+    const FLASH_OFFSET = 0x0;
+
+    const conEl = document.getElementById('console');
+    const btnConnect = document.getElementById('btnConnect');
+    const btnConnectLabel = document.getElementById('btnConnectLabel');
+    const btnDisconnect = document.getElementById('btnDisconnect');
+    const btnFlash = document.getElementById('btnFlash');
+    const fileInput = document.getElementById('fileInput');
+    const chipInfoEl = document.getElementById('chipInfo');
+    const chipTypeEl = document.getElementById('chipType');
+    const chipMacEl = document.getElementById('chipMac');
+    const statusDot = document.getElementById('statusDot');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressFill = document.getElementById('progressFill');
+    const progressPct = document.getElementById('progressPct');
+    const browserWarning = document.getElementById('browserWarning');
+
+    // Check Web Serial support
+    if (!('serial' in navigator)) {
+      browserWarning.style.display = 'block';
+      btnConnect.disabled = true;
+      logErr('Web Serial API not available. Use Chrome or Edge 89+.');
+    }
+
+    function logMsg(text, cls) {
+      const span = document.createElement('span');
+      if (cls) span.className = cls;
+      span.textContent = text + '\n';
+      conEl.appendChild(span);
+      conEl.scrollTop = conEl.scrollHeight;
+    }
+    function logInfo(t)  { logMsg(t, 'info'); }
+    function logWarn(t)  { logMsg(t, 'warn'); }
+    function logErr(t)   { logMsg(t, 'err'); }
+    function logDim(t)   { logMsg(t, 'dim'); }
+    function logOk(t)    { logMsg(t); }
+
+    const espLoaderTerminal = {
+      clean()          { conEl.textContent = ''; },
+      writeLine(data)  { logDim(data); },
+      write(data)      { /* suppress noisy byte-level output */ },
+    };
+
+    function setButtonState(label, dotClass) {
+      statusDot.className = 'status-dot' + (dotClass ? ' ' + dotClass : '');
+      btnConnectLabel.textContent = label;
+    }
+
+    function setConnected(state) {
+      connected = state;
+      btnConnect.disabled = state;
+      btnDisconnect.disabled = !state;
+      fileInput.disabled = !state;
+      setButtonState(state ? 'CONNECTED' : 'CONNECT', state ? 'connected' : '');
+      updateFlashButton();
+    }
+
+    function updateFlashButton() {
+      btnFlash.disabled = !(connected && fileInput.files && fileInput.files.length > 0);
+    }
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) {
+        logInfo('File selected: ' + fileInput.files[0].name + ' (' + formatBytes(fileInput.files[0].size) + ')');
+      }
+      updateFlashButton();
+    });
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(2) + ' MB';
+    }
+
+    async function doConnect() {
+      if (connected) return;
+      try {
+        logInfo('Requesting serial port...');
+        device = await navigator.serial.requestPort({});
+        logInfo('Port selected. Opening connection...');
+
+        transport = new Transport(device, true);
+
+        esploader = new ESPLoader({
+          transport: transport,
+          baudrate: BAUD_RATE,
+          terminal: espLoaderTerminal,
+          debugLogging: false,
+        });
+
+        logInfo('Connecting to ESP32 (baud ' + BAUD_RATE + ')...');
+        chip = await esploader.main();
+        logOk('Connected to: ' + chip);
+
+        chipTypeEl.textContent = chip;
+        chipInfoEl.style.display = 'block';
+
+        // Read MAC address
+        try {
+          const mac = await esploader.readMac();
+          const macStr = mac.toString();
+          chipMacEl.textContent = macStr;
+          logInfo('MAC address: ' + macStr);
+        } catch (e) {
+          chipMacEl.textContent = '(unavailable)';
+          logWarn('Could not read MAC address');
+        }
+
+        setConnected(true);
+        logOk('Ready to flash. Select a .bin file.');
+
+      } catch (err) {
+        logErr('Connection failed: ' + err.message);
+        setButtonState('CONNECT', 'error');
+        setTimeout(() => {
+          if (!connected) setButtonState('CONNECT', '');
+        }, 3000);
+        cleanup();
+      }
+    }
+
+    async function doDisconnect() {
+      if (!connected) return;
+      try {
+        logInfo('Disconnecting...');
+        await cleanup();
+        logInfo('Disconnected.');
+      } catch (err) {
+        logErr('Disconnect error: ' + err.message);
+      }
+      setConnected(false);
+      chipInfoEl.style.display = 'none';
+    }
+
+    async function cleanup() {
+      try {
+        if (transport) await transport.disconnect();
+      } catch (e) { /* ignore */ }
+      transport = null;
+      esploader = null;
+      chip = null;
+    }
+
+    async function doFlash() {
+      if (!connected || !esploader) {
+        logErr('Not connected. Click CONNECT first.');
+        return;
+      }
+      if (!fileInput.files || fileInput.files.length === 0) {
+        logErr('No firmware file selected.');
+        return;
+      }
+
+      const file = fileInput.files[0];
+      if (!file.name.toLowerCase().endsWith('.bin')) {
+        logWarn('Warning: file does not have .bin extension.');
+      }
+
+      btnFlash.disabled = true;
+      btnDisconnect.disabled = true;
+      fileInput.disabled = true;
+      setButtonState('FLASHING...', 'flashing');
+
+      progressWrap.style.display = 'block';
+      progressFill.style.width = '0%';
+      progressFill.style.background = '#ffaa00';
+      progressPct.textContent = '0%';
+
+      try {
+        logInfo('Reading firmware file: ' + file.name + ' (' + formatBytes(file.size) + ')');
+        const contents = await readFileAsStr(file);
+
+        logInfo('Erasing flash and writing firmware at offset 0x' + FLASH_OFFSET.toString(16) + '...');
+        logWarn('Do NOT unplug the device during flashing.');
+
+        const fileArray = [{ data: contents, address: FLASH_OFFSET }];
+
+        await esploader.writeFlash({
+          fileArray: fileArray,
+          flashSize: 'keep',
+          flashMode: 'keep',
+          flashFreq: 'keep',
+          eraseAll: false,
+          compress: true,
+          reportProgress: (fileIndex, written, total) => {
+            const pct = Math.round((written / total) * 100);
+            progressFill.style.width = pct + '%';
+            progressPct.textContent = pct + '%';
+          },
+          calculateMD5Hash: (image) => {
+            return '';
+          },
+        });
+
+        progressFill.style.width = '100%';
+        progressPct.textContent = '100%';
+
+        logOk('');
+        logOk('========================================');
+        logOk('  FLASH COMPLETE - FIRMWARE WRITTEN OK');
+        logOk('========================================');
+        logOk('');
+
+        logInfo('Resetting device...');
+        try {
+          await esploader.hardReset();
+        } catch (e) {
+          logDim('Hard reset sent. Device should reboot now.');
+        }
+
+        logOk('Device will reboot with new firmware.');
+
+      } catch (err) {
+        logErr('Flash failed: ' + err.message);
+        progressFill.style.background = '#ff4444';
+      } finally {
+        btnDisconnect.disabled = false;
+        fileInput.disabled = false;
+        setButtonState('CONNECTED', 'connected');
+        updateFlashButton();
+      }
+    }
+
+    function readFileAsStr(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsBinaryString(file);
+      });
+    }
+
+    // Expose to onclick handlers
+    window.doConnect = doConnect;
+    window.doDisconnect = doDisconnect;
+    window.doFlash = doFlash;
+  </script>
+</body>
+</html>

@@ -332,21 +332,37 @@ void fetchFlights() {
   bool fromCache = false;
 
   if (wifiOk()) {
-    int maxBlock = ESP.getMaxAllocHeap();
-    if (maxBlock >= 8000) {
-      String payload = fetchFromProxy();
-      if (!payload.isEmpty()) {
-        writeCache(payload);
-        esp_task_wdt_reset();
-        newCount = parsePayload(payload);
-        payload = String();
-        dataSource = 0;
+    bool skipProxy = (proxyFailCount >= PROXY_FAIL_THRESHOLD && millis() < proxySkipUntilMs);
+    if (skipProxy) {
+      logTs("FETCH", "Proxy skipped (failed %dx, direct-first for %lu ms)",
+            proxyFailCount, proxySkipUntilMs - millis());
+    }
+
+    if (!skipProxy) {
+      int maxBlock = ESP.getMaxAllocHeap();
+      if (maxBlock >= 8000) {
+        String payload = fetchFromProxy();
+        if (!payload.isEmpty()) {
+          writeCache(payload);
+          esp_task_wdt_reset();
+          newCount = parsePayload(payload);
+          payload = String();
+          dataSource = 0;
+          proxyFailCount = 0;
+        } else {
+          proxyFailCount++;
+          if (proxyFailCount >= PROXY_FAIL_THRESHOLD) {
+            proxySkipUntilMs = millis() + PROXY_SKIP_MS;
+            logTs("FETCH", "Proxy failed %dx, switching to direct-first for %d s",
+                  proxyFailCount, PROXY_SKIP_MS / 1000);
+          }
+        }
+      } else {
+        logTs("FETCH", "WARN: heap fragmented (maxblk %d), skipping proxy", maxBlock);
       }
-    } else {
-      logTs("FETCH", "WARN: heap fragmented (maxblk %d), skipping proxy", maxBlock);
     }
     if (newCount < 0) {
-      logTs("FETCH", "Proxy empty/skipped, trying direct API...");
+      logTs("FETCH", "Trying direct API...");
       esp_task_wdt_reset();
       newCount = fetchAndParseDirectAPI();
       if (newCount >= 0) dataSource = 1;
@@ -450,4 +466,31 @@ bool fetchWeather() {
   }
   Serial.println("[WX] All attempts failed");
   return false;
+}
+
+// ─── Device heartbeat ────────────────────────────────
+void sendHeartbeat() {
+  if (!wifiOk()) return;
+  WiFiClientSecure tcp;
+  tcp.setInsecure();
+  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
+    Serial.println("[HB] Connect failed");
+    return;
+  }
+  char body[256];
+  snprintf(body, sizeof(body),
+    "{\"device\":\"foxtrot\",\"fw\":\"%s\",\"heap\":%d,\"uptime\":%lu,"
+    "\"rssi\":%d,\"flights\":%d,\"source\":%d,\"location\":\"%s\"}",
+    FW_VERSION, ESP.getFreeHeap(), millis() / 1000,
+    WiFi.RSSI(), flightCount, dataSource, LOCATION_NAME);
+  HTTPClient http;
+  char url[96];
+  snprintf(url, sizeof(url), "https://%s/device/heartbeat", PROXY_HOST);
+  http.begin(tcp, url);
+  http.setTimeout(5000);
+  http.addHeader("Content-Type", "application/json");
+  int code = http.POST(body);
+  http.end();
+  if (code == 200) Serial.println("[HB] OK");
+  else Serial.printf("[HB] HTTP %d\n", code);
 }

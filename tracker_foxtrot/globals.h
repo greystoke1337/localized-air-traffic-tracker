@@ -70,6 +70,10 @@ extern time_t        cacheTimestamp;
 extern int           directApiFailCount;
 extern unsigned long directApiNextRetryMs;
 
+// ─── Proxy failover ─────────────────────────────────
+extern int           proxyFailCount;
+extern unsigned long proxySkipUntilMs;
+
 // ─── Session log ──────────────────────────────────────
 extern char loggedCallsigns[MAX_LOGGED][12];
 extern int  loggedCount;
@@ -123,6 +127,7 @@ int parsePayload(String& payload);
 int extractFlights(DynamicJsonDocument& doc);
 void fetchFlights();
 bool fetchWeather();
+void sendHeartbeat();
 
 // touch.ino
 void initTouch();

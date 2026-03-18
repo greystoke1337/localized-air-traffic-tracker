@@ -361,10 +361,13 @@ void bootSequence() {
   tft.drawString("OVERHEAD", W / 2, H / 2 - 50);
   tft.drawString("TRACKER", W / 2, H / 2 + 10);
 
-  // Subtitle
+  // Subtitle + version
   tft.setFont(FONT_SM);
   tft.setTextColor(C_DIM);
-  tft.drawString("FOXTROT", W / 2, H / 2 + 70);
+  tft.drawString("FOXTROT", W / 2, H / 2 + 60);
+  tft.setFont(FONT_XS);
+  tft.setTextColor(C_DIMMER);
+  tft.drawString("v" FW_VERSION, W / 2, H / 2 + 85);
   tft.setTextDatum(lgfx::top_left);
 
   // Progress bar

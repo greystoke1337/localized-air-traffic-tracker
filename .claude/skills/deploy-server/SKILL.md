@@ -28,8 +28,10 @@ eval "$(/opt/homebrew/bin/brew shellenv)" && node --check server/server.js
 
 ### 2. Deploy
 
+IMPORTANT: Deploy from the **project root**, not from `server/`. Railway's service has root directory set to `server` — running `railway up` from inside `server/` causes "Could not find root directory: server" because it looks for `server/server/`.
+
 ```bash
-eval "$(/opt/homebrew/bin/brew shellenv)" && cd server && railway up
+eval "$(/opt/homebrew/bin/brew shellenv)" && cd /path/to/localized-air-traffic-tracker && railway up --service overhead-tracker-proxy --project 362c10c6-31f9-4e49-96d8-ec86501fa3f0 --environment production
 ```
 
 ---
@@ -44,8 +46,10 @@ node --check server/server.js
 
 ### 2. Deploy
 
+IMPORTANT: Deploy from the **project root**, not from `server/`. Railway's service has root directory set to `server` — running `railway up` from inside `server/` causes "Could not find root directory: server" because it looks for `server/server/`.
+
 ```bash
-cd server && railway up
+cd c:/Users/maxim/localized-air-traffic-tracker && railway up --service overhead-tracker-proxy --project 362c10c6-31f9-4e49-96d8-ec86501fa3f0 --environment production
 ```
 
 ---

@@ -1,5 +1,8 @@
 #pragma once
 
+// ─── Firmware version ────────────────────────────────
+#define FW_VERSION "1.0.0"
+
 // ─── Feature flags ───────────────────────────────────
 #define HAS_TOUCH  1
 #define HAS_SD     1
@@ -71,6 +74,10 @@
 // ─── Direct API robustness ────────────────────────────
 #define DIRECT_API_MIN_HEAP  40000
 #define DIRECT_API_TIMEOUT   8000
+
+// ─── Proxy failover ─────────────────────────────────
+#define PROXY_FAIL_THRESHOLD  3
+#define PROXY_SKIP_MS         300000
 
 // ─── Session log ──────────────────────────────────────
 #define MAX_LOGGED   200

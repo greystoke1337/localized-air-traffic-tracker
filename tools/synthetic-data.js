@@ -12,7 +12,7 @@
 const DEG = Math.PI / 180;
 
 // ── Airlines & Aircraft ──────────────────────────────────────────────
-const AIRLINES = [
+const AIRLINES_SYDNEY = [
   { prefix: 'QFA', reg: 'VH-OQ', types: ['A388','B789','A332'], country: 'AU' },
   { prefix: 'VOZ', reg: 'VH-YI', types: ['B738','B73H','A320'], country: 'AU' },
   { prefix: 'JST', reg: 'VH-VK', types: ['A320','A321','A20N'], country: 'AU' },
@@ -30,7 +30,25 @@ const AIRLINES = [
   { prefix: 'EZY', reg: 'G-EZB', types: ['A320','A20N','A319'], country: 'GB' },
 ];
 
-const AIRPORTS = [
+const AIRLINES_CHICAGO = [
+  { prefix: 'UAL', reg: 'N375', types: ['B738','B739','B789','A320','B77W','B39M'], country: 'US' },
+  { prefix: 'AAL', reg: 'N178', types: ['A321','B738','B77W','A21N'], country: 'US' },
+  { prefix: 'SWA', reg: 'N832', types: ['B738','B38M','B37M'], country: 'US' },
+  { prefix: 'DAL', reg: 'N501', types: ['A321','B763','A359','A21N'], country: 'US' },
+  { prefix: 'NKS', reg: 'N650', types: ['A320','A21N','A20N'], country: 'US' },
+  { prefix: 'FFT', reg: 'N341', types: ['A320','A21N','A20N'], country: 'US' },
+  { prefix: 'JBU', reg: 'N603', types: ['A320','A321','E190'], country: 'US' },
+  { prefix: 'SKW', reg: 'N117', types: ['E175','CRJ7','CRJ9'], country: 'US' },
+  { prefix: 'ENY', reg: 'N225', types: ['E175','E170','CRJ7'], country: 'US' },
+  { prefix: 'RPA', reg: 'N401', types: ['E175','E170'], country: 'US' },
+  { prefix: 'ASA', reg: 'N461', types: ['B739','B38M','A321'], country: 'US' },
+  { prefix: 'DLH', reg: 'D-AIM', types: ['A388','A359','B748'], country: 'DE' },
+  { prefix: 'BAW', reg: 'G-XLE', types: ['B789','A35K','B77W'], country: 'GB' },
+  { prefix: 'ANA', reg: 'JA88', types: ['B789','B77W'], country: 'JP' },
+  { prefix: 'FDX', reg: 'N68', types: ['B763','B77L','A306'], country: 'US' },
+];
+
+const AIRPORTS_SYDNEY = [
   { icao: 'YSSY', iata: 'SYD' }, { icao: 'YMML', iata: 'MEL' },
   { icao: 'YBBN', iata: 'BNE' }, { icao: 'EGLL', iata: 'LHR' },
   { icao: 'KJFK', iata: 'JFK' }, { icao: 'KLAX', iata: 'LAX' },
@@ -40,6 +58,25 @@ const AIRPORTS = [
   { icao: 'LEMD', iata: 'MAD' }, { icao: 'LIRF', iata: 'FCO' },
   { icao: 'NZAA', iata: 'AKL' },
 ];
+
+const AIRPORTS_CHICAGO = [
+  { icao: 'KORD', iata: 'ORD' }, { icao: 'KMDW', iata: 'MDW' },
+  { icao: 'KLAX', iata: 'LAX' }, { icao: 'KJFK', iata: 'JFK' },
+  { icao: 'KSFO', iata: 'SFO' }, { icao: 'KATL', iata: 'ATL' },
+  { icao: 'KDFW', iata: 'DFW' }, { icao: 'KMIA', iata: 'MIA' },
+  { icao: 'KDEN', iata: 'DEN' }, { icao: 'KLAS', iata: 'LAS' },
+  { icao: 'KBOS', iata: 'BOS' }, { icao: 'KMSP', iata: 'MSP' },
+  { icao: 'KDTW', iata: 'DTW' }, { icao: 'EGLL', iata: 'LHR' },
+  { icao: 'RJTT', iata: 'HND' }, { icao: 'EDDF', iata: 'FRA' },
+];
+
+const CITIES = {
+  sydney:  { lat: -33.8688, lon: 151.2093, airlines: AIRLINES_SYDNEY, airports: AIRPORTS_SYDNEY },
+  chicago: { lat: 41.9028, lon: -87.6773, airlines: AIRLINES_CHICAGO, airports: AIRPORTS_CHICAGO },
+};
+
+let AIRLINES = AIRLINES_SYDNEY;
+let AIRPORTS = AIRPORTS_SYDNEY;
 
 const CATEGORIES = ['A1', 'A2', 'A3', 'A4', 'A5'];
 
@@ -206,6 +243,20 @@ const SCENARIOS = {
     desc: 'Mixed bag — 6 flights across different phases',
     phases: ['takeoff', 'climbing', 'cruising', 'descending', 'approach', 'landing']
   },
+  chicago_busy: {
+    desc: 'Chicago busy — 12 flights, O\'Hare + Midway mix',
+    phases: ['takeoff', 'climbing', 'climbing', 'cruising', 'cruising', 'cruising',
+             'descending', 'descending', 'approach', 'approach', 'landing', 'overhead'],
+    city: 'chicago'
+  },
+  chicago_rush: {
+    desc: 'Chicago approach rush — 18 flights, heavy arrivals',
+    phases: ['takeoff', 'climbing', 'climbing', 'cruising', 'cruising', 'cruising', 'cruising',
+             'descending', 'descending', 'descending',
+             'approach', 'approach', 'approach', 'approach',
+             'landing', 'landing', 'landing', 'overhead'],
+    city: 'chicago'
+  },
 };
 
 // ── Weather generator ────────────────────────────────────────────────
@@ -253,8 +304,13 @@ function generateWeather() {
 }
 
 // ── Main generator ───────────────────────────────────────────────────
-function generate(lat, lon, scenario) {
+function generate(lat, lon, scenario, city) {
   const sc = SCENARIOS[scenario] || SCENARIOS.busy;
+  const cityKey = sc.city || city || null;
+  if (cityKey && CITIES[cityKey]) {
+    AIRLINES = CITIES[cityKey].airlines;
+    AIRPORTS = CITIES[cityKey].airports;
+  }
   const flights = sc.phases.map((phase, i) => makeFlight(lat, lon, phase, i));
   return {
     flights: { ac: flights, total: flights.length, now: Date.now() / 1000 },
@@ -277,9 +333,11 @@ if (require.main === module) {
 
   let lat = -33.8688, lon = 151.2093; // default: Sydney
   let scenario = 'busy';
+  let city = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--scenario' && args[i + 1]) { scenario = args[++i]; continue; }
+    if (args[i] === '--city' && args[i + 1]) { city = args[++i].toLowerCase(); continue; }
     const n = parseFloat(args[i]);
     if (!isNaN(n)) {
       if (lat === -33.8688 && i === 0) lat = n;
@@ -287,7 +345,12 @@ if (require.main === module) {
     }
   }
 
-  const data = generate(lat, lon, scenario);
+  if (city && CITIES[city]) {
+    lat = CITIES[city].lat;
+    lon = CITIES[city].lon;
+  }
+
+  const data = generate(lat, lon, scenario, city);
   console.log(JSON.stringify(data, null, 2));
 }
 

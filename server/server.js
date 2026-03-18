@@ -946,6 +946,26 @@ app.get('/peak', (req, res) => {
   });
 });
 
+// ── Device heartbeat ────────────────────────────────────────────────
+const deviceHeartbeats = new Map();
+
+app.post('/device/heartbeat', express.json(), (req, res) => {
+  const { device, fw, heap, uptime, rssi, flights, source, location } = req.body || {};
+  if (!device) return res.status(400).json({ error: 'missing device' });
+  deviceHeartbeats.set(device, {
+    fw, heap, uptime, rssi, flights, source, location,
+    ts: Date.now(), ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+  });
+  res.json({ ok: true });
+});
+
+app.get('/device/:name/status', (req, res) => {
+  const hb = deviceHeartbeats.get(req.params.name);
+  if (!hb) return res.json({ online: false, message: 'no heartbeat received' });
+  const ageSec = Math.round((Date.now() - hb.ts) / 1000);
+  res.json({ online: ageSec < 600, ageSec, ...hb });
+});
+
 // ── Weather endpoint (used by ESP32 + web app) ────────────────────────
 const WEATHER_CACHE_MS = 10 * 60 * 1000;
 

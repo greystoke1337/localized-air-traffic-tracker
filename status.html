@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overhead Tracker — Project Status</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: #0C1117;
+      color: #c0c0c0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 15px;
+      margin: 0;
+      padding: 24px 16px;
+      min-height: 100dvh;
+    }
+
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px, transparent 3px,
+        rgba(0,0,0,0.02) 3px, rgba(0,0,0,0.02) 4px
+      );
+      pointer-events: none;
+      z-index: 99;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: #ffaa00;
+      font-size: 1.3rem;
+      letter-spacing: 0.12em;
+      margin: 0 0 6px 0;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      color: #999;
+      font-size: 0.92rem;
+      letter-spacing: 0.08em;
+      margin-bottom: 28px;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #444;
+      margin: 24px 0;
+    }
+
+    h2 {
+      color: #ffaa00;
+      font-size: 0.9rem;
+      letter-spacing: 0.1em;
+      margin: 0 0 18px 0;
+      font-weight: 600;
+    }
+
+    /* ── Timeline ── */
+
+    .timeline {
+      position: relative;
+      padding-left: 28px;
+      margin-bottom: 8px;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 4px;
+      bottom: 4px;
+      width: 2px;
+      background: #ffaa00;
+      opacity: 0.35;
+    }
+
+    .tl-item {
+      position: relative;
+      padding: 0 0 24px 0;
+      line-height: 1.5;
+    }
+
+    .tl-item:last-child { padding-bottom: 0; }
+
+    .tl-dot {
+      position: absolute;
+      left: -28px;
+      top: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid #ffaa00;
+      background: #0C1117;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tl-item.done .tl-dot {
+      background: #ffaa00;
+    }
+
+    .tl-item.done .tl-dot::after {
+      content: '';
+      display: block;
+      width: 5px;
+      height: 9px;
+      border: solid #0C1117;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+      margin-top: -2px;
+    }
+
+    .tl-item.pending .tl-label {
+      color: #999;
+    }
+
+    .tl-label {
+      font-size: 1.0rem;
+      color: #c0c0c0;
+    }
+
+    .tl-detail {
+      font-size: 0.88rem;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    .tl-tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .tl-tag {
+      font-size: 0.72rem; letter-spacing: 0.06em; font-weight: 600;
+      padding: 2px 8px; border-radius: 2px; display: inline-block;
+    }
+    .tl-tag.implemented { background: rgba(255,170,0,0.15); color: #ffaa00; }
+    .tl-tag.tested      { background: rgba(68,136,255,0.15); color: #4488ff; }
+    .tl-tag.validated   { background: rgba(68,255,68,0.15); color: #44ff44; }
+
+    .tl-legend {
+      font-size: 0.82rem; color: #888; margin-bottom: 20px;
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    }
+
+    /* ── Cards ── */
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    @media (max-width: 560px) {
+      .card-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: #141B22;
+      border: 1px solid rgba(255, 170, 0, 0.25);
+      padding: 18px;
+    }
+
+    .card-title {
+      color: #ffaa00;
+      font-size: 0.95rem;
+      letter-spacing: 0.1em;
+      margin: 0 0 14px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.green {
+      background: #44ff44;
+      box-shadow: 0 0 6px rgba(68, 255, 68, 0.5);
+    }
+
+    .status-dot.red {
+      background: #ff4444;
+      box-shadow: 0 0 6px rgba(255, 68, 68, 0.5);
+    }
+
+    .status-dot.amber {
+      background: #ffaa00;
+      box-shadow: 0 0 6px rgba(255, 170, 0, 0.5);
+    }
+
+    .status-dot.dim {
+      background: #666;
+      box-shadow: none;
+    }
+
+    .card-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.95rem;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .card-row:last-of-type { border-bottom: none; }
+
+    .card-row .label {
+      color: #999;
+    }
+
+    .card-row .value {
+      color: #c0c0c0;
+      text-align: right;
+    }
+
+    .card-age {
+      font-size: 0.85rem;
+      color: #777;
+      margin-top: 10px;
+      text-align: right;
+    }
+
+    .card-message {
+      color: #888;
+      font-size: 0.95rem;
+      font-style: italic;
+      padding: 8px 0;
+    }
+
+    /* ── Quick links ── */
+
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .links a {
+      display: inline-block;
+      color: #ffaa00;
+      text-decoration: none;
+      font-size: 0.95rem;
+      letter-spacing: 0.06em;
+      padding: 8px 16px;
+      border: 1px solid rgba(255, 170, 0, 0.3);
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .links a:hover, .links a:focus {
+      background: rgba(255, 170, 0, 0.08);
+      border-color: #ffaa00;
+      outline: none;
+    }
+
+    /* ── Footer ── */
+
+    .footer {
+      text-align: center;
+      color: #555;
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <h1>OVERHEAD TRACKER — PROJECT STATUS</h1>
+    <div class="subtitle">FOXTROT DEVICE &middot; ESP32-S3 &middot; WAVESHARE 4.3" DISPLAY</div>
+
+    <hr>
+
+    <!-- ── Milestones ── -->
+    <h2>PROJECT MILESTONES</h2>
+
+    <div class="tl-legend">
+      <span class="tl-tag implemented">IMPLEMENTED</span> Code written
+      <span class="tl-tag tested">TESTED</span> Tests pass
+      <span class="tl-tag validated">VALIDATED</span> Verified on hardware
+    </div>
+
+    <div class="timeline">
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Hardware assembled</div>
+        <div class="tl-detail">Waveshare ESP32-S3 4.3" IPS display, capacitive touch, USB-C</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Core firmware</div>
+        <div class="tl-detail">Flight display (800x480), weather overlay, touch navigation, 5 screens</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Imperial units</div>
+        <div class="tl-detail">All readouts in feet, miles, knots, Fahrenheit</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Proxy server</div>
+        <div class="tl-detail">Railway-hosted, races 3 ADS-B APIs (adsb.lol, adsb.fi, airplanes.live), geo-bucketed cache, route enrichment</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Chicago configuration</div>
+        <div class="tl-detail">12 US airlines (SWA, NKS, FFT, JBU, ENY, SKW...), 16 airports, 20-mile geofence for KORD + KMDW</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Network resilience &mdash; sticky proxy failover</div>
+        <div class="tl-detail">Skip proxy for 5 min after 3 consecutive failures, direct API fallback</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Network resilience &mdash; WiFi auto-reboot</div>
+        <div class="tl-detail">Auto-reboot after 30 min WiFi disconnection</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Device heartbeat</div>
+        <div class="tl-detail">ESP32 POSTs health data every 5 min (heap, RSSI, uptime, firmware version). Server endpoints ready, not yet deployed.</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Firmware update tool</div>
+        <div class="tl-detail">Browser-based Web Serial flasher (Chrome, esptool.js) &mdash; no Arduino IDE needed</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Status page</div>
+        <div class="tl-detail">Live dashboard with proxy health, device status, and architecture diagram</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Server deployment</div>
+        <div class="tl-detail">Heartbeat endpoints deployed to Railway. /device/foxtrot/status live.</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+        </div>
+      </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Device flash &amp; end-to-end test</div>
+        <div class="tl-detail">Firmware compiled and flashed. Clean boot, stable proxy fetches, 20 flights, heap stable at 243KB.</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+        </div>
+      </div>
+      <div class="tl-item pending">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Shipping</div>
+        <div class="tl-detail">Device to Chicago 60642</div>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- ── Live dashboard ── -->
+    <h2>LIVE DASHBOARD</h2>
+
+    <div class="card-grid">
+
+      <!-- Proxy health -->
+      <div class="card" id="proxy-card">
+        <div class="card-title">
+          <span class="status-dot dim" id="proxy-dot"></span>
+          PROXY HEALTH
+        </div>
+        <div id="proxy-body">
+          <div class="card-message">Loading...</div>
+        </div>
+        <div class="card-age" id="proxy-age"></div>
+      </div>
+
+      <!-- Device status -->
+      <div class="card" id="device-card">
+        <div class="card-title">
+          <span class="status-dot dim" id="device-dot"></span>
+          DEVICE STATUS
+        </div>
+        <div id="device-body">
+          <div class="card-message">Loading...</div>
+        </div>
+        <div class="card-age" id="device-age"></div>
+      </div>
+
+    </div>
+
+    <hr>
+
+    <!-- ── System Architecture ── -->
+    <h2>SYSTEM ARCHITECTURE</h2>
+
+    <div style="overflow-x: auto;">
+      <svg viewBox="0 0 700 400" xmlns="http://www.w3.org/2000/svg" font-family="'Courier New', monospace" style="width: 100%; max-width: 700px;">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#ffaa00"/>
+          </marker>
+        </defs>
+
+        <!-- Top tier: ADS-B APIs -->
+        <rect x="140" y="30" width="200" height="52" rx="4" fill="#141B22" stroke="#ffaa00" stroke-width="1.5"/>
+        <text x="240" y="52" text-anchor="middle" fill="#ffaa00" font-size="12" font-weight="bold">ADS-B APIs</text>
+        <text x="240" y="68" text-anchor="middle" fill="#999" font-size="9">adsb.lol / adsb.fi / airplanes.live</text>
+
+        <!-- Top tier: Route APIs -->
+        <rect x="420" y="30" width="180" height="52" rx="4" fill="#141B22" stroke="#ffaa00" stroke-width="1.5"/>
+        <text x="510" y="52" text-anchor="middle" fill="#ffaa00" font-size="12" font-weight="bold">Route APIs</text>
+        <text x="510" y="68" text-anchor="middle" fill="#999" font-size="9">OpenSky / adsbdb</text>
+
+        <!-- Middle tier: Proxy -->
+        <rect x="200" y="165" width="260" height="52" rx="4" fill="#141B22" stroke="#ffaa00" stroke-width="1.5"/>
+        <text x="330" y="187" text-anchor="middle" fill="#ffaa00" font-size="12" font-weight="bold">PROXY SERVER</text>
+        <text x="330" y="203" text-anchor="middle" fill="#999" font-size="9">api.overheadtracker.com (Railway)</text>
+
+        <!-- Bottom tier: ESP32 Foxtrot -->
+        <rect x="20" y="310" width="160" height="52" rx="4" fill="#141B22" stroke="#ffaa00" stroke-width="1.5"/>
+        <text x="100" y="332" text-anchor="middle" fill="#ffaa00" font-size="12" font-weight="bold">ESP32 FOXTROT</text>
+        <text x="100" y="348" text-anchor="middle" fill="#999" font-size="9">Chicago device</text>
+
+        <!-- Bottom tier: Web App -->
+        <rect x="220" y="310" width="140" height="52" rx="4" fill="#141B22" stroke="#ffaa00" stroke-width="1.5"/>
+        <text x="290" y="332" text-anchor="middle" fill="#ffaa00" font-size="12" font-weight="bold">WEB APP</text>
+        <text x="290" y="348" text-anchor="middle" fill="#999" font-size="9">overheadtracker.com</text>
+
+        <!-- Bottom tier: Flash Tool -->
+        <rect x="400" y="310" width="130" height="52" rx="4" fill="#141B22" stroke="#ffaa00" stroke-width="1.5"/>
+        <text x="465" y="332" text-anchor="middle" fill="#ffaa00" font-size="12" font-weight="bold">FLASH TOOL</text>
+        <text x="465" y="348" text-anchor="middle" fill="#999" font-size="9">/flash</text>
+
+        <!-- Bottom tier: Status Page -->
+        <rect x="570" y="310" width="120" height="52" rx="4" fill="#141B22" stroke="#ffaa00" stroke-width="1.5"/>
+        <text x="630" y="332" text-anchor="middle" fill="#ffaa00" font-size="12" font-weight="bold">STATUS PAGE</text>
+        <text x="630" y="348" text-anchor="middle" fill="#999" font-size="9">/status</text>
+
+        <!-- Arrow 1: ADS-B APIs -> Proxy -->
+        <line x1="240" y1="82" x2="300" y2="165" stroke="#ffaa00" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <rect x="225" y="114" width="80" height="14" rx="2" fill="#0C1117" fill-opacity="0.9"/>
+        <text x="265" y="124" text-anchor="middle" fill="#888" font-size="9">races 3 APIs</text>
+
+        <!-- Arrow 2: Proxy -> Route APIs -->
+        <line x1="420" y1="175" x2="510" y2="82" stroke="#ffaa00" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <rect x="422" y="120" width="96" height="14" rx="2" fill="#0C1117" fill-opacity="0.9"/>
+        <text x="470" y="130" text-anchor="middle" fill="#888" font-size="9">enriches routes</text>
+
+        <!-- Arrow 3: Proxy -> ESP32 -->
+        <line x1="250" y1="217" x2="130" y2="310" stroke="#ffaa00" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <rect x="135" y="255" width="110" height="14" rx="2" fill="#0C1117" fill-opacity="0.9"/>
+        <text x="190" y="265" text-anchor="middle" fill="#888" font-size="9">flights every 15s</text>
+
+        <!-- Arrow 4: ESP32 -> Proxy (heartbeat, offset from arrow 3) -->
+        <line x1="150" y1="310" x2="270" y2="217" stroke="#ffaa00" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <rect x="158" y="240" width="100" height="14" rx="2" fill="#0C1117" fill-opacity="0.9"/>
+        <text x="208" y="250" text-anchor="middle" fill="#888" font-size="9">heartbeat 5min</text>
+
+        <!-- Arrow 5: Proxy -> Web App -->
+        <line x1="330" y1="217" x2="300" y2="310" stroke="#ffaa00" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <rect x="276" y="258" width="70" height="14" rx="2" fill="#0C1117" fill-opacity="0.9"/>
+        <text x="311" y="268" text-anchor="middle" fill="#888" font-size="9">flight data</text>
+
+        <!-- Arrow 6: ESP32 -> ADS-B APIs (dashed fallback) -->
+        <line x1="80" y1="310" x2="180" y2="82" stroke="#ffaa00" stroke-opacity="0.4" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+        <rect x="80" y="185" width="96" height="14" rx="2" fill="#0C1117" fill-opacity="0.9"/>
+        <text x="128" y="195" text-anchor="middle" fill="#888" font-size="9">direct fallback</text>
+      </svg>
+    </div>
+
+    <hr>
+
+    <!-- ── Quick links ── -->
+    <h2>QUICK LINKS</h2>
+
+    <div class="links">
+      <a href="https://overheadtracker.com" target="_blank" rel="noopener">Live Tracker</a>
+      <a href="https://overheadtracker.com/flash" target="_blank" rel="noopener">Firmware Update</a>
+      <a href="https://api.overheadtracker.com" target="_blank" rel="noopener">Proxy Dashboard</a>
+    </div>
+
+    <div class="footer">
+      Built in Sydney for Chicago
+    </div>
+
+  </div>
+
+  <script>
+    const PROXY_URL  = 'https://api.overheadtracker.com/status';
+    const DEVICE_URL = 'https://api.overheadtracker.com/device/foxtrot/status';
+    const REFRESH_MS = 30000;
+
+    let proxyFetchedAt = 0;
+    let deviceFetchedAt = 0;
+
+    function fmtUptime(sec) {
+      const d = Math.floor(sec / 86400);
+      const h = Math.floor((sec % 86400) / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    }
+
+    function fmtAgo(sec) {
+      if (sec < 60) return sec + 's ago';
+      if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+      if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
+      return Math.floor(sec / 86400) + 'd ago';
+    }
+
+    function makeRow(label, value) {
+      const div = document.createElement('div');
+      div.className = 'card-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'label';
+      lbl.textContent = label;
+      const val = document.createElement('span');
+      val.className = 'value';
+      val.textContent = value;
+      div.appendChild(lbl);
+      div.appendChild(val);
+      return div;
+    }
+
+    function makeMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'card-message';
+      div.textContent = text;
+      return div;
+    }
+
+    function clearChildren(el) {
+      while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function cacheHitRate(log) {
+      if (!log || !log.length) return 'N/A';
+      let hits = 0, total = 0;
+      for (const e of log) {
+        if (e.type === 'HIT') { hits++; total++; }
+        else if (e.type === 'MISS') { total++; }
+      }
+      if (total === 0) return 'N/A';
+      return Math.round((hits / total) * 100) + '%';
+    }
+
+    async function fetchProxy() {
+      const dot = document.getElementById('proxy-dot');
+      const body = document.getElementById('proxy-body');
+      try {
+        const r = await fetch(PROXY_URL);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        proxyFetchedAt = Date.now();
+
+        dot.className = 'status-dot green';
+        clearChildren(body);
+        body.appendChild(makeRow('STATUS', 'Online'));
+        body.appendChild(makeRow('UPTIME', fmtUptime(Math.round(d.uptime || 0))));
+        body.appendChild(makeRow('RECENT REQS', d.log ? d.log.length : 0));
+        body.appendChild(makeRow('CACHE HIT', cacheHitRate(d.log)));
+      } catch (e) {
+        dot.className = 'status-dot red';
+        clearChildren(body);
+        body.appendChild(makeMessage('Offline \u2014 ' + e.message));
+        proxyFetchedAt = Date.now();
+      }
+      updateAges();
+    }
+
+    async function fetchDevice() {
+      const dot = document.getElementById('device-dot');
+      const body = document.getElementById('device-body');
+      try {
+        const r = await fetch(DEVICE_URL);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        deviceFetchedAt = Date.now();
+
+        if (!d.online && !d.ts) {
+          dot.className = 'status-dot dim';
+          clearChildren(body);
+          body.appendChild(makeMessage('Awaiting first connection'));
+          return;
+        }
+
+        dot.className = d.online ? 'status-dot green' : 'status-dot red';
+        clearChildren(body);
+        body.appendChild(makeRow('STATUS', d.online ? 'Online' : 'Offline'));
+        body.appendChild(makeRow('LAST SEEN', d.ageSec != null ? fmtAgo(d.ageSec) : '--'));
+        if (d.fw) body.appendChild(makeRow('FIRMWARE', d.fw));
+        if (d.rssi != null) body.appendChild(makeRow('WIFI RSSI', d.rssi + ' dBm'));
+        if (d.flights != null) body.appendChild(makeRow('FLIGHTS', String(d.flights)));
+        if (d.heap != null) body.appendChild(makeRow('HEAP FREE', Math.round(d.heap / 1024) + ' KB'));
+        if (d.source) body.appendChild(makeRow('DATA SRC', d.source));
+      } catch (e) {
+        dot.className = 'status-dot dim';
+        clearChildren(body);
+        body.appendChild(makeMessage('Awaiting first connection'));
+        deviceFetchedAt = Date.now();
+      }
+      updateAges();
+    }
+
+    function updateAges() {
+      const now = Date.now();
+      const pa = document.getElementById('proxy-age');
+      const da = document.getElementById('device-age');
+      if (proxyFetchedAt) {
+        const s = Math.round((now - proxyFetchedAt) / 1000);
+        pa.textContent = 'Updated ' + (s < 2 ? 'just now' : s + 's ago');
+      }
+      if (deviceFetchedAt) {
+        const s = Math.round((now - deviceFetchedAt) / 1000);
+        da.textContent = 'Updated ' + (s < 2 ? 'just now' : s + 's ago');
+      }
+    }
+
+    fetchProxy();
+    fetchDevice();
+    setInterval(fetchProxy, REFRESH_MS);
+    setInterval(fetchDevice, REFRESH_MS);
+    setInterval(updateAges, 5000);
+  </script>
+</body>
+</html>

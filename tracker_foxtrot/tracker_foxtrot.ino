@@ -94,6 +94,10 @@ time_t        cacheTimestamp = 0;
 int           directApiFailCount   = 0;
 unsigned long directApiNextRetryMs = 0;
 
+// ─── Proxy failover ─────────────────────────────────
+int           proxyFailCount   = 0;
+unsigned long proxySkipUntilMs = 0;
+
 // ─── Session log ──────────────────────────────────────
 char loggedCallsigns[MAX_LOGGED][12];
 int  loggedCount = 0;
@@ -128,33 +132,33 @@ static void drawTempMsg(int y, const lgfx::IFont* f, uint16_t col, const char* t
 
 // ─── Load demo flights (shared by DEMO_MODE and DIAG_STEP) ──
 static void loadDemoFlights() {
-  strlcpy(LOCATION_NAME, "SYDNEY", sizeof(LOCATION_NAME));
-  GEOFENCE_MI = 10.0f;
+  strlcpy(LOCATION_NAME, "CHICAGO", sizeof(LOCATION_NAME));
+  GEOFENCE_MI = 20.0f;
   memset(flights, 0, sizeof(flights));
   flightCount = 3;
   flightIndex = 0;
 
-  strlcpy(flights[0].callsign, "QFA1",   sizeof(flights[0].callsign));
-  strlcpy(flights[0].reg,      "VH-OQA", sizeof(flights[0].reg));
-  strlcpy(flights[0].type,     "A380",   sizeof(flights[0].type));
-  strlcpy(flights[0].route,    "SYD > LHR", sizeof(flights[0].route));
-  strlcpy(flights[0].squawk,   "1234",   sizeof(flights[0].squawk));
+  strlcpy(flights[0].callsign, "UAL1218", sizeof(flights[0].callsign));
+  strlcpy(flights[0].reg,      "N37510",  sizeof(flights[0].reg));
+  strlcpy(flights[0].type,     "B738",    sizeof(flights[0].type));
+  strlcpy(flights[0].route,    "ORD > LAX", sizeof(flights[0].route));
+  strlcpy(flights[0].squawk,   "1234",    sizeof(flights[0].squawk));
   flights[0].alt = 35000; flights[0].speed = 485; flights[0].vs = 0;
-  flights[0].dist = 2.0f; flights[0].status = STATUS_CRUISING;
+  flights[0].dist = 8.0f; flights[0].status = STATUS_CRUISING;
 
-  strlcpy(flights[1].callsign, "VOZ456", sizeof(flights[1].callsign));
-  strlcpy(flights[1].reg,      "VH-YIA", sizeof(flights[1].reg));
-  strlcpy(flights[1].type,     "B738",   sizeof(flights[1].type));
-  strlcpy(flights[1].route,    "MEL > SYD", sizeof(flights[1].route));
-  strlcpy(flights[1].squawk,   "3417",   sizeof(flights[1].squawk));
+  strlcpy(flights[1].callsign, "SWA2847", sizeof(flights[1].callsign));
+  strlcpy(flights[1].reg,      "N8329B",  sizeof(flights[1].reg));
+  strlcpy(flights[1].type,     "B38M",    sizeof(flights[1].type));
+  strlcpy(flights[1].route,    "MDW > LAS", sizeof(flights[1].route));
+  strlcpy(flights[1].squawk,   "3417",    sizeof(flights[1].squawk));
   flights[1].alt = 2800; flights[1].speed = 160; flights[1].vs = -1200;
   flights[1].dist = 3.5f; flights[1].status = STATUS_LANDING;
 
-  strlcpy(flights[2].callsign, "JST621", sizeof(flights[2].callsign));
-  strlcpy(flights[2].reg,      "VH-VKA", sizeof(flights[2].reg));
-  strlcpy(flights[2].type,     "A320",   sizeof(flights[2].type));
-  strlcpy(flights[2].route,    "BNE > SYD", sizeof(flights[2].route));
-  strlcpy(flights[2].squawk,   "2501",   sizeof(flights[2].squawk));
+  strlcpy(flights[2].callsign, "AAL456",  sizeof(flights[2].callsign));
+  strlcpy(flights[2].reg,      "N178AA",  sizeof(flights[2].reg));
+  strlcpy(flights[2].type,     "A321",    sizeof(flights[2].type));
+  strlcpy(flights[2].route,    "DFW > ORD", sizeof(flights[2].route));
+  strlcpy(flights[2].squawk,   "2501",    sizeof(flights[2].squawk));
   flights[2].alt = 12000; flights[2].speed = 340; flights[2].vs = -800;
   flights[2].dist = 5.0f; flights[2].status = STATUS_DESCENDING;
 }
@@ -517,16 +521,35 @@ void loop() {
     diagReport();
   }
 
+  {
+    static unsigned long lastHeartbeat = 0;
+    if (now - lastHeartbeat >= 300000) {
+      lastHeartbeat = now;
+      sendHeartbeat();
+    }
+  }
+
   if (now - lastTick >= 1000) {
     lastTick = now;
     countdown--;
     wxCountdown--;
 
-    if (WiFi.status() != WL_CONNECTED) {
+    {
+      static unsigned long wifiLostSince = 0;
       static unsigned long lastReconnect = 0;
-      if (now - lastReconnect > 10000) {
-        lastReconnect = now;
-        WiFi.reconnect();
+      if (WiFi.status() != WL_CONNECTED) {
+        if (wifiLostSince == 0) wifiLostSince = now;
+        if (now - lastReconnect > 10000) {
+          lastReconnect = now;
+          WiFi.reconnect();
+        }
+        if (now - wifiLostSince > 1800000) {
+          logTs("WIFI", "Disconnected 30+ min, rebooting");
+          delay(500);
+          ESP.restart();
+        }
+      } else {
+        wifiLostSince = 0;
       }
     }
 
