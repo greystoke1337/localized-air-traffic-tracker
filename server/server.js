@@ -32,6 +32,7 @@ const inFlight     = new Map();  // key → Promise (dedup concurrent upstream f
 const routeCache   = new Map();  // callsign -> { dep, arr, timestamp }
 const apiCooldowns = new Map();  // apiName → cooldownExpiresAt (timestamp)
 const COOLDOWN_MS  = 60000;
+let apiRoundRobin  = 0;         // rotates across upstream APIs to spread load
 
 // ── Concurrency semaphore ───────────────────────────────────────────
 function semaphore(max) {
@@ -836,37 +837,32 @@ app.get('/flights', async (req, res) => {
         });
         if (apis.length === 0) throw new Error('All ADS-B APIs on cooldown');
 
-        // Race all available APIs — first successful response wins
-        const data = await new Promise((resolve, reject) => {
-          let settled = false, errors = [];
-          const controllers = apis.map(() => new AbortController());
-          apis.forEach((api, i) => {
-            fetch(api.url, { signal: AbortSignal.any([controllers[i].signal, AbortSignal.timeout(6000)]) })
-              .then(async r => {
-                if (r.status === 429) {
-                  apiCooldowns.set(api.name, Date.now() + COOLDOWN_MS);
-                  addLog({ type: 'COOLDOWN', client, key, error: `${api.name} → 60s cooldown (429)` });
-                  throw new Error(`${api.name} returned 429`);
-                }
-                if (!r.ok) throw new Error(`${api.name} returned ${r.status}`);
-                const d = await r.json();
-                if (!settled) {
-                  settled = true;
-                  addLog({ type: 'MISS', client, key: key + ` (${api.name})` });
-                  controllers.forEach((c, j) => { if (j !== i) c.abort(); });
-                  resolve(d);
-                }
-              })
-              .catch(e => {
-                errors.push(e);
-                addLog({ type: 'ERR', client, key, error: `${api.name}: ${e.message}` });
-                if (errors.length === apis.length && !settled) {
-                  settled = true;
-                  reject(errors[0]);
-                }
-              });
-          });
-        });
+        // Try APIs sequentially (round-robin) — 1 call per cache miss instead of 4
+        let data;
+        const startIdx = apiRoundRobin % apis.length;
+        for (let attempt = 0; attempt < apis.length; attempt++) {
+          const api = apis[(startIdx + attempt) % apis.length];
+          try {
+            const r = await fetch(api.url, { signal: AbortSignal.timeout(2500) });
+            if (r.status === 429) {
+              apiCooldowns.set(api.name, Date.now() + COOLDOWN_MS);
+              addLog({ type: 'COOLDOWN', client, key, error: `${api.name} → 60s cooldown (429)` });
+              continue;
+            }
+            if (!r.ok) {
+              addLog({ type: 'ERR', client, key, error: `${api.name}: HTTP ${r.status}` });
+              continue;
+            }
+            data = await r.json();
+            addLog({ type: 'MISS', client, key: key + ` (${api.name})` });
+            apiRoundRobin++;
+            break;
+          } catch (e) {
+            addLog({ type: 'ERR', client, key, error: `${api.name}: ${e.message}` });
+            continue;
+          }
+        }
+        if (!data) throw new Error('All ADS-B APIs failed');
 
         // Attach cached routes immediately, fire background lookups for misses
         const unrouted = enrichRoutes(data);
