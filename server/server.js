@@ -12,7 +12,6 @@ const fetch   = (url, opts = {}) => {
 const os      = require('os');
 const fs      = require('fs');
 const path    = require('path');
-const { execSync } = require('child_process');
 const nodemailer = require('nodemailer');
 const rateLimit  = require('express-rate-limit');
 
