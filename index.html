@@ -622,7 +622,7 @@
     let locationName = '';
     let locationLat  = 0, locationLon = 0;
 
-    let flights = [], flightIndex = 0;
+    let flights = [], flightIndex = 0, lastRawAc = [];
     let fetchController = null; // AbortController — cancels stale requests
     let interpState = null;
     let animFrameId = null;
@@ -1773,12 +1773,39 @@
     // Refresh weather every 15 minutes
     setInterval(() => { if (locationLat || locationLon) fetchWeather(); }, 15 * 60 * 1000);
 
+    // ── Re-filter cached flights (no API call) ─────────────────────
+    function refilterFlights() {
+      if (!lastRawAc.length) return;
+      const prevHex = flights[flightIndex]?.hex;
+      let ac = lastRawAc.filter(f =>
+        typeof f.alt_baro === 'number' && f.alt_baro >= altFloorFt &&
+        haversineKm(locationLat, locationLon, f.lat, f.lon) <= geofenceKm
+      );
+      ac.sort((a, b) =>
+        haversineKm(locationLat, locationLon, a.lat, a.lon) -
+        haversineKm(locationLat, locationLon, b.lat, b.lon)
+      );
+      if (!ac.length) {
+        flights = []; flightIndex = 0;
+        clearAircraftMarker(); clearPhoto();
+        document.getElementById('info').textContent = 'NO AIRCRAFT ABOVE ' + locationName + '.\nTRY INCREASING GEOFENCE OR LOWERING ALT FLOOR.\nNEXT CHECK IN 15S.';
+        ['d-alt','d-spd','d-vs','d-hdg','d-dist','d-sqk'].forEach(id => document.getElementById(id).textContent = '---');
+        document.getElementById('counter').textContent = '';
+        document.getElementById('info-wrap').className = '';
+        updateAltBar(null);
+        return;
+      }
+      flights = ac;
+      const restored = prevHex ? ac.findIndex(f => f.hex === prevHex) : -1;
+      flightIndex = restored >= 0 ? restored : 0;
+      render(flights[flightIndex]);
+      updateStats(flights);
+    }
+
     // ── Fetch flights ────────────────────────────────────────────────
-    // Races direct ADS-B APIs first (each user's browser IP avoids shared rate limits).
-    // Falls back to proxy if all direct APIs fail. Aborts in-progress requests.
+    // Uses the proxy server which races multiple ADS-B APIs server-side.
     const PROXY_URL   = 'https://api.overheadtracker.com/flights?lat={LAT}&lon={LON}&radius={R}';
     const DIRECT_APIS = [
-      { name: 'airplanes.live', url: 'https://api.airplanes.live/v2/point/{LAT}/{LON}/{R}' },
     ];
 
     function buildUrl(template) {
@@ -1912,32 +1939,20 @@
           data = demoGenerateFlights();
           document.getElementById('proxy-status').textContent = '[DEMO] ' + (demoScenario || 'busy').toUpperCase();
         } else {
-        // Race direct APIs AND proxy simultaneously — first valid response wins
-        const directPromise = raceDirectAPIs(signal, firstFetchDone ? undefined : 10000)
-          .then(r => ({ data: r.data, label: '[OK] DIRECT VIA ' + r.source.toUpperCase() }));
-
         const proxyTimeout = firstFetchDone ? 8000 : 12000;
         const proxySig = (AbortSignal.any && AbortSignal.timeout)
           ? AbortSignal.any([signal, AbortSignal.timeout(proxyTimeout)])
           : signal;
-        const proxyPromise = fetch(buildUrl(PROXY_URL), { signal: proxySig })
-          .then(async r => {
-            if (!r.ok) throw new Error('proxy HTTP ' + r.status);
-            return { data: await r.json(), label: '[OK] VIA PROXY' };
-          });
-
-        try {
-          const result = await Promise.any([directPromise, proxyPromise]);
-          data = result.data;
-          document.getElementById('proxy-status').textContent = result.label;
-        } catch(aggErr) {
-          if (signal.aborted) throw aggErr;
-          throw new Error('All APIs failed');
+        const res = await fetch(buildUrl(PROXY_URL), { signal: proxySig });
+        if (!res.ok) throw new Error('proxy HTTP ' + res.status);
+        data = await res.json();
+        document.getElementById('proxy-status').textContent = '[OK] VIA PROXY';
         }
-        }
-        let ac = (data.ac || []).filter(f =>
+        lastRawAc = (data.ac || []).filter(f =>
+          typeof f.lat === 'number' && typeof f.lon === 'number'
+        );
+        let ac = lastRawAc.filter(f =>
           typeof f.alt_baro === 'number' && f.alt_baro >= altFloorFt &&
-          typeof f.lat === 'number' && typeof f.lon === 'number' &&
           haversineKm(locationLat, locationLon, f.lat, f.lon) <= geofenceKm
         );
         ac.sort((a, b) =>
@@ -2024,6 +2039,7 @@
       try { localStorage.setItem('geofenceKm', geofenceKm); } catch(e) {}
     });
     document.getElementById('geofence-slider').addEventListener('change', function () {
+      refilterFlights();
       if (locationLat !== 0 || locationLon !== 0) manualRefresh();
     });
 
@@ -2044,7 +2060,7 @@
       try { localStorage.setItem('altFloorFt', altFloorFt); } catch(e) {}
     });
     document.getElementById('altfloor-slider').addEventListener('change', function () {
-      if (locationLat !== 0 || locationLon !== 0) manualRefresh();
+      refilterFlights();
     });
 
 
