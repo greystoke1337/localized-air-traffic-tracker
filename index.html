@@ -1335,7 +1335,7 @@
 
       let alt = interpState.baseAlt;
       if (typeof alt === 'number' && typeof interpState.baroRate === 'number') {
-        alt = Math.max(0, alt + (interpState.baroRate / 60) * elapsed);
+        alt = Math.round(Math.max(0, alt + (interpState.baroRate / 60) * elapsed));
       }
 
       const pos = [lat, lon];
@@ -1359,6 +1359,14 @@
         if (typeof alt === 'number') {
           document.getElementById('d-alt').textContent = formatAlt(alt);
           updateAltBar(alt);
+        }
+        if (typeof interpState.baroRate === 'number') {
+          const vsEl = document.getElementById('d-vs');
+          vsEl.textContent = formatVs(Math.round(interpState.baroRate));
+          vsEl.className = 'data-value';
+          if      (interpState.baroRate >  100) vsEl.classList.add('vs-climbing');
+          else if (interpState.baroRate < -100) vsEl.classList.add('vs-descending');
+          else                                  vsEl.classList.add('vs-level');
         }
       }
     }
