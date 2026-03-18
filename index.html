@@ -1323,7 +1323,7 @@
       animFrameId = requestAnimationFrame(animateAircraft);
       if (!interpState) return;
 
-      const elapsed = Math.min((timestamp - interpState.baseTime) / 1000, 20);
+      const elapsed = Math.min((timestamp - interpState.baseTime) / 1000, 30);
       if (elapsed < 0.016) return;
 
       let lat = interpState.baseLat, lon = interpState.baseLon;
@@ -1809,11 +1809,12 @@
         mapLat = pt[0]; mapLon = pt[1];
       }
       updateMap(mapLat, mapLon, call, f.gs, f.track, phase.color);
+      const sameAc = interpState && interpState.hex === f.hex;
       interpState = {
         hex: f.hex, baseLat: f.lat, baseLon: f.lon,
         baseAlt: typeof f.alt_baro === 'number' ? f.alt_baro : null,
-        gs: typeof f.gs === 'number' ? f.gs : 0,
-        track: typeof f.track === 'number' ? f.track : null,
+        gs: typeof f.gs === 'number' ? f.gs : (sameAc ? interpState.gs : 0),
+        track: typeof f.track === 'number' ? f.track : (sameAc ? interpState.track : null),
         baroRate: typeof f.baro_rate === 'number' ? f.baro_rate : null,
         baseTime: performance.now() - lastDataAge, phaseColor: phase.color, callsign: call
       };
