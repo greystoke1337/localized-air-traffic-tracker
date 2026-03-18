@@ -625,6 +625,7 @@
     let flights = [], flightIndex = 0, lastRawAc = [];
     let fetchController = null; // AbortController — cancels stale requests
     let interpState = null;
+    let lastDataAge = 0; // ms since data was fetched from upstream (accounts for server cache)
     let animFrameId = null;
 
     function timeoutSignal(ms) {
@@ -1631,14 +1632,20 @@
 
       logFlight(f, phase, distLoc);
       fetchPhoto(reg, f.hex || '', (f.t || '').toUpperCase());
-      updateMap(f.lat, f.lon, call, f.gs, f.track, phase.color);
+      let mapLat = f.lat, mapLon = f.lon;
+      if (lastDataAge > 1000 && typeof f.gs === 'number' && f.gs > 0 && typeof f.track === 'number') {
+        const ageKm = (f.gs * 1.852 / 3600) * (lastDataAge / 1000);
+        const pt = destPoint(f.lat, f.lon, f.track, ageKm);
+        mapLat = pt[0]; mapLon = pt[1];
+      }
+      updateMap(mapLat, mapLon, call, f.gs, f.track, phase.color);
       interpState = {
         hex: f.hex, baseLat: f.lat, baseLon: f.lon,
         baseAlt: typeof f.alt_baro === 'number' ? f.alt_baro : null,
         gs: typeof f.gs === 'number' ? f.gs : 0,
         track: typeof f.track === 'number' ? f.track : null,
         baroRate: typeof f.baro_rate === 'number' ? f.baro_rate : null,
-        baseTime: performance.now(), phaseColor: phase.color, callsign: call
+        baseTime: performance.now() - lastDataAge, phaseColor: phase.color, callsign: call
       };
       updateInterestingBadge(f);
       updateIntercept(f, distLoc);
@@ -1948,6 +1955,7 @@
         data = await res.json();
         document.getElementById('proxy-status').textContent = '[OK] VIA PROXY';
         }
+        lastDataAge = data._fetchedAt ? Math.max(0, Date.now() - data._fetchedAt) : 0;
         lastRawAc = (data.ac || []).filter(f =>
           typeof f.lat === 'number' && typeof f.lon === 'number'
         );

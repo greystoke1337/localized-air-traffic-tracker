@@ -874,7 +874,9 @@ app.get('/flights', async (req, res) => {
             .catch(() => {});
         }
 
-        cacheSet(key, { data, timestamp: Date.now() });
+        const fetchedAt = Date.now();
+        data._fetchedAt = fetchedAt;
+        cacheSet(key, { data, timestamp: fetchedAt });
         logFlights(data.ac || []);
         return data;
       } finally {
