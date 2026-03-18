@@ -435,6 +435,112 @@
       50%       { border-color: #ff6060; background: rgba(255,0,0,0.18); }
     }
 
+    /* ── Phase text colour classes (used instead of inline styles) ── */
+    .phase-landing-text    { color: #ff0000; }
+    .phase-takeoff-text    { color: #00ff00; }
+    .phase-climbing-text   { color: #00ffff; }
+    .phase-descending-text { color: #ff8e00; }
+    .phase-approach-text   { color: #ffcf42; }
+    .phase-cruising-text   { color: #ffa200; }
+    .phase-overhead-text   { color: #ffff00; }
+
+    /* ── Light mode ── */
+    body.dotmatrix.light-mode {
+      --c-main: #6b3a00;
+      --c-glow: #8a4e00;
+      --c-dim:  #b08050;
+      --c-bg:   #f5efe6;
+      --c-overlay: rgba(245,239,230,0.85);
+      --scanline-opacity: 0.03;
+    }
+
+    /* Phase borders — softer glow on light bg */
+    body.dotmatrix.light-mode #info-wrap.phase-landing    { border-color: #cc0000; box-shadow: -4px 0 12px rgba(204,0,0,0.15); }
+    body.dotmatrix.light-mode #info-wrap.phase-takeoff    { border-color: #008a00; box-shadow: -4px 0 12px rgba(0,138,0,0.15); }
+    body.dotmatrix.light-mode #info-wrap.phase-climbing   { border-color: #007a7a; box-shadow: -4px 0 12px rgba(0,122,122,0.12); }
+    body.dotmatrix.light-mode #info-wrap.phase-descending { border-color: #b06600; box-shadow: -4px 0 12px rgba(176,102,0,0.12); }
+    body.dotmatrix.light-mode #info-wrap.phase-approach   { border-color: #8a7000; box-shadow: -4px 0 12px rgba(138,112,0,0.12); }
+    body.dotmatrix.light-mode #info-wrap.phase-cruising   { border-color: #8a5000; box-shadow: -4px 0 12px rgba(138,80,0,0.1); }
+    body.dotmatrix.light-mode #info-wrap.phase-overhead   { border-color: #8a7000; box-shadow: -4px 0 12px rgba(138,112,0,0.15); }
+
+    /* Phase label text */
+    body.dotmatrix.light-mode .phase-landing-text    { color: #cc0000; }
+    body.dotmatrix.light-mode .phase-takeoff-text    { color: #008a00; }
+    body.dotmatrix.light-mode .phase-climbing-text   { color: #007a7a; }
+    body.dotmatrix.light-mode .phase-descending-text { color: #b06600; }
+    body.dotmatrix.light-mode .phase-approach-text   { color: #8a7000; }
+    body.dotmatrix.light-mode .phase-cruising-text   { color: #8a5000; }
+    body.dotmatrix.light-mode .phase-overhead-text   { color: #8a7000; }
+
+    /* Data colour bands */
+    body.dotmatrix.light-mode .alt-ground  { color: #cc0000; }
+    body.dotmatrix.light-mode .alt-low     { color: #8a6600; }
+    body.dotmatrix.light-mode .alt-high    { color: #006080; }
+    body.dotmatrix.light-mode .alt-vhigh   { color: #4040aa; }
+    body.dotmatrix.light-mode .vs-climbing   { color: #006a20; }
+    body.dotmatrix.light-mode .vs-descending { color: #cc0000; }
+    body.dotmatrix.light-mode .spd-slow    { color: #cc0000; }
+    body.dotmatrix.light-mode .spd-fast    { color: #006080; }
+    body.dotmatrix.light-mode .dist-close  { color: #8a4000; }
+    body.dotmatrix.light-mode .intercept-wrap .intercept-closing  { color: #8a4000; }
+    body.dotmatrix.light-mode .intercept-wrap .intercept-overhead { color: #006a20; }
+
+    /* Route / type labels */
+    body.dotmatrix.light-mode .info-route { color: #6b5500; }
+    body.dotmatrix.light-mode .info-type  { color: #006060; }
+
+    /* Interesting badge */
+    body.dotmatrix.light-mode #interesting-badge {
+      border-color: #8a7000; color: #6b5500; background: rgba(138,112,0,0.08);
+    }
+
+    /* Emergency banner */
+    body.dotmatrix.light-mode #emerg-banner {
+      border-color: #cc0000; color: #cc0000; background: rgba(204,0,0,0.08);
+      animation-name: emerg-flash-light;
+    }
+    @keyframes emerg-flash-light {
+      0%, 100% { border-color: #cc0000; background: rgba(204,0,0,0.08); }
+      50%      { border-color: #ff0000; background: rgba(255,0,0,0.15); }
+    }
+
+    /* Tooltip bg */
+    body.dotmatrix.light-mode [data-tip]::after {
+      background: var(--c-bg);
+      box-shadow: 0 0 12px rgba(107,58,0,0.15);
+    }
+
+    /* Kbd overlay */
+    body.dotmatrix.light-mode #kbd-overlay { background: rgba(245,239,230,0.92); }
+
+    /* Halftone dot overlay — invert for light bg */
+    body.dotmatrix.light-mode .photo-wrap::after {
+      background-image: radial-gradient(circle, rgba(255,255,255,0.2) 1px, transparent 1px);
+    }
+
+    /* Weather strip border */
+    body.dotmatrix.light-mode #wx-strip { border-top-color: rgba(107,58,0,0.15); }
+
+    /* Log entries */
+    body.dotmatrix.light-mode .log-entry { border-bottom-color: rgba(107,58,0,0.1); }
+
+    /* Alt bar */
+    body.dotmatrix.light-mode #alt-bar-wrap { background: rgba(107,58,0,0.06); }
+
+    /* Mode toggle — floating top-right */
+    #mode-toggle {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 100;
+      padding: 6px 10px;
+      font-size: 0.7rem;
+      min-height: 32px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    #mode-toggle:hover { opacity: 1; }
+
     @media (prefers-reduced-motion: reduce) {
       .blink { animation: none; opacity: 1; }
       #info-wrap.fetching { animation: none; }
@@ -448,6 +554,7 @@
   </style>
 </head>
 <body class="dotmatrix">
+  <button id="mode-toggle" onclick="toggleMode()" data-tip="Switch dark/light mode (D).">DARK</button>
   <div class="classic-layout">
 
     <!-- Title: location-display updated by JS on each location change -->
@@ -521,7 +628,7 @@
       <button onclick="toggleSound()" id="sound-btn" data-tip="Ping when nearest changes.">[OFF] SND</button>
       <button onclick="shareUrl()" data-tip="Copy shareable link.">&#x2197; SHARE</button>
       <button onclick="showKbdHelp()" data-tip="Keyboard shortcuts.">? HELP</button>
-      <button id="unit-toggle" onclick="toggleUnits()" data-tip="Switch km/mi for distances.">KM</button>
+      <button id="unit-toggle" onclick="toggleUnits()" data-tip="Switch metric/imperial for distances and weather.">METRIC</button>
     </div>
 
     <!-- Keyboard shortcut overlay -->
@@ -533,6 +640,7 @@
         <div class="kbd-row"><span class="kbd-key">Home</span><span class="kbd-desc">Jump to nearest</span></div>
         <div class="kbd-row"><span class="kbd-key">R</span><span class="kbd-desc">Manual refresh</span></div>
         <div class="kbd-row"><span class="kbd-key">S</span><span class="kbd-desc">Toggle sound</span></div>
+        <div class="kbd-row"><span class="kbd-key">D</span><span class="kbd-desc">Toggle dark / light mode</span></div>
         <div class="kbd-row"><span class="kbd-key">?</span><span class="kbd-desc">Show / hide this help</span></div>
         <div class="kbd-row"><span class="kbd-key">Esc</span><span class="kbd-desc">Close this panel</span></div>
         <div class="kbd-row" style="margin-top:10px;opacity:0.45;font-size:0.65rem;justify-content:center;">Click outside or press Esc to close</div>
@@ -631,6 +739,8 @@
     let interpState = null;
     let lastDataAge = 0; // ms since data was fetched from upstream (accounts for server cache)
     let animFrameId = null;
+    let lastWeatherData = null;
+    let isDarkMode = true;
 
     function timeoutSignal(ms) {
       return typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(ms) : undefined;
@@ -656,6 +766,19 @@
       if (geofenceCircle) geofenceCircle.setStyle({ color: t.main, fillColor: t.main });
       if (acLine)         acLine.setStyle({ color: t.main });
       currentTheme = name;
+    }
+
+
+    function toggleMode() {
+      isDarkMode = !isDarkMode;
+      document.body.classList.toggle('light-mode', !isDarkMode);
+      document.getElementById('mode-toggle').textContent = isDarkMode ? 'DARK' : 'LIGHT';
+      try { localStorage.setItem('isDarkMode', isDarkMode); } catch(e) {}
+      if (tileLayer) tileLayer.setUrl(isDarkMode ? DARK_TILES : LIGHT_TILES);
+      if (locationMarker) locationMarker.setStyle({
+        color: isDarkMode ? '#fff' : '#333', fillColor: isDarkMode ? '#fff' : '#333'
+      });
+      if (flights.length) render(flights[flightIndex]);
     }
 
 
@@ -845,12 +968,13 @@
       useMetric = !useMetric;
       try { localStorage.setItem('useMetric', useMetric); } catch(e) {}
       updateUnitLabels();
+      renderWeather();
       if (flights.length) render(flights[flightIndex]);
     }
 
     function updateUnitLabels() {
       const btn = document.getElementById('unit-toggle');
-      btn.textContent = useMetric ? 'KM' : 'MI';
+      btn.textContent = useMetric ? 'METRIC' : 'IMPERIAL';
       document.getElementById('geofence-label').textContent = formatGeofence(geofenceKm);
       document.getElementById('altfloor-label').textContent = formatAltFloor(altFloorFt);
     }
@@ -1082,11 +1206,13 @@
 
     // ── Map ──────────────────────────────────────────────────────────
 
-    let map, acMarker, acLine, acVector, acArrowHead, geofenceCircle, locationMarker;
+    const DARK_TILES  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    let map, tileLayer, acMarker, acLine, acVector, acArrowHead, geofenceCircle, locationMarker;
 
     function initMap() {
-      map = L.map('dm-map', { zoomControl: false }).setView([20, 0], 2); // world view until location is set
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      map = L.map('dm-map', { zoomControl: false }).setView([20, 0], 2);
+      tileLayer = L.tileLayer(isDarkMode ? DARK_TILES : LIGHT_TILES, {
         attribution: '© OpenStreetMap © Carto', maxZoom: 14
       }).addTo(map);
     }
@@ -1108,8 +1234,9 @@
         locationMarker.setLatLng([locationLat, locationLon]);
         locationMarker.getTooltip().setContent(locationName);
       } else {
+        const mc = isDarkMode ? '#ffffff' : '#333333';
         locationMarker = L.circleMarker([locationLat, locationLon], {
-          radius: 5, color: '#ffffff', fillColor: '#ffffff', fillOpacity: 0.9, weight: 2
+          radius: 5, color: mc, fillColor: mc, fillOpacity: 0.9, weight: 2
         }).addTo(map).bindTooltip(locationName, { permanent: true, direction: 'right', className: 'dm-callout' });
       }
       map.setView([locationLat, locationLon], 11);
@@ -1576,8 +1703,8 @@
         : '---';
 
       const phase     = flightPhase(f, distLoc);
-      const phaseHtml = phase.color
-        ? '<span style="color:' + phase.color + ';">' + phase.label + '</span>'
+      const phaseHtml = phase.cls
+        ? '<span class="' + phase.cls + '-text">' + phase.label + '</span>'
         : phase.label;
 
       document.getElementById('info-wrap').className = phase.cls || '';
@@ -1605,8 +1732,8 @@
         R('AIRLINE', airline.color
             ? '<span style="color:' + airline.color + '">' + airline.name + '</span>'
             : airline.name) +
-        R('PHASE',   phase.color
-            ? '<span style="color:' + phase.color + ';">' + phase.label + '</span>'
+        R('PHASE',   phase.cls
+            ? '<span class="' + phase.cls + '-text">' + phase.label + '</span>'
             : phase.label) +
         (inlineRoute ? R('ROUTE', '<span class="info-route">' + inlineRoute + '</span>') : '');
 
@@ -1813,17 +1940,30 @@
         const url = WEATHER_URL.replace('{LAT}', locationLat).replace('{LON}', locationLon);
         const res = await fetch(url, { signal: timeoutSignal(8000) });
         if (!res.ok) return;
-        const d = await res.json();
+        lastWeatherData = await res.json();
+        renderWeather();
+      } catch(e) { /* weather is best-effort; fail silently */ }
+    }
+
+    function renderWeather() {
+      const d = lastWeatherData;
+      if (!d) return;
+      if (useMetric) {
         document.getElementById('wx-temp').textContent =
           Math.round(d.temp) + '\u00b0C (FEELS ' + Math.round(d.feels_like) + '\u00b0C)';
-        document.getElementById('wx-cond').textContent = (d.condition || '').toUpperCase();
         document.getElementById('wx-wind').textContent =
           Math.round(d.wind_speed) + ' KM/H ' + d.wind_cardinal;
-        document.getElementById('wx-hum').textContent = d.humidity + '% RH';
-        document.getElementById('wx-uv').textContent =
-          'UV ' + (d.uv_index != null ? d.uv_index.toFixed(1) : '---');
-        document.getElementById('wx-strip').style.display = '';
-      } catch(e) { /* weather is best-effort; fail silently */ }
+      } else {
+        document.getElementById('wx-temp').textContent =
+          Math.round(d.temp * 9/5 + 32) + '\u00b0F (FEELS ' + Math.round(d.feels_like * 9/5 + 32) + '\u00b0F)';
+        document.getElementById('wx-wind').textContent =
+          Math.round(d.wind_speed * 0.621371) + ' MPH ' + d.wind_cardinal;
+      }
+      document.getElementById('wx-cond').textContent = (d.condition || '').toUpperCase();
+      document.getElementById('wx-hum').textContent = d.humidity + '% RH';
+      document.getElementById('wx-uv').textContent =
+        'UV ' + (d.uv_index != null ? d.uv_index.toFixed(1) : '---');
+      document.getElementById('wx-strip').style.display = '';
     }
 
     // Refresh weather every 15 minutes
@@ -2066,6 +2206,7 @@
       if (e.key === 'Home')       { go(0); resetAutoCycle(); return; }
       if (e.key === 'r' || e.key === 'R') { manualRefresh(); return; }
       if (e.key === 's' || e.key === 'S') { toggleSound(); return; }
+      if (e.key === 'd' || e.key === 'D') { toggleMode(); return; }
       if (e.key === '?')  { showKbdHelp(); return; }
       if (e.key === 'Escape') { hideKbdHelp(); return; }
     });
@@ -2084,6 +2225,18 @@
         const saved = localStorage.getItem('useMetric');
         if (saved !== null) useMetric = saved !== 'false';
         updateUnitLabels();
+      } catch(e) {}
+    })();
+
+    // Dark/light mode preference
+    (function () {
+      try {
+        const saved = localStorage.getItem('isDarkMode');
+        if (saved === 'false') {
+          isDarkMode = false;
+          document.body.classList.add('light-mode');
+          document.getElementById('mode-toggle').textContent = 'LIGHT';
+        }
       } catch(e) {}
     })();
 
