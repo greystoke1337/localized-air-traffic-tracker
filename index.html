@@ -149,6 +149,11 @@
       background: color-mix(in srgb, var(--c-main) 20%, transparent);
       border-color: var(--c-glow);
     }
+    body.dotmatrix button:focus-visible {
+      outline: 1px solid var(--c-main);
+      outline-offset: 2px;
+      background: color-mix(in srgb, var(--c-main) 13%, transparent);
+    }
 
     /* Location input row */
     #location-ctrl { display: flex; gap: 6px; align-items: stretch; margin: 10px 0 6px; }
@@ -209,7 +214,7 @@
     #log-list::-webkit-scrollbar { width: 4px; }
     #log-list::-webkit-scrollbar-thumb { background: var(--c-dim); }
     #log-list { scrollbar-width: thin; scrollbar-color: var(--c-dim) transparent; }
-    .log-entry { border-bottom: 1px solid rgba(255,166,0,0.1); padding: 1px 0; }
+    .log-entry { border-bottom: 1px solid rgba(255,166,0,0.18); padding: 1px 0; }
     .log-entry:last-child { border-bottom: none; }
 
     /* Fetching pulse — subtle border flicker on info-wrap while loading */
@@ -279,7 +284,7 @@
     [data-tip]::before {
       content: '';
       position: absolute;
-      bottom: calc(100% + 1px);
+      bottom: calc(100% + 2px);
       left: 50%;
       transform: translateX(-50%);
       border: 5px solid transparent;
@@ -297,6 +302,13 @@
     [data-tip]:focus::before,
     [data-tip]:focus-within::after,
     [data-tip]:focus-within::before { opacity: 1; }
+
+    .data-item:focus,
+    .data-item:focus-visible {
+      outline: 1px solid var(--c-main);
+      outline-offset: 2px;
+      background: color-mix(in srgb, var(--c-main) 8%, transparent);
+    }
 
     /* Tooltip anchored to the left edge on data items (avoids screen overflow) */
     .data-item[data-tip]::after { left: 0; transform: none; }
@@ -408,9 +420,9 @@
       margin-bottom: 10px;
     }
     .stat-block { display: flex; flex-direction: column; gap: 2px; }
-    .stat-label { font-size: 0.58rem; opacity: 0.45; letter-spacing: 0.06em; }
+    .stat-label { font-size: 0.58rem; opacity: 0.60; letter-spacing: 0.06em; }
     .stat-value { font-size: 0.8rem; line-height: 1.3; }
-    .stat-sub   { font-size: 0.62rem; opacity: 0.55; margin-top: 1px; }
+    .stat-sub   { font-size: 0.62rem; opacity: 0.65; margin-top: 1px; }
     .stats-divider {
       border: none; border-top: 1px solid var(--c-dim);
       opacity: 0.4; margin: 8px 0;
@@ -482,8 +494,8 @@
     body.dotmatrix.light-mode .spd-slow    { color: #cc0000; }
     body.dotmatrix.light-mode .spd-fast    { color: #006080; }
     body.dotmatrix.light-mode .dist-close  { color: #8a4000; }
-    body.dotmatrix.light-mode .intercept-wrap .intercept-closing  { color: #8a4000; }
-    body.dotmatrix.light-mode .intercept-wrap .intercept-overhead { color: #006a20; }
+    body.dotmatrix.light-mode #intercept-wrap .intercept-closing  { color: #8a4000; }
+    body.dotmatrix.light-mode #intercept-wrap .intercept-overhead { color: #006a20; }
 
     /* Route / type labels */
     body.dotmatrix.light-mode .info-route { color: #6b5500; }
@@ -522,7 +534,7 @@
     body.dotmatrix.light-mode #wx-strip { border-top-color: rgba(107,58,0,0.15); }
 
     /* Log entries */
-    body.dotmatrix.light-mode .log-entry { border-bottom-color: rgba(107,58,0,0.1); }
+    body.dotmatrix.light-mode .log-entry { border-bottom-color: rgba(107,58,0,0.18); }
 
     /* Alt bar */
     body.dotmatrix.light-mode #alt-bar-wrap { background: rgba(107,58,0,0.06); }
@@ -536,10 +548,9 @@
       padding: 6px 10px;
       font-size: 0.7rem;
       min-height: 32px;
-      opacity: 0.7;
-      transition: opacity 0.2s;
+      opacity: 0.6;
+      transition: opacity 0.2s, background 0.2s;
     }
-    #mode-toggle:hover { opacity: 1; }
 
     @media (prefers-reduced-motion: reduce) {
       .blink { animation: none; opacity: 1; }
@@ -550,6 +561,11 @@
       #info-wrap { transition: none; }
       #log-section summary::before,
       #stats-section summary::before { transition: none; }
+    }
+
+    @media (max-width: 360px) {
+      body.dotmatrix { padding: 10px; }
+      #main-grid { gap: 2px 8px; }
     }
   </style>
 </head>
