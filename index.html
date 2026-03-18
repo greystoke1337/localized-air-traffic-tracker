@@ -512,8 +512,8 @@
 
     <!-- PREV/NEXT: browse flights | NEAREST: jump to closest | SND: ping toggle | SHARE: copy URL -->
     <div id="btn-row">
-      <button onclick="prev()" aria-label="Previous aircraft" data-tip="Show previous aircraft&#10;in the list (sorted by&#10;distance from you)">&#9664; PREV</button>
-      <button onclick="next()" aria-label="Next aircraft" data-tip="Show next aircraft&#10;in the list (sorted by&#10;distance from you)">NEXT &#9654;</button>
+      <button onclick="prev(); resetAutoCycle()" aria-label="Previous aircraft" data-tip="Show previous aircraft&#10;in the list (sorted by&#10;distance from you)">&#9664; PREV</button>
+      <button onclick="next(); resetAutoCycle()" aria-label="Next aircraft" data-tip="Show next aircraft&#10;in the list (sorted by&#10;distance from you)">NEXT &#9654;</button>
       <button onclick="go(0)" aria-label="Jump to nearest aircraft" data-tip="Jump to the closest&#10;aircraft to your location">NEAREST</button>
       <button onclick="manualRefresh()" data-tip="Force a data refresh&#10;(auto-refreshes every 15s)">REFRESH</button>
       <button onclick="toggleSound()" id="sound-btn" data-tip="Toggle radar ping sound&#10;when a new closest aircraft&#10;is detected">[OFF] SND</button>
@@ -1695,6 +1695,12 @@
     function go(n) { if (flights.length) { flightIndex = (n + flights.length) % flights.length; render(flights[flightIndex]); } }
     function next() { go(flightIndex + 1); }
     function prev() { go(flightIndex - 1); }
+
+    let autoCycleTimer = setInterval(() => { if (flights.length > 1) next(); }, 10000);
+    function resetAutoCycle() {
+      clearInterval(autoCycleTimer);
+      autoCycleTimer = setInterval(() => { if (flights.length > 1) next(); }, 10000);
+    }
     let lastManualRefresh = 0;
     function manualRefresh() {
       const now = Date.now();
@@ -2012,9 +2018,9 @@
       const typing = document.activeElement === document.getElementById('location-input')
                   || document.activeElement.tagName === 'INPUT';
       if (typing) return;
-      if (e.key === 'ArrowRight') { next(); return; }
-      if (e.key === 'ArrowLeft')  { prev(); return; }
-      if (e.key === 'Home')       { go(0); return; }
+      if (e.key === 'ArrowRight') { next(); resetAutoCycle(); return; }
+      if (e.key === 'ArrowLeft')  { prev(); resetAutoCycle(); return; }
+      if (e.key === 'Home')       { go(0); resetAutoCycle(); return; }
       if (e.key === 'r' || e.key === 'R') { manualRefresh(); return; }
       if (e.key === 's' || e.key === 'S') { toggleSound(); return; }
       if (e.key === '?')  { showKbdHelp(); return; }
