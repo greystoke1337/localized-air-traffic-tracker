@@ -475,11 +475,6 @@
       <span id="altfloor-label">500 FT</span>
     </div>
 
-    <div class="slider-ctrl">
-      <span data-tip="Switch between metric and imperial units.">UNITS</span>
-      <button id="unit-toggle" onclick="toggleUnits()" style="flex:1;text-align:center">METRIC (KM, KM/H, M)</button>
-    </div>
-
     <p id="error"></p>
 
     <!-- Weather strip — populated by fetchWeather(), hidden until data arrives -->
@@ -526,6 +521,7 @@
       <button onclick="toggleSound()" id="sound-btn" data-tip="Ping when nearest changes.">[OFF] SND</button>
       <button onclick="shareUrl()" data-tip="Copy shareable link.">&#x2197; SHARE</button>
       <button onclick="showKbdHelp()" data-tip="Keyboard shortcuts.">? HELP</button>
+      <button id="unit-toggle" onclick="toggleUnits()" data-tip="Switch km/mi for distances.">KM</button>
     </div>
 
     <!-- Keyboard shortcut overlay -->
@@ -813,24 +809,21 @@
       return sqk;
     }
 
-    // Above 10,000ft → Flight Level notation; below → feet/metres QNH
+    // Above 10,000ft → Flight Level notation; below → feet QNH
     function formatAlt(alt) {
       if (typeof alt !== 'number') return '---';
       if (alt >= 10000) return 'FL' + String(Math.round(alt / 100)).padStart(3, '0');
-      if (useMetric) return Math.round(alt * 0.3048).toLocaleString() + ' M QNH';
       return alt.toLocaleString() + ' FT QNH';
     }
 
     function formatSpd(gs) {
       if (gs == null) return '---';
-      if (useMetric) return Math.round(gs * 1.852) + ' KM/H';
-      return Math.round(gs) + ' MPH';
+      return Math.round(gs) + ' KT';
     }
 
     function formatVs(rate) {
       if (rate == null) return '---';
       const sign = rate > 0 ? '+' : '';
-      if (useMetric) return sign + Math.round(rate * 0.3048) + ' M/MIN';
       return sign + rate + ' FPM';
     }
 
@@ -845,7 +838,6 @@
     }
 
     function formatAltFloor(ft) {
-      if (useMetric) return Math.round(ft * 0.3048) + ' M';
       return ft + ' FT';
     }
 
@@ -858,7 +850,7 @@
 
     function updateUnitLabels() {
       const btn = document.getElementById('unit-toggle');
-      btn.textContent = useMetric ? 'METRIC (KM, KM/H, M)' : 'IMPERIAL (MI, MPH, FT)';
+      btn.textContent = useMetric ? 'KM' : 'MI';
       document.getElementById('geofence-label').textContent = formatGeofence(geofenceKm);
       document.getElementById('altfloor-label').textContent = formatAltFloor(altFloorFt);
     }
