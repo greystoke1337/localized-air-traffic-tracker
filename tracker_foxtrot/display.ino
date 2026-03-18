@@ -28,6 +28,15 @@ static void dlbl_r(int x, int y, const lgfx::IFont* f, uint16_t col, const char*
   tft.setTextDatum(lgfx::top_left);
 }
 
+// Draw text with background fill (single-pass, no tearing)
+static void dlbl_bg(int x, int y, int w, int h, const lgfx::IFont* f, uint16_t col, const char* txt) {
+  tft.fillRect(x, y, w, h, C_BG);
+  tft.setFont(f);
+  tft.setTextColor(col);
+  tft.setTextDatum(lgfx::top_left);
+  tft.drawString(txt, x + 4, y + 2);
+}
+
 static void drawBtn(int x, int y, int w, int h, uint16_t bg, const lgfx::IFont* f, uint16_t txtCol, const char* txt) {
   tft.fillRect(x, y, w, h, bg);
   tft.setFont(f);
@@ -123,7 +132,9 @@ void renderMessage(const char* line1, const char* line2) {
 // ─── renderFlight ───────────────────────────────────
 void renderFlight(const Flight& f) {
   currentScreen = SCREEN_FLIGHT;
-  tft.fillRect(0, CONTENT_Y, W, CONTENT_H, C_BG);
+
+  // Clear content in horizontal strips just before drawing each section
+  // instead of one big fillRect, to minimize visible blanking
   if (previousScreen != SCREEN_FLIGHT) drawHeader();
   previousScreen = SCREEN_FLIGHT;
   drawNavBar();
@@ -148,11 +159,13 @@ void renderFlight(const Flight& f) {
     yOff = 44;
   }
 
-  // Callsign (DejaVu56, ~60px)
+  // Callsign — clear strip then draw
+  tft.fillRect(0, CY + yOff, W, 66, C_BG);
   dlbl(20, CY + yOff + 8, FONT_XL, C_AMBER, f.callsign[0] ? f.callsign : "SEARCHING");
 
-  // Airline (DejaVu24, ~26px)
+  // Airline
   int alY = CY + yOff + 72;
+  tft.fillRect(0, alY, W, 34, C_BG);
   if (!hasEmergency) {
     const Airline* al = getAirline(f.callsign);
     dlbl(20, alY, FONT_SM, al ? al->color : C_DIM, al ? al->name : "UNKNOWN AIRLINE");
@@ -160,6 +173,7 @@ void renderFlight(const Flight& f) {
 
   // Divider + type/reg
   int divY = alY + (hasEmergency ? 6 : 34);
+  tft.fillRect(0, divY, W, 58, C_BG);
   tft.drawFastHLine(14, divY, W - 28, C_DIMMER);
 
   const char* acCat = getAircraftCategory(f.type);
@@ -170,6 +184,8 @@ void renderFlight(const Flight& f) {
 
   // Route
   int routeDivY = divY + 56;
+  int dashY     = CY + CONTENT_H - 90;
+  tft.fillRect(0, routeDivY, W, dashY - routeDivY, C_BG);
   tft.drawFastHLine(14, routeDivY, W - 28, C_DIMMER);
   dlbl(20, routeDivY + 8, FONT_XS, C_DIM, "ROUTE");
   if (f.route[0])
@@ -178,8 +194,8 @@ void renderFlight(const Flight& f) {
     dlbl(20, routeDivY + 30, FONT_SM, C_DIMMER, "NO ROUTE DATA");
 
   // Dashboard (compact 90px)
-  int dashY  = CY + CONTENT_H - 90;
   int COL_W  = W / 4;
+  tft.fillRect(0, dashY, W, 90, C_BG);
   tft.drawFastHLine(0, dashY, W, C_DIM);
 
   uint16_t sCol = statusColor(f.status);
@@ -388,7 +404,7 @@ void redrawDashNumbers(float alt, float dist, int spd, int vs) {
 
   int iAlt = (int)(alt + 0.5f);
 
-  // ALT value
+  // ALT value — fillRect + draw in tight sequence
   tft.fillRect(COL_W + 10, dashY + 20, COL_W - 14, 28, C_BG);
   char altBuf[20];
   formatAlt(iAlt, altBuf, sizeof(altBuf));
