@@ -822,6 +822,7 @@ app.get('/flights', async (req, res) => {
         const allApis = [
           { name: 'adsb.lol',        url: `https://api.adsb.lol/v2/point/${lat}/${lon}/${radius}` },
           { name: 'adsb.fi',         url: `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}` },
+          { name: 'airplanes.live',  url: `https://api.airplanes.live/v2/point/${lat}/${lon}/${radius}` },
           { name: 'adsb-one',        url: `https://api.adsb-one.com/v2/point/${lat}/${lon}/${radius}` },
         ];
 

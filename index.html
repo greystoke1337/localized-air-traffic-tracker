@@ -1912,26 +1912,27 @@
           data = demoGenerateFlights();
           document.getElementById('proxy-status').textContent = '[DEMO] ' + (demoScenario || 'busy').toUpperCase();
         } else {
-        // Race direct APIs first (distributed rate limits); fall back to proxy
+        // Race direct APIs AND proxy simultaneously — first valid response wins
+        const directPromise = raceDirectAPIs(signal, firstFetchDone ? undefined : 10000)
+          .then(r => ({ data: r.data, label: '[OK] DIRECT VIA ' + r.source.toUpperCase() }));
+
+        const proxyTimeout = firstFetchDone ? 8000 : 12000;
+        const proxySig = (AbortSignal.any && AbortSignal.timeout)
+          ? AbortSignal.any([signal, AbortSignal.timeout(proxyTimeout)])
+          : signal;
+        const proxyPromise = fetch(buildUrl(PROXY_URL), { signal: proxySig })
+          .then(async r => {
+            if (!r.ok) throw new Error('proxy HTTP ' + r.status);
+            return { data: await r.json(), label: '[OK] VIA PROXY' };
+          });
+
         try {
-          const result = await raceDirectAPIs(signal, firstFetchDone ? undefined : 10000);
+          const result = await Promise.any([directPromise, proxyPromise]);
           data = result.data;
-          document.getElementById('proxy-status').textContent = '[OK] DIRECT VIA ' + result.source.toUpperCase();
-        } catch(directErr) {
-          if (signal.aborted) throw directErr;
-          console.warn('Direct APIs failed, trying proxy:', directErr.message);
-          try {
-            const proxySignal = (AbortSignal.any && AbortSignal.timeout)
-              ? AbortSignal.any([signal, AbortSignal.timeout(12000)])
-              : signal;
-            const res = await fetch(buildUrl(PROXY_URL), { signal: proxySignal });
-            if (!res.ok) throw new Error('proxy HTTP ' + res.status);
-            data = await res.json();
-            document.getElementById('proxy-status').textContent = '[!] VIA PROXY (FALLBACK)';
-          } catch(proxyErr) {
-            if (signal.aborted) throw proxyErr;
-            throw new Error('All APIs failed');
-          }
+          document.getElementById('proxy-status').textContent = result.label;
+        } catch(aggErr) {
+          if (signal.aborted) throw aggErr;
+          throw new Error('All APIs failed');
         }
         }
         let ac = (data.ac || []).filter(f =>
