@@ -289,8 +289,10 @@
       transition: opacity 0.15s;
       z-index: 999;
     }
-    [data-tip]:hover::after,
-    [data-tip]:hover::before,
+    @media (hover: hover) {
+      [data-tip]:hover::after,
+      [data-tip]:hover::before { opacity: 1; }
+    }
     [data-tip]:focus::after,
     [data-tip]:focus::before,
     [data-tip]:focus-within::after,
@@ -461,16 +463,21 @@
 
     <!-- GEOFENCE: search radius. Label updates live; API refreshes on next 15s cycle. -->
     <div class="slider-ctrl">
-      <span id="geofence-lbl" data-tip="Search radius around your location.&#10;Only aircraft within this circle are shown.&#10;Larger = more results but slower.">GEOFENCE</span>
+      <span id="geofence-lbl" data-tip="Search radius around you.">GEOFENCE</span>
       <input type="range" id="geofence-slider" min="2" max="20" value="5" step="1" aria-labelledby="geofence-lbl" aria-describedby="geofence-label">
       <span id="geofence-label">5 KM</span>
     </div>
 
     <!-- ALT FLOOR: hide aircraft below this altitude -->
     <div class="slider-ctrl">
-      <span id="altfloor-lbl" data-tip="Hide aircraft below this altitude.&#10;Useful to filter out ground vehicles&#10;and very low-level traffic.">ALT FLOOR</span>
+      <span id="altfloor-lbl" data-tip="Hide aircraft below this altitude.">ALT FLOOR</span>
       <input type="range" id="altfloor-slider" min="200" max="5000" value="500" step="100" aria-labelledby="altfloor-lbl" aria-describedby="altfloor-label">
       <span id="altfloor-label">500 FT</span>
+    </div>
+
+    <div class="slider-ctrl">
+      <span data-tip="Switch between metric and imperial units.">UNITS</span>
+      <button id="unit-toggle" onclick="toggleUnits()" style="flex:1;text-align:center">METRIC (KM, KM/H, M)</button>
     </div>
 
     <p id="error"></p>
@@ -492,12 +499,12 @@
     <div id="interesting-badge"></div>
     <div id="intercept-wrap"></div>
     <div id="main-grid">
-      <div class="data-item" tabindex="0" data-tip="Barometric altitude above sea level.&#10;Red=below 1000ft  Yellow=1000–10000ft&#10;Amber=normal  Blue=above 35000ft"><span class="data-label">ALT</span><span class="data-value" id="d-alt">---</span></div>
-      <div class="data-item" tabindex="0" data-tip="Ground speed in knots.&#10;1 kt ≈ 1.85 km/h&#10;Dim=slow  Amber=normal  Blue=fast (500kt+)"><span class="data-label">SPEED</span><span class="data-value" id="d-spd">---</span></div>
-      <div class="data-item" tabindex="0" data-tip="Vertical speed in feet per minute.&#10;Green = climbing&#10;Red = descending&#10;Amber = level flight"><span class="data-label">V/SPEED</span><span class="data-value" id="d-vs">---</span></div>
-      <div class="data-item" tabindex="0" data-tip="Ground track heading in degrees.&#10;0°=North  90°=East&#10;180°=South  270°=West"><span class="data-label">GND TRK</span><span class="data-value" id="d-hdg">---</span></div>
-      <div class="data-item" tabindex="0" data-tip="Straight-line distance from your&#10;set location to the aircraft.&#10;Orange = very close (under 3km)"><span class="data-label">DIST LOC</span><span class="data-value" id="d-dist">---</span></div>
-      <div class="data-item" tabindex="0" data-tip="Transponder squawk code.&#10;7700 = Emergency (MAYDAY)&#10;7600 = Radio failure (NORDO)&#10;7500 = Hijack  1200 = VFR"><span class="data-label">SQUAWK</span><span class="data-value" id="d-sqk">---</span></div>
+      <div class="data-item" tabindex="0" data-tip="Altitude above sea level."><span class="data-label">ALT</span><span class="data-value" id="d-alt">---</span></div>
+      <div class="data-item" tabindex="0" data-tip="Ground speed."><span class="data-label">SPEED</span><span class="data-value" id="d-spd">---</span></div>
+      <div class="data-item" tabindex="0" data-tip="Vertical speed."><span class="data-label">V/SPEED</span><span class="data-value" id="d-vs">---</span></div>
+      <div class="data-item" tabindex="0" data-tip="Heading (0°=N 90°=E 180°=S 270°=W)."><span class="data-label">GND TRK</span><span class="data-value" id="d-hdg">---</span></div>
+      <div class="data-item" tabindex="0" data-tip="Distance to aircraft."><span class="data-label">DIST LOC</span><span class="data-value" id="d-dist">---</span></div>
+      <div class="data-item" tabindex="0" data-tip="Squawk code.&#10;7700=Emergency 7600=Radio fail&#10;7500=Hijack 1200=VFR"><span class="data-label">SQUAWK</span><span class="data-value" id="d-sqk">---</span></div>
     </div>
 
     <div id="dm-map" role="application" aria-label="Live flight map"></div>
@@ -512,13 +519,13 @@
 
     <!-- PREV/NEXT: browse flights | NEAREST: jump to closest | SND: ping toggle | SHARE: copy URL -->
     <div id="btn-row">
-      <button onclick="prev(); resetAutoCycle()" aria-label="Previous aircraft" data-tip="Show previous aircraft&#10;in the list (sorted by&#10;distance from you)">&#9664; PREV</button>
-      <button onclick="next(); resetAutoCycle()" aria-label="Next aircraft" data-tip="Show next aircraft&#10;in the list (sorted by&#10;distance from you)">NEXT &#9654;</button>
-      <button onclick="go(0)" aria-label="Jump to nearest aircraft" data-tip="Jump to the closest&#10;aircraft to your location">NEAREST</button>
-      <button onclick="manualRefresh()" data-tip="Force a data refresh&#10;(auto-refreshes every 15s)">REFRESH</button>
-      <button onclick="toggleSound()" id="sound-btn" data-tip="Toggle radar ping sound&#10;when a new closest aircraft&#10;is detected">[OFF] SND</button>
-      <button onclick="shareUrl()" data-tip="Copy a shareable link&#10;with your current location&#10;pre-filled">&#x2197; SHARE</button>
-      <button onclick="showKbdHelp()" data-tip="Show keyboard shortcuts">? HELP</button>
+      <button onclick="prev(); resetAutoCycle()" aria-label="Previous aircraft" data-tip="Previous aircraft.">&#9664; PREV</button>
+      <button onclick="next(); resetAutoCycle()" aria-label="Next aircraft" data-tip="Next aircraft.">NEXT &#9654;</button>
+      <button onclick="go(0)" aria-label="Jump to nearest aircraft" data-tip="Jump to nearest aircraft.">NEAREST</button>
+      <button onclick="manualRefresh()" data-tip="Force refresh (auto every 15s).">REFRESH</button>
+      <button onclick="toggleSound()" id="sound-btn" data-tip="Ping when nearest changes.">[OFF] SND</button>
+      <button onclick="shareUrl()" data-tip="Copy shareable link.">&#x2197; SHARE</button>
+      <button onclick="showKbdHelp()" data-tip="Keyboard shortcuts.">? HELP</button>
     </div>
 
     <!-- Keyboard shortcut overlay -->
@@ -614,6 +621,7 @@
 
     let geofenceKm = 5;   // search radius, set by slider
     let altFloorFt = 500; // minimum altitude filter, set by slider
+    let useMetric  = true;
 
     // Converts geofence km → nautical miles for the API, with 4× buffer.
     // We then filter precisely with haversineKm on the results.
@@ -805,11 +813,54 @@
       return sqk;
     }
 
-    // Above 10,000ft → Flight Level notation; below → feet QNH
+    // Above 10,000ft → Flight Level notation; below → feet/metres QNH
     function formatAlt(alt) {
       if (typeof alt !== 'number') return '---';
       if (alt >= 10000) return 'FL' + String(Math.round(alt / 100)).padStart(3, '0');
+      if (useMetric) return Math.round(alt * 0.3048).toLocaleString() + ' M QNH';
       return alt.toLocaleString() + ' FT QNH';
+    }
+
+    function formatSpd(gs) {
+      if (gs == null) return '---';
+      if (useMetric) return Math.round(gs * 1.852) + ' KM/H';
+      return Math.round(gs) + ' MPH';
+    }
+
+    function formatVs(rate) {
+      if (rate == null) return '---';
+      const sign = rate > 0 ? '+' : '';
+      if (useMetric) return sign + Math.round(rate * 0.3048) + ' M/MIN';
+      return sign + rate + ' FPM';
+    }
+
+    function formatDist(km) {
+      if (useMetric) return km.toFixed(1) + ' KM';
+      return (km * 0.621371).toFixed(1) + ' MI';
+    }
+
+    function formatGeofence(km) {
+      if (useMetric) return km + ' KM';
+      return (km * 0.621371).toFixed(1) + ' MI';
+    }
+
+    function formatAltFloor(ft) {
+      if (useMetric) return Math.round(ft * 0.3048) + ' M';
+      return ft + ' FT';
+    }
+
+    function toggleUnits() {
+      useMetric = !useMetric;
+      try { localStorage.setItem('useMetric', useMetric); } catch(e) {}
+      updateUnitLabels();
+      if (flights.length) render(flights[flightIndex]);
+    }
+
+    function updateUnitLabels() {
+      const btn = document.getElementById('unit-toggle');
+      btn.textContent = useMetric ? 'METRIC (KM, KM/H, M)' : 'IMPERIAL (MI, MPH, FT)';
+      document.getElementById('geofence-label').textContent = formatGeofence(geofenceKm);
+      document.getElementById('altfloor-label').textContent = formatAltFloor(altFloorFt);
     }
 
 
@@ -1020,14 +1071,14 @@
       // Fastest aircraft
       const bySpd = entries.filter(e => e.gs !== null).sort((a,b) => b.gs - a.gs)[0];
       if (bySpd) {
-        document.getElementById('st-maxspd').textContent     = Math.round(bySpd.gs) + ' KT';
+        document.getElementById('st-maxspd').textContent     = formatSpd(bySpd.gs);
         document.getElementById('st-maxspd-sub').textContent = bySpd.call;
       }
 
       // Closest approach
       const byDist = entries.filter(e => e.dist !== null).sort((a,b) => a.dist - b.dist)[0];
       if (byDist) {
-        document.getElementById('st-closest').textContent     = byDist.dist.toFixed(1) + ' KM';
+        document.getElementById('st-closest').textContent     = formatDist(byDist.dist);
         document.getElementById('st-closest-sub').textContent = byDist.call;
       }
 
@@ -1185,7 +1236,7 @@
       if (timestamp - _lastPanelUpdate > 250) {
         _lastPanelUpdate = timestamp;
         const distLoc = haversineKm(locationLat, locationLon, lat, lon);
-        document.getElementById('d-dist').textContent = distLoc.toFixed(1) + ' KM';
+        document.getElementById('d-dist').textContent = formatDist(distLoc);
         if (typeof alt === 'number') {
           document.getElementById('d-alt').textContent = formatAlt(alt);
           updateAltBar(alt);
@@ -1396,9 +1447,9 @@
       // Military aircraft type
       if (MILITARY_TYPES.includes(t)) flags.push('★ MILITARY TYPE: ' + t);
       // High performance / supersonic candidate
-      if (c === 'A6' || gs > 520) flags.push('★ HIGH SPEED: ' + Math.round(gs) + ' KT');
+      if (c === 'A6' || gs > 520) flags.push('★ HIGH SPEED: ' + formatSpd(gs));
       // Extremely high altitude
-      if (alt > 43000) flags.push('★ VERY HIGH ALT: FL' + String(Math.round(alt/100)).padStart(3,'0'));
+      if (alt > 43000) flags.push('★ VERY HIGH ALT: ' + formatAlt(alt));
       // No callsign — anonymous aircraft
       if (!call || call === '---') flags.push('★ NO CALLSIGN (ANON)');
       // Private registration pattern (VH-Oxx = Qantas fleet, but VH-Xxx = private)
@@ -1518,8 +1569,8 @@
       const ctr     = '[' + (flightIndex+1) + '/' + flights.length + ']';
       const distLoc = haversineKm(locationLat, locationLon, f.lat, f.lon);
       const altStr  = formatAlt(f.alt_baro);
-      const spd     = f.gs        != null ? Math.round(f.gs) + ' KT' : '---';
-      const vs      = f.baro_rate != null ? (f.baro_rate > 0 ? '+' : '') + f.baro_rate + ' FPM' : '---';
+      const spd     = formatSpd(f.gs);
+      const vs      = formatVs(f.baro_rate);
       const hdg     = f.track     != null ? Math.round(f.track) + '°' : '---';
       const call    = (f.flight || '---').trim().toUpperCase();
       const typeStr = formatType(f.t, f.category);
@@ -1618,7 +1669,7 @@
 
       // Distance proximity colour
       const distEl = document.getElementById('d-dist');
-      distEl.textContent = distLoc.toFixed(1) + ' KM';
+      distEl.textContent = formatDist(distLoc);
       distEl.className = 'data-value';
       if      (distLoc < 3)  distEl.classList.add('dist-close');
       else if (distLoc < 10) distEl.classList.add('dist-medium');
@@ -2035,6 +2086,15 @@
     // Each slider restores its saved value on load, then updates state + localStorage on drag.
     // They do NOT trigger an API fetch — the next 15s refresh picks up the new value.
 
+    // Units preference
+    (function () {
+      try {
+        const saved = localStorage.getItem('useMetric');
+        if (saved !== null) useMetric = saved !== 'false';
+        updateUnitLabels();
+      } catch(e) {}
+    })();
+
     // Geofence
     (function () {
       try {
@@ -2042,13 +2102,13 @@
         if (saved >= 2 && saved <= 20) {
           geofenceKm = saved;
           document.getElementById('geofence-slider').value = saved;
-          document.getElementById('geofence-label').textContent = saved + ' KM';
+          document.getElementById('geofence-label').textContent = formatGeofence(saved);
         }
       } catch(e) {}
     })();
     document.getElementById('geofence-slider').addEventListener('input', function () {
       geofenceKm = parseInt(this.value, 10);
-      document.getElementById('geofence-label').textContent = geofenceKm + ' KM';
+      document.getElementById('geofence-label').textContent = formatGeofence(geofenceKm);
       if (geofenceCircle) updateGeofenceCircle();
       try { localStorage.setItem('geofenceKm', geofenceKm); } catch(e) {}
     });
@@ -2064,13 +2124,13 @@
         if (saved >= 200 && saved <= 5000) {
           altFloorFt = saved;
           document.getElementById('altfloor-slider').value = saved;
-          document.getElementById('altfloor-label').textContent = saved + ' FT';
+          document.getElementById('altfloor-label').textContent = formatAltFloor(saved);
         }
       } catch(e) {}
     })();
     document.getElementById('altfloor-slider').addEventListener('input', function () {
       altFloorFt = Math.max(200, parseInt(this.value, 10));
-      document.getElementById('altfloor-label').textContent = altFloorFt + ' FT';
+      document.getElementById('altfloor-label').textContent = formatAltFloor(altFloorFt);
       try { localStorage.setItem('altFloorFt', altFloorFt); } catch(e) {}
     });
     document.getElementById('altfloor-slider').addEventListener('change', function () {
