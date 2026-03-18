@@ -546,15 +546,7 @@ function requireAdmin(req, res) {
 }
 
 // ── Rate limiting ────────────────────────────────────────────────────
-app.use(rateLimit({
-  windowMs: 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.ip,
-}));
-
-// ── CORS ─────────────────────────────────────────────────────────────
+// ── CORS (must be before rate limiter so preflights always get headers) ──
 const ALLOWED_ORIGINS = [
   'https://overheadtracker.com',
   'https://www.overheadtracker.com',
@@ -576,6 +568,14 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.ip,
+}));
 
 // ── Toggle endpoint ───────────────────────────────────────────────────
 app.post('/proxy/toggle', (req, res) => {
