@@ -54,5 +54,16 @@ struct WeatherData {
 // ─── Airline lookup ───────────────────────────────────
 struct Airline { const char* prefix; const char* name; uint16_t color; };
 
+// ─── Dead-reckoning state ────────────────────────────
+struct AnimState {
+  float         baseAlt;       // altitude at last ping (ft)
+  float         baseDist;      // distance at last ping (mi)
+  int           vs;            // vertical speed (ft/min)
+  float         distRate;      // distance change rate (mi/s), negative = closing
+  int           speed;         // ground speed (kt) — displayed as-is
+  unsigned long baseMs;        // millis() at last ping
+  bool          active;
+};
+
 // ─── Aircraft type lookup ─────────────────────────────
 struct AircraftType { const char* code; const char* name; const char* cat; };

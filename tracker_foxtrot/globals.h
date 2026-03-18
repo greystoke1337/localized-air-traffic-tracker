@@ -82,6 +82,9 @@ extern int  loggedCount;
 extern char loggedUnknowns[MAX_UNKNOWNS][6];
 extern int  loggedUnknownCount;
 
+// ─── Dashboard animation ─────────────────────────────
+extern AnimState anim;
+
 // ─── Diagnostics ──────────────────────────────────────
 extern unsigned long lastDiagMs;
 
@@ -119,6 +122,9 @@ void renderWeather();
 void renderMessage(const char* line1, const char* line2 = nullptr);
 void bootSequence();
 void drawOtaProgress(int pct);
+void animStart(const Flight& f);
+void animTickDashboard();
+void redrawDashNumbers(float alt, float dist, int spd, int vs);
 
 // network.ino
 String fetchFromProxy();

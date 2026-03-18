@@ -25,6 +25,9 @@ const Airline AIRLINES[] = {
   {"JBU","JETBLUE",AL_SKY},     {"ENY","ENVOY",AL_SKY},         {"SKW","SKYWEST",AL_SKY},
   {"RPA","REPUBLIC",AL_SKY},    {"EDV","ENDEAVOR",AL_RED},       {"GJS","GOJET",AL_SKY},
   {"FDX","FEDEX",AL_VIOLET},    {"UPS","UPS",AL_ORANGE},         {"GTI","ATLAS AIR",AL_SKY},
+  {"ACA","AIR CANADA",AL_SKY}, {"WJA","WESTJET",AL_TEAL},       {"SCX","SUN COUNTRY",AL_ORANGE},
+  {"PDT","PIEDMONT",AL_SKY},   {"PSA","PSA AIR",AL_SKY},        {"MES","MESA",AL_SKY},
+  {"VOI","VOLARIS",AL_VIOLET},
 };
 const int AIRLINE_COUNT = sizeof(AIRLINES) / sizeof(AIRLINES[0]);
 

@@ -106,6 +106,9 @@ int  loggedCount = 0;
 char loggedUnknowns[MAX_UNKNOWNS][6];
 int  loggedUnknownCount = 0;
 
+// ─── Dashboard animation ─────────────────────────────
+AnimState anim = {};
+
 // ─── Diagnostics ──────────────────────────────────────
 unsigned long lastDiagMs = 0;
 
@@ -467,7 +470,11 @@ void setup() {
   if (flightCount == 0) {
     if (wxReady) renderWeather();
     else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
-  } else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
+  } else {
+    currentScreen = SCREEN_FLIGHT;
+    animStart(flights[flightIndex]);
+    renderFlight(flights[flightIndex]);
+  }
 
   countdown = REFRESH_SECS;
   fetchWeather();
@@ -511,7 +518,11 @@ void loop() {
     if (flightCount == 0) {
       if (wxReady) renderWeather();
       else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
-    } else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
+    } else {
+      currentScreen = SCREEN_FLIGHT;
+      animStart(flights[flightIndex]);
+      renderFlight(flights[flightIndex]);
+    }
     countdown = REFRESH_SECS;
     lastCycle  = millis();
   }
@@ -570,9 +581,14 @@ void loop() {
     if (countdown <= 0) {
       fetchFlights();
       if (flightCount == 0) {
+        anim.active = false;
         if (wxReady) renderWeather();
         else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
-      } else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
+      } else {
+        currentScreen = SCREEN_FLIGHT;
+        animStart(flights[flightIndex]);
+        renderFlight(flights[flightIndex]);
+      }
       countdown = REFRESH_SECS;
       lastCycle  = millis();
     }
@@ -589,7 +605,17 @@ void loop() {
       !isFetching && now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
     lastCycle = now;
     flightIndex = (flightIndex + 1) % flightCount;
+    animStart(flights[flightIndex]);
     renderFlight(flights[flightIndex]);
+  }
+
+  {
+    static unsigned long lastAnimMs = 0;
+    if (anim.active && currentScreen == SCREEN_FLIGHT
+        && now - lastAnimMs >= ANIM_TICK_MS) {
+      lastAnimMs = now;
+      animTickDashboard();
+    }
   }
 #endif
 }

@@ -133,6 +133,12 @@ const AIRLINE_NAMES = {
   VJC:'VietJet',ASA:'Alaska Airlines',KLM:'KLM',ANG:'Air Niugini',
   CAL:'China Airlines',ALK:'SriLankan',NWL:'Network Aviation',UTY:'Alliance Airlines',
   FRE:'FlyPelican',MXD:'Batik Air',ACI:'Aircalin',
+  // US domestic — Chicago O'Hare + Midway
+  SWA:'Southwest',NKS:'Spirit',FFT:'Frontier',JBU:'JetBlue',
+  ENY:'Envoy Air',SKW:'SkyWest',RPA:'Republic',EDV:'Endeavor Air',GJS:'GoJet',
+  FDX:'FedEx Express',UPS:'UPS Airlines',GTI:'Atlas Air',
+  ACA:'Air Canada',WJA:'WestJet',SCX:'Sun Country',
+  PDT:'Piedmont Airlines',PSA:'PSA Airlines',MES:'Mesa Airlines',VOI:'Volaris',
 };
 
 function airlineName(callsign) {
@@ -323,7 +329,7 @@ const AIRPORT_DB = {
   LHBP:'Budapest',BUD:'Budapest',
   LGAV:'Athens',ATH:'Athens',
   LTFM:'Istanbul',LTBA:'Istanbul',IST:'Istanbul',SAW:'Istanbul',
-  // Americas
+  // Americas — major hubs
   KJFK:'New York',KLGA:'New York',KEWR:'New York',
   JFK:'New York',LGA:'New York',EWR:'New York',
   KLAX:'Los Angeles',LAX:'Los Angeles',
@@ -332,24 +338,121 @@ const AIRPORT_DB = {
   KBOS:'Boston',BOS:'Boston',
   KMIA:'Miami',MIA:'Miami',
   KATL:'Atlanta',ATL:'Atlanta',
-  KDFW:'Dallas',DFW:'Dallas',DAL:'Dallas',
+  KDFW:'Dallas',DFW:'Dallas',KDAL:'Dallas',DAL:'Dallas',
   KDEN:'Denver',DEN:'Denver',
   KSEA:'Seattle',SEA:'Seattle',
   KLAS:'Las Vegas',LAS:'Las Vegas',
   KPHX:'Phoenix',PHX:'Phoenix',
-  KIAH:'Houston',KOAK:'Oakland',KONT:'Ontario',KPDX:'Portland',KSDF:'Louisville',
-  PHNL:'Honolulu',
+  KIAH:'Houston',IAH:'Houston',KHOU:'Houston',HOU:'Houston',
+  PHNL:'Honolulu',HNL:'Honolulu',
+  // US — Midwest
+  KMSP:'Minneapolis',MSP:'Minneapolis',KDTW:'Detroit',DTW:'Detroit',
+  KSTL:'St. Louis',STL:'St. Louis',KMKE:'Milwaukee',MKE:'Milwaukee',
+  KCMH:'Columbus',CMH:'Columbus',KIND:'Indianapolis',IND:'Indianapolis',
+  KCLE:'Cleveland',CLE:'Cleveland',KCVG:'Cincinnati',CVG:'Cincinnati',
+  KDSM:'Des Moines',DSM:'Des Moines',KOMA:'Omaha',OMA:'Omaha',
+  KGRR:'Grand Rapids',GRR:'Grand Rapids',KRFD:'Rockford',RFD:'Rockford',
+  KMCI:'Kansas City',MCI:'Kansas City',KICT:'Wichita',ICT:'Wichita',
+  KDAY:'Dayton',DAY:'Dayton',KFWA:'Fort Wayne',FWA:'Fort Wayne',
+  KSBN:'South Bend',SBN:'South Bend',KMSN:'Madison',MSN:'Madison',
+  KFSD:'Sioux Falls',FSD:'Sioux Falls',KFAR:'Fargo',FAR:'Fargo',
+  KGRB:'Green Bay',GRB:'Green Bay',KLSE:'La Crosse',LSE:'La Crosse',
+  KEAU:'Eau Claire',EAU:'Eau Claire',KCWA:'Wausau',CWA:'Wausau',
+  KPIA:'Peoria',PIA:'Peoria',KSPI:'Springfield',SPI:'Springfield',
+  KMLI:'Moline',MLI:'Moline',KCID:'Cedar Rapids',CID:'Cedar Rapids',
+  KBMI:'Bloomington',BMI:'Bloomington',KAZO:'Kalamazoo',AZO:'Kalamazoo',
+  KLAN:'Lansing',LAN:'Lansing',KFNT:'Flint',FNT:'Flint',
+  KMBS:'Saginaw',MBS:'Saginaw',KCAK:'Akron',CAK:'Akron',
+  KDLH:'Duluth',DLH:'Duluth',KBIS:'Bismarck',BIS:'Bismarck',
+  KRAP:'Rapid City',RAP:'Rapid City',KLNK:'Lincoln',LNK:'Lincoln',
+  KSGF:'Springfield MO',SGF:'Springfield MO',KLIT:'Little Rock',LIT:'Little Rock',
+  KLEX:'Lexington',LEX:'Lexington',KEVV:'Evansville',EVV:'Evansville',
+  // US — East Coast
+  KCLT:'Charlotte',CLT:'Charlotte',KPHL:'Philadelphia',PHL:'Philadelphia',
+  KIAD:'Washington',IAD:'Washington',KDCA:'Washington',DCA:'Washington',
+  KBWI:'Baltimore',BWI:'Baltimore',KPIT:'Pittsburgh',PIT:'Pittsburgh',
+  KBUF:'Buffalo',BUF:'Buffalo',KRDU:'Raleigh',RDU:'Raleigh',
+  KRIC:'Richmond',RIC:'Richmond',KORF:'Norfolk',ORF:'Norfolk',
+  KSYR:'Syracuse',SYR:'Syracuse',KROC:'Rochester',ROC:'Rochester',
+  KALB:'Albany',ALB:'Albany',KPVD:'Providence',PVD:'Providence',
+  KBDL:'Hartford',BDL:'Hartford',KMHT:'Manchester',MHT:'Manchester',
+  KPWM:'Portland ME',PWM:'Portland ME',KBTV:'Burlington',BTV:'Burlington',
+  KHPN:'Westchester',HPN:'Westchester',KMDT:'Harrisburg',MDT:'Harrisburg',
+  KABE:'Allentown',ABE:'Allentown',KERI:'Erie',ERI:'Erie',
+  KGSO:'Greensboro',GSO:'Greensboro',KGSP:'Greenville',GSP:'Greenville',
+  // US — Southeast
+  KBNA:'Nashville',BNA:'Nashville',KMCO:'Orlando',MCO:'Orlando',
+  KFLL:'Ft Lauderdale',FLL:'Ft Lauderdale',KTPA:'Tampa',TPA:'Tampa',
+  KMSY:'New Orleans',MSY:'New Orleans',
+  KJAX:'Jacksonville',JAX:'Jacksonville',KRSW:'Fort Myers',RSW:'Fort Myers',
+  KSRQ:'Sarasota',SRQ:'Sarasota',KEYW:'Key West',EYW:'Key West',
+  KBHM:'Birmingham',BHM:'Birmingham',KTYS:'Knoxville',TYS:'Knoxville',
+  KMEM:'Memphis',MEM:'Memphis',KCHS:'Charleston',CHS:'Charleston',
+  KSAV:'Savannah',SAV:'Savannah',KMYR:'Myrtle Beach',MYR:'Myrtle Beach',
+  KCAE:'Columbia',CAE:'Columbia',KILM:'Wilmington NC',ILM:'Wilmington NC',
+  KAVL:'Asheville',AVL:'Asheville',KHHH:'Hilton Head',HHH:'Hilton Head',
+  KPNS:'Pensacola',PNS:'Pensacola',KVPS:'Destin',VPS:'Destin',
+  KECP:'Panama City FL',ECP:'Panama City FL',KPGD:'Punta Gorda',PGD:'Punta Gorda',
+  KSAT:'San Antonio',SAT:'San Antonio',KELP:'El Paso',ELP:'El Paso',
+  // US — West / Southwest
+  KSAN:'San Diego',SAN:'San Diego',KSLC:'Salt Lake City',SLC:'Salt Lake City',
+  KAUS:'Austin',AUS:'Austin',KOKC:'Oklahoma City',OKC:'Oklahoma City',
+  KTUL:'Tulsa',TUL:'Tulsa',KABQ:'Albuquerque',ABQ:'Albuquerque',
+  KSJC:'San Jose',SJC:'San Jose',KSMF:'Sacramento',SMF:'Sacramento',
+  KOAK:'Oakland',OAK:'Oakland',KONT:'Ontario',ONT:'Ontario',
+  KPDX:'Portland',PDX:'Portland',KSDF:'Louisville',SDF:'Louisville',
+  KBUR:'Burbank',BUR:'Burbank',KLGB:'Long Beach',LGB:'Long Beach',
+  KSNA:'Orange County',SNA:'Orange County',KPSP:'Palm Springs',PSP:'Palm Springs',
+  KBOI:'Boise',BOI:'Boise',KRNO:'Reno',RNO:'Reno',
+  KGEG:'Spokane',GEG:'Spokane',KEUG:'Eugene',EUG:'Eugene',
+  KFAT:'Fresno',FAT:'Fresno',KCOS:'Colorado Springs',COS:'Colorado Springs',
+  KTUS:'Tucson',TUS:'Tucson',KSBA:'Santa Barbara',SBA:'Santa Barbara',
+  KMRY:'Monterey',MRY:'Monterey',KBZN:'Bozeman',BZN:'Bozeman',
+  KMSO:'Missoula',MSO:'Missoula',KBIL:'Billings',BIL:'Billings',
+  KJAC:'Jackson Hole',JAC:'Jackson Hole',KSUN:'Sun Valley',SUN:'Sun Valley',
+  KMTJ:'Montrose',MTJ:'Montrose',KHDN:'Steamboat',HDN:'Steamboat',
+  KASE:'Aspen',ASE:'Aspen',KGUC:'Gunnison',GUC:'Gunnison',
+  KFCA:'Kalispell',FCA:'Kalispell',KIDA:'Idaho Falls',IDA:'Idaho Falls',
+  KSGU:'St. George',SGU:'St. George',PANC:'Anchorage',ANC:'Anchorage',
+  PHOG:'Maui',OGG:'Maui',PHKO:'Kona',KOA:'Kona',
+  // Canada
   CYYZ:'Toronto',CYVR:'Vancouver',CYUL:'Montreal',
   YYZ:'Toronto',YVR:'Vancouver',YUL:'Montreal',
+  CYYC:'Calgary',YYC:'Calgary',CYEG:'Edmonton',YEG:'Edmonton',
+  CYOW:'Ottawa',YOW:'Ottawa',CYHZ:'Halifax',YHZ:'Halifax',
+  CYWG:'Winnipeg',YWG:'Winnipeg',CYQB:'Quebec City',YQB:'Quebec City',
+  CYTZ:'Toronto Island',YTZ:'Toronto Island',
+  // Mexico
+  MMMX:'Mexico City',MEX:'Mexico City',MMGL:'Guadalajara',GDL:'Guadalajara',
+  MMUN:'Cancun',CUN:'Cancun',MMPR:'Puerto Vallarta',PVR:'Puerto Vallarta',
+  MMSD:'San Jose del Cabo',SJD:'San Jose del Cabo',
+  MMMY:'Monterrey',MTY:'Monterrey',MMLO:'Leon',BJX:'Leon',
+  MMCZ:'Cozumel',CZM:'Cozumel',MMZH:'Ixtapa',ZIH:'Ixtapa',
+  MMMM:'Morelia',MLM:'Morelia',MMQT:'Queretaro',QRO:'Queretaro',
+  // Caribbean / Central America
+  TJSJ:'San Juan',SJU:'San Juan',MDPC:'Punta Cana',PUJ:'Punta Cana',
+  MKJS:'Montego Bay',MBJ:'Montego Bay',MYNN:'Nassau',NAS:'Nassau',
+  MWCR:'Grand Cayman',GCM:'Grand Cayman',
+  TNCA:'Aruba',AUA:'Aruba',TNCC:'Curacao',CUR:'Curacao',
+  TNCM:'Sint Maarten',SXM:'Sint Maarten',
+  TIST:'St. Thomas',STT:'St. Thomas',TISX:'St. Croix',STX:'St. Croix',
+  TLPL:'St. Lucia',UVF:'St. Lucia',MBPV:'Providenciales',PLS:'Providenciales',
+  MROC:'San Jose CR',SJO:'San Jose CR',MRLB:'Liberia CR',LIR:'Liberia CR',
+  MPTO:'Panama City',PTY:'Panama City',MZBZ:'Belize City',BZE:'Belize City',
+  MSLP:'San Salvador',SAL:'San Salvador',
+  MGGT:'Guatemala City',GUA:'Guatemala City',
+  MTPP:'Port-au-Prince',PAP:'Port-au-Prince',
+  // South America
   SBGR:'São Paulo',SBGL:'Rio de Janeiro',
   GRU:'São Paulo',GIG:'Rio de Janeiro',
   SAEZ:'Buenos Aires',EZE:'Buenos Aires',
   SCEL:'Santiago',SCL:'Santiago',
   SKBO:'Bogotá',BOG:'Bogotá',
   SEQM:'Quito',UIO:'Quito',
-  MMMX:'Mexico City',MMGL:'Guadalajara',MEX:'Mexico City',GDL:'Guadalajara',
-  MGGT:'Guatemala City',GUA:'Guatemala City',
-  MTPP:'Port-au-Prince',PAP:'Port-au-Prince',
+  // Europe — additional
+  LPPT:'Lisbon',LIS:'Lisbon',LYBE:'Belgrade',BEG:'Belgrade',
+  EPKK:'Krakow',KRK:'Krakow',EINN:'Shannon',SNN:'Shannon',
+  LIRN:'Naples',NAP:'Naples',
   // Africa
   FAOR:'Johannesburg',FACT:'Cape Town',
   JNB:'Johannesburg',CPT:'Cape Town',
@@ -372,6 +475,33 @@ function formatRouteString(dep, arr) {
   return depName + ' > ' + arrName;
 }
 
+// ── Unknown airport tracker (temporary) ──────────────────────────────
+const unknownAirports = new Map(); // code → { count, firstSeen, lastSeen, flights: Set }
+const UNKNOWN_AIRPORT_TTL = 14 * 60 * 60 * 1000; // 14 hours
+
+function trackUnknownAirport(code, callsign) {
+  if (!code) return;
+  code = code.trim().toUpperCase();
+  if (AIRPORT_DB[code]) return; // known
+  if (code.length < 3 || code.length > 4) return; // skip garbage
+  const now = Date.now();
+  const existing = unknownAirports.get(code);
+  if (existing) {
+    existing.count++;
+    existing.lastSeen = now;
+    existing.flights.add(callsign);
+  } else {
+    unknownAirports.set(code, { count: 1, firstSeen: now, lastSeen: now, flights: new Set([callsign]) });
+  }
+}
+
+function pruneUnknownAirports() {
+  const cutoff = Date.now() - UNKNOWN_AIRPORT_TTL;
+  for (const [code, entry] of unknownAirports) {
+    if (entry.lastSeen < cutoff) unknownAirports.delete(code);
+  }
+}
+
 function enrichRoutes(data) {
   const unrouted = [];
   for (const ac of (data.ac || [])) {
@@ -387,6 +517,8 @@ function enrichRoutes(data) {
     }
     const dep = ac.dep || ac.orig_iata || null;
     const arr = ac.arr || ac.dest_iata || null;
+    if (dep) trackUnknownAirport(dep, cs);
+    if (arr) trackUnknownAirport(arr, cs);
     const routeStr = formatRouteString(dep, arr);
     if (routeStr) ac.route = routeStr;
   }
@@ -772,6 +904,12 @@ app.get('/', (req, res) => {
 
 // ── Status API ────────────────────────────────────────────────────────
 app.get('/status', async (req, res) => {
+  pruneUnknownAirports();
+  const unknown = [];
+  for (const [code, e] of unknownAirports) {
+    unknown.push({ code, count: e.count, flights: [...e.flights].slice(-10), firstSeen: new Date(e.firstSeen).toISOString(), lastSeen: new Date(e.lastSeen).toISOString() });
+  }
+  unknown.sort((a, b) => b.count - a.count);
   res.json({
     proxyEnabled,
     uptime:  os.uptime(),
@@ -780,6 +918,7 @@ app.get('/status', async (req, res) => {
     ram:     { total: os.totalmem(), free: os.freemem() },
     network: networkInfo(),
     pm2:     await pm2Status(),
+    unknownAirports: unknown,
     log:     requestLog,
   });
 });

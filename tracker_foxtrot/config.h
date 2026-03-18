@@ -26,6 +26,10 @@
 #define REFRESH_SECS 15
 #define CYCLE_SECS   8
 
+// ─── Dashboard animation ─────────────────────────────
+#define ANIM_DURATION_MS 1000
+#define ANIM_TICK_MS     100
+
 // ─── Screen ──────────────────────────────────────────
 #define W 800
 #define H 480

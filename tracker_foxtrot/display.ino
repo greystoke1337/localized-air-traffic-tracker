@@ -201,9 +201,9 @@ void renderFlight(const Flight& f) {
   formatAlt(f.alt, altBuf, sizeof(altBuf));
   dlbl(COL_W + 14, dashY + 22, FONT_SM, C_AMBER, altBuf);
   if (abs(f.vs) >= 50) {
-    char vsBuf[16];
-    if (f.vs > 0) snprintf(vsBuf, sizeof(vsBuf), "+%d", f.vs);
-    else          snprintf(vsBuf, sizeof(vsBuf), "%d",  f.vs);
+    char vsBuf[24];
+    if (f.vs > 0) snprintf(vsBuf, sizeof(vsBuf), "+%d FPM", f.vs);
+    else          snprintf(vsBuf, sizeof(vsBuf), "%d FPM",  f.vs);
     dlbl(COL_W + 14, dashY + 48, FONT_XS, f.vs > 0 ? C_GREEN : C_RED, vsBuf);
   } else {
     dlbl(COL_W + 14, dashY + 48, FONT_XS, C_AMBER, "LEVEL");
@@ -348,6 +348,95 @@ void renderWeather() {
   }
 
   drawStatusBar();
+}
+
+// ─── Dead-reckoning helpers ─────────────────────────
+
+void animStart(const Flight& f) {
+  anim.baseAlt  = (float)f.alt;
+  anim.baseDist = f.dist;
+  anim.vs       = f.vs;
+  anim.speed    = f.speed;
+  anim.baseMs   = millis();
+
+  // Compute distance rate: project ground speed along the radial to home.
+  // Bearing from aircraft to home, compared to aircraft track.
+  // distRate in mi/s (negative = closing, positive = opening).
+  if (f.speed > 0 && f.track >= 0 && f.dist > 0.1f) {
+    float bearingToHome = atan2f(
+      sinf((HOME_LON - f.lon) * M_PI / 180.0f) * cosf(HOME_LAT * M_PI / 180.0f),
+      cosf(f.lat * M_PI / 180.0f) * sinf(HOME_LAT * M_PI / 180.0f) -
+      sinf(f.lat * M_PI / 180.0f) * cosf(HOME_LAT * M_PI / 180.0f) *
+      cosf((HOME_LON - f.lon) * M_PI / 180.0f)
+    ) * 180.0f / M_PI;
+    if (bearingToHome < 0) bearingToHome += 360.0f;
+
+    float diff = ((float)f.track - bearingToHome) * M_PI / 180.0f;
+    // knots * 1.15078 = mph, /3600 = mi/s. Positive cosine = moving toward home = dist shrinks.
+    anim.distRate = -(float)f.speed * 1.15078f / 3600.0f * cosf(diff);
+  } else {
+    anim.distRate = 0.0f;
+  }
+
+  anim.active = (f.alt > 0 || f.dist > 0);
+}
+
+void redrawDashNumbers(float alt, float dist, int spd, int vs) {
+  const int CY    = CONTENT_Y;
+  const int dashY = CY + CONTENT_H - 90;
+  const int COL_W = W / 4;
+
+  int iAlt = (int)(alt + 0.5f);
+
+  // ALT value
+  tft.fillRect(COL_W + 10, dashY + 20, COL_W - 14, 28, C_BG);
+  char altBuf[20];
+  formatAlt(iAlt, altBuf, sizeof(altBuf));
+  dlbl(COL_W + 14, dashY + 22, FONT_SM, C_AMBER, altBuf);
+
+  // VS value
+  tft.fillRect(COL_W + 10, dashY + 46, COL_W - 14, 22, C_BG);
+  if (abs(vs) >= 50) {
+    char vsBuf[24];
+    if (vs > 0) snprintf(vsBuf, sizeof(vsBuf), "+%d FPM", vs);
+    else        snprintf(vsBuf, sizeof(vsBuf), "%d FPM",  vs);
+    dlbl(COL_W + 14, dashY + 48, FONT_XS, vs > 0 ? C_GREEN : C_RED, vsBuf);
+  } else {
+    dlbl(COL_W + 14, dashY + 48, FONT_XS, C_AMBER, "LEVEL");
+  }
+
+  // SPD value
+  tft.fillRect(COL_W * 2 + 10, dashY + 20, COL_W - 14, 28, C_BG);
+  if (spd > 0) {
+    char spdBuf[16];
+    snprintf(spdBuf, sizeof(spdBuf), "%d KT", spd);
+    dlbl(COL_W * 2 + 14, dashY + 22, FONT_SM, C_AMBER, spdBuf);
+  } else {
+    dlbl(COL_W * 2 + 14, dashY + 22, FONT_SM, C_AMBER, "---");
+  }
+
+  // DIST value
+  tft.fillRect(COL_W * 3 + 10, dashY + 20, COL_W - 14, 28, C_BG);
+  if (dist > 0) {
+    uint16_t dCol = distanceColor(dist, GEOFENCE_MI);
+    char distBuf[16];
+    snprintf(distBuf, sizeof(distBuf), "%.1f MI", dist);
+    dlbl(COL_W * 3 + 14, dashY + 22, FONT_SM, dCol, distBuf);
+  } else {
+    dlbl(COL_W * 3 + 14, dashY + 22, FONT_SM, C_AMBER, "---");
+  }
+}
+
+void animTickDashboard() {
+  float elapsed = (float)(millis() - anim.baseMs) / 1000.0f;
+  if (elapsed > 30.0f) elapsed = 30.0f;  // cap at 30s to avoid runaway
+
+  float alt  = anim.baseAlt + ((float)anim.vs / 60.0f) * elapsed;
+  if (alt < 0) alt = 0;
+  float dist = anim.baseDist + anim.distRate * elapsed;
+  if (dist < 0) dist = 0;
+
+  redrawDashNumbers(alt, dist, anim.speed, anim.vs);
 }
 
 // ─── Boot sequence ──────────────────────────────────
