@@ -1,4 +1,7 @@
 // ─── Display rendering: immediate-mode LovyanGFX (800x480) ─────────────────
+// Anti-tear strategy: use setTextColor(fg, bg) to draw text with background
+// fill in a single pass, avoiding the fillRect→drawString gap that causes
+// DMA read/write races on the RGB parallel framebuffer.
 
 // ─── Font aliases (2× scale) ─────────────────────────
 #define FONT_XS  (&lgfx::fonts::DejaVu18)
@@ -28,13 +31,15 @@ static void dlbl_r(int x, int y, const lgfx::IFont* f, uint16_t col, const char*
   tft.setTextDatum(lgfx::top_left);
 }
 
-// Draw text with background fill (single-pass, no tearing)
-static void dlbl_bg(int x, int y, int w, int h, const lgfx::IFont* f, uint16_t col, const char* txt) {
-  tft.fillRect(x, y, w, h, C_BG);
+// Draw text with background fill in one pass (no clear/draw gap)
+static void dlbl_fill(int x, int y, int w, int h, const lgfx::IFont* f, uint16_t col, uint16_t bg, const char* txt) {
+  tft.setClipRect(x, y, w, h);
+  tft.fillRect(x, y, w, h, bg);
   tft.setFont(f);
   tft.setTextColor(col);
   tft.setTextDatum(lgfx::top_left);
-  tft.drawString(txt, x + 4, y + 2);
+  tft.drawString(txt, x, y);
+  tft.clearClipRect();
 }
 
 static void drawBtn(int x, int y, int w, int h, uint16_t bg, const lgfx::IFont* f, uint16_t txtCol, const char* txt) {
@@ -133,8 +138,6 @@ void renderMessage(const char* line1, const char* line2) {
 void renderFlight(const Flight& f) {
   currentScreen = SCREEN_FLIGHT;
 
-  // Clear content in horizontal strips just before drawing each section
-  // instead of one big fillRect, to minimize visible blanking
   if (previousScreen != SCREEN_FLIGHT) drawHeader();
   previousScreen = SCREEN_FLIGHT;
   drawNavBar();
@@ -265,7 +268,6 @@ void renderWeather() {
                     ? utcNow + wxData.utc_offset_secs : utcNow;
   struct tm* t = gmtime(&localNow);
 
-  // Clock (DejaVu56, ~60px)
   char timeBuf[8];
   if (ntpOk) snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", t->tm_hour, t->tm_min);
   else       strlcpy(timeBuf, "--:--", sizeof(timeBuf));
@@ -375,9 +377,6 @@ void animStart(const Flight& f) {
   anim.speed    = f.speed;
   anim.baseMs   = millis();
 
-  // Compute distance rate: project ground speed along the radial to home.
-  // Bearing from aircraft to home, compared to aircraft track.
-  // distRate in mi/s (negative = closing, positive = opening).
   if (f.speed > 0 && f.track >= 0 && f.dist > 0.1f) {
     float bearingToHome = atan2f(
       sinf((HOME_LON - f.lon) * M_PI / 180.0f) * cosf(HOME_LAT * M_PI / 180.0f),
@@ -388,7 +387,6 @@ void animStart(const Flight& f) {
     if (bearingToHome < 0) bearingToHome += 360.0f;
 
     float diff = ((float)f.track - bearingToHome) * M_PI / 180.0f;
-    // knots * 1.15078 = mph, /3600 = mi/s. Positive cosine = moving toward home = dist shrinks.
     anim.distRate = -(float)f.speed * 1.15078f / 3600.0f * cosf(diff);
   } else {
     anim.distRate = 0.0f;
@@ -397,6 +395,8 @@ void animStart(const Flight& f) {
   anim.active = (f.alt > 0 || f.dist > 0);
 }
 
+// Tear-free dashboard cell update: fillRect + drawString clipped to the cell
+// so the clear and draw happen within a single clipped region.
 void redrawDashNumbers(float alt, float dist, int spd, int vs) {
   const int CY    = CONTENT_Y;
   const int dashY = CY + CONTENT_H - 90;
@@ -404,48 +404,44 @@ void redrawDashNumbers(float alt, float dist, int spd, int vs) {
 
   int iAlt = (int)(alt + 0.5f);
 
-  // ALT value — fillRect + draw in tight sequence
-  tft.fillRect(COL_W + 10, dashY + 20, COL_W - 14, 28, C_BG);
+  // ALT value
   char altBuf[20];
   formatAlt(iAlt, altBuf, sizeof(altBuf));
-  dlbl(COL_W + 14, dashY + 22, FONT_SM, C_AMBER, altBuf);
+  dlbl_fill(COL_W + 10, dashY + 20, COL_W - 14, 28, FONT_SM, C_AMBER, C_BG, altBuf);
 
   // VS value
-  tft.fillRect(COL_W + 10, dashY + 46, COL_W - 14, 22, C_BG);
   if (abs(vs) >= 50) {
     char vsBuf[24];
     if (vs > 0) snprintf(vsBuf, sizeof(vsBuf), "+%d FPM", vs);
     else        snprintf(vsBuf, sizeof(vsBuf), "%d FPM",  vs);
-    dlbl(COL_W + 14, dashY + 48, FONT_XS, vs > 0 ? C_GREEN : C_RED, vsBuf);
+    dlbl_fill(COL_W + 10, dashY + 46, COL_W - 14, 22, FONT_XS, vs > 0 ? C_GREEN : C_RED, C_BG, vsBuf);
   } else {
-    dlbl(COL_W + 14, dashY + 48, FONT_XS, C_AMBER, "LEVEL");
+    dlbl_fill(COL_W + 10, dashY + 46, COL_W - 14, 22, FONT_XS, C_AMBER, C_BG, "LEVEL");
   }
 
   // SPD value
-  tft.fillRect(COL_W * 2 + 10, dashY + 20, COL_W - 14, 28, C_BG);
   if (spd > 0) {
     char spdBuf[16];
     snprintf(spdBuf, sizeof(spdBuf), "%d KT", spd);
-    dlbl(COL_W * 2 + 14, dashY + 22, FONT_SM, C_AMBER, spdBuf);
+    dlbl_fill(COL_W * 2 + 10, dashY + 20, COL_W - 14, 28, FONT_SM, C_AMBER, C_BG, spdBuf);
   } else {
-    dlbl(COL_W * 2 + 14, dashY + 22, FONT_SM, C_AMBER, "---");
+    dlbl_fill(COL_W * 2 + 10, dashY + 20, COL_W - 14, 28, FONT_SM, C_AMBER, C_BG, "---");
   }
 
   // DIST value
-  tft.fillRect(COL_W * 3 + 10, dashY + 20, COL_W - 14, 28, C_BG);
   if (dist > 0) {
     uint16_t dCol = distanceColor(dist, GEOFENCE_MI);
     char distBuf[16];
     snprintf(distBuf, sizeof(distBuf), "%.1f MI", dist);
-    dlbl(COL_W * 3 + 14, dashY + 22, FONT_SM, dCol, distBuf);
+    dlbl_fill(COL_W * 3 + 10, dashY + 20, COL_W - 14, 28, FONT_SM, dCol, C_BG, distBuf);
   } else {
-    dlbl(COL_W * 3 + 14, dashY + 22, FONT_SM, C_AMBER, "---");
+    dlbl_fill(COL_W * 3 + 10, dashY + 20, COL_W - 14, 28, FONT_SM, C_AMBER, C_BG, "---");
   }
 }
 
 void animTickDashboard() {
   float elapsed = (float)(millis() - anim.baseMs) / 1000.0f;
-  if (elapsed > 30.0f) elapsed = 30.0f;  // cap at 30s to avoid runaway
+  if (elapsed > 30.0f) elapsed = 30.0f;
 
   float alt  = anim.baseAlt + ((float)anim.vs / 60.0f) * elapsed;
   if (alt < 0) alt = 0;
@@ -459,14 +455,12 @@ void animTickDashboard() {
 void bootSequence() {
   tft.fillScreen(C_BG);
 
-  // Title — large, centered
   tft.setFont(FONT_XL);
   tft.setTextColor(C_AMBER);
   tft.setTextDatum(lgfx::middle_center);
   tft.drawString("OVERHEAD", W / 2, H / 2 - 50);
   tft.drawString("TRACKER", W / 2, H / 2 + 10);
 
-  // Subtitle + version
   tft.setFont(FONT_SM);
   tft.setTextColor(C_DIM);
   tft.drawString("FOXTROT", W / 2, H / 2 + 60);
@@ -475,7 +469,6 @@ void bootSequence() {
   tft.drawString("v" FW_VERSION, W / 2, H / 2 + 85);
   tft.setTextDatum(lgfx::top_left);
 
-  // Progress bar
   int barX = W / 4, barY = H / 2 + 110, barW = W / 2, barH = 6;
   tft.drawRect(barX, barY, barW, barH, C_DIMMER);
   for (int i = 0; i <= 10; i++) {
