@@ -460,6 +460,148 @@ const AIRPORT_DB = {
   HAAB:'Addis Ababa',ADD:'Addis Ababa',
   HSSS:'Khartoum',KRT:'Khartoum',
   FMMI:'Antananarivo',TNR:'Antananarivo',
+  // UK — regional
+  EGCC:'Manchester',EGGP:'Liverpool',EGAA:'Belfast',EGNM:'Leeds Bradford',
+  EGBB:'Birmingham',EGGD:'Bristol',EGNS:'Isle of Man',EGGW:'Luton',
+  EGAC:'Belfast City',EGNT:'Newcastle',EGNX:'East Midlands',EGHQ:'Newquay',
+  EGFF:'Cardiff',EGPK:'Prestwick',EGPD:'Aberdeen',EGAE:'Derry',
+  EGHH:'Bournemouth',EGPE:'Inverness',EGPN:'Dundee',
+  MAN:'Manchester',LPL:'Liverpool',BFS:'Belfast',BHX:'Birmingham',BRS:'Bristol',
+  NCL:'Newcastle',EMA:'East Midlands',CWL:'Cardiff',ABZ:'Aberdeen',INV:'Inverness',
+  // Iceland
+  BIKF:'Keflavik',KEF:'Keflavik',
+  // Ireland — regional
+  EIKN:'Knock',NOC:'Knock',
+  // Spain / Canaries / Balearics
+  LEPA:'Palma de Mallorca',LEAL:'Alicante',LEMG:'Málaga',LEVC:'Valencia',
+  LEIB:'Ibiza',LEST:'Santiago de Compostela',
+  GCTS:'Tenerife South',GCRR:'Lanzarote',GCFV:'Fuerteventura',GCLP:'Gran Canaria',
+  PMI:'Palma de Mallorca',ALC:'Alicante',AGP:'Málaga',VLC:'Valencia',IBZ:'Ibiza',
+  TFS:'Tenerife South',ACE:'Lanzarote',FUE:'Fuerteventura',LPA:'Gran Canaria',
+  // Portugal — regional
+  LPFR:'Faro',LPPR:'Porto',LPMA:'Madeira',
+  FAO:'Faro',OPO:'Porto',FNC:'Madeira',
+  // France — regional
+  LFOB:'Beauvais',LFBH:'La Rochelle',LFMN:'Nice',LFBD:'Bordeaux',
+  LFML:'Marseille',LFLB:'Chambéry',
+  BVA:'Beauvais',NCE:'Nice',BOD:'Bordeaux',MRS:'Marseille',CMF:'Chambéry',
+  // Belgium — regional
+  EBCI:'Charleroi',EBOS:'Ostend',EBLG:'Liège',
+  CRL:'Charleroi',OST:'Ostend',LGG:'Liège',
+  // Netherlands — regional
+  EHBK:'Maastricht',EHEH:'Eindhoven',EHRD:'Rotterdam',
+  MST:'Maastricht',EIN:'Eindhoven',RTM:'Rotterdam',
+  // Luxembourg
+  ELLX:'Luxembourg',LUX:'Luxembourg',
+  // Germany — regional
+  EDDP:'Leipzig',EDDK:'Cologne',EDDH:'Hamburg',EDSB:'Baden-Baden',
+  EDDW:'Bremen',EDDB:'Berlin',EDDL:'Düsseldorf',EDDG:'Münster',
+  EDDC:'Dresden',EDFH:'Hahn',
+  LEJ:'Leipzig',CGN:'Cologne',HAM:'Hamburg',FKB:'Baden-Baden',
+  BRE:'Bremen',BER:'Berlin',DUS:'Düsseldorf',FMO:'Münster',DRS:'Dresden',HHN:'Hahn',
+  // Poland — regional
+  EPWR:'Wrocław',WRO:'Wrocław',
+  // Baltic states
+  EYKA:'Kaunas',EYVI:'Vilnius',EVRA:'Riga',
+  KUN:'Kaunas',VNO:'Vilnius',RIX:'Riga',
+  // Denmark — regional
+  EKBI:'Billund',BLL:'Billund',
+  // Norway — regional
+  ENTO:'Sandefjord',TRF:'Sandefjord',
+  // Italy — regional
+  LIME:'Bergamo',LICJ:'Palermo',LIPE:'Bologna',LIRA:'Rome Ciampino',LIPZ:'Venice',
+  BGY:'Bergamo',PMO:'Palermo',BLQ:'Bologna',CIA:'Rome Ciampino',VCE:'Venice',
+  // Malta
+  LMML:'Malta',MLA:'Malta',
+  // Croatia
+  LDZA:'Zagreb',ZAG:'Zagreb',
+  // Greece — regional
+  LGKO:'Kos',LGIR:'Heraklion',LGRP:'Rhodes',LGSA:'Chania',LGTS:'Thessaloniki',
+  KGS:'Kos',HER:'Heraklion',RHO:'Rhodes',CHQ:'Chania',SKG:'Thessaloniki',
+  // Bulgaria
+  LBPD:'Plovdiv',LBSF:'Sofia',PDV:'Plovdiv',SOF:'Sofia',
+  // Turkey — regional
+  LTBS:'Dalaman',LTAI:'Antalya',LTFJ:'Istanbul Sabiha',
+  DLM:'Dalaman',AYT:'Antalya',
+  // Gibraltar
+  LXGB:'Gibraltar',GIB:'Gibraltar',
+  // Moldova
+  LUKK:'Chișinău',KIV:'Chișinău',
+  // Montenegro
+  LYPG:'Podgorica',TGD:'Podgorica',
+  // Jordan — regional
+  OJAI:'Amman',
+  // Egypt — regional
+  HESH:'Sharm El Sheikh',SSH:'Sharm El Sheikh',
+  // Morocco — regional
+  GMMX:'Marrakech',GMAD:'Agadir',RAK:'Marrakech',AGA:'Agadir',
+  // Cape Verde
+  GVBA:'Boa Vista',GVAC:'Sal',BVC:'Boa Vista',SID:'Sal',
+  // Japan — regional
+  RJGG:'Nagoya',NGO:'Nagoya',
+  // China — regional
+  ZSNB:'Ningbo',NGB:'Ningbo',
+  // Mexico — regional
+  MMTM:'Tampico',MMAS:'Aguascalientes',
+  TAM:'Tampico',AGU:'Aguascalientes',
+  // Dominican Republic
+  MDST:'Santiago DR',MDSD:'Santo Domingo',
+  STI:'Santiago DR',SDQ:'Santo Domingo',
+  // Caribbean — additional
+  MYAM:'Marsh Harbour',TBPB:'Barbados',TNCB:'Bonaire',TJBQ:'Aguadilla',
+  MHH:'Marsh Harbour',BGI:'Barbados',BON:'Bonaire',BQN:'Aguadilla',
+  // Colombia — regional
+  SKCG:'Cartagena',CTG:'Cartagena',
+  // Canada — regional
+  CYQY:'Sydney NS',CYYG:'Charlottetown',
+  YQY:'Sydney NS',YYG:'Charlottetown',
+  // US — Northeast additional
+  KTEB:'Teterboro',KISP:'Islip',KSWF:'Newburgh',KFOK:'Westhampton',
+  KOXC:'Oxford CT',KITH:'Ithaca',KELM:'Elmira',KJST:'Johnstown PA',
+  KUNV:'State College',KMMU:'Morristown NJ',KMIV:'Millville NJ',
+  KPSM:'Portsmouth NH',KBGR:'Bangor',KPQI:'Presque Isle',
+  TEB:'Teterboro',ISP:'Islip',SWF:'Newburgh',ITH:'Ithaca',ELM:'Elmira',
+  JST:'Johnstown PA',UNV:'State College',MMU:'Morristown NJ',BGR:'Bangor',PQI:'Presque Isle',
+  // US — Southeast additional
+  KPBI:'West Palm Beach',KPIE:'St. Petersburg FL',KLCQ:'Lake City FL',
+  KHSV:'Huntsville',KABY:'Albany GA',KTRI:'Tri-Cities TN',
+  KSHD:'Shenandoah Valley',KCHO:'Charlottesville',KROA:'Roanoke',
+  KPIB:'Hattiesburg',KGYH:'Greenville Downtown',KFTY:'Fulton County GA',
+  KOAJ:'Jacksonville NC',KMCF:'MacDill AFB',KVRB:'Vero Beach',KSFB:'Sanford FL',
+  PBI:'West Palm Beach',PIE:'St. Petersburg FL',HSV:'Huntsville',ABY:'Albany GA',
+  TRI:'Tri-Cities TN',SHD:'Shenandoah Valley',CHO:'Charlottesville',ROA:'Roanoke',
+  OAJ:'Jacksonville NC',VRB:'Vero Beach',SFB:'Sanford FL',
+  // US — South / Texas additional
+  KMFE:'McAllen',KBRO:'Brownsville',KHRL:'Harlingen',KAEX:'Alexandria LA',
+  KACT:'Waco',KFTW:'Fort Worth Meacham',KAFW:'Fort Worth Alliance',KADS:'Addison TX',
+  KCLL:'College Station',KLBB:'Lubbock',KSWO:'Stillwater OK',KROW:'Roswell NM',
+  MFE:'McAllen',BRO:'Brownsville',HRL:'Harlingen',AEX:'Alexandria LA',
+  ACT:'Waco',AFW:'Fort Worth Alliance',CLL:'College Station',LBB:'Lubbock',ROW:'Roswell NM',
+  // US — Midwest additional
+  KXNA:'Northwest Arkansas',KATW:'Appleton',KSTP:'St. Paul Downtown',
+  KLAF:'Lafayette IN',KUIN:'Quincy IL',KDEC:'Decatur IL',KCMI:'Champaign',
+  KSBM:'Sheboygan',KCMX:'Houghton MI',KMCW:'Mason City',KYIP:'Willow Run MI',
+  KTVF:'Thief River Falls',KRST:'Rochester MN',KSUX:'Sioux City',
+  KBRL:'Burlington IA',KALO:'Waterloo IA',KCGF:'Cuyahoga County',KSTC:'St. Cloud MN',
+  XNA:'Northwest Arkansas',ATW:'Appleton',CMI:'Champaign',RST:'Rochester MN',SUX:'Sioux City',
+  ALO:'Waterloo IA',
+  // US — West additional
+  KSTS:'Santa Rosa CA',KACV:'Arcata',KMFR:'Medford',KSBP:'San Luis Obispo',
+  KOTH:'North Bend OR',KSBD:'San Bernardino',KPAE:'Paine Field',KVCV:'Victorville',
+  KSCK:'Stockton',KRDM:'Redmond OR',KSDL:'Scottsdale',KBFI:'Boeing Field',
+  KFHR:'Friday Harbor',KIWA:'Mesa Gateway',KILN:'Wilmington OH',KRIV:'March ARB',
+  KBLI:'Bellingham',KCRW:'Charleston WV',KHLN:'Helena MT',KBTM:'Butte MT',
+  KMVY:'Martha\'s Vineyard',
+  STS:'Santa Rosa CA',ACV:'Arcata',MFR:'Medford',SBP:'San Luis Obispo',
+  OTH:'North Bend OR',SBD:'San Bernardino',PAE:'Paine Field',SCK:'Stockton',
+  RDM:'Redmond OR',SDL:'Scottsdale',BFI:'Boeing Field',IWA:'Mesa Gateway',
+  BLI:'Bellingham',CRW:'Charleston WV',HLN:'Helena MT',BTM:'Butte MT',MVY:'Martha\'s Vineyard',
+  // US — Hawaii / Alaska additional
+  PHNY:'Lanai',PHLI:'Lihue',PHMK:'Molokai',PAKT:'Ketchikan',PAFA:'Fairbanks',
+  LNY:'Lanai',LIH:'Lihue',MKK:'Molokai',KTN:'Ketchikan',FAI:'Fairbanks',
+  // US — Military
+  KADW:'Andrews AFB',KBKF:'Buckley SFB',KNGU:'Norfolk NAS',KNYL:'Yuma MCAS',
+  KHXD:'Hilton Head',
 };
 
 function airportName(code) {
