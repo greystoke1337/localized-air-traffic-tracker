@@ -88,6 +88,7 @@ bool          usingCache   = false;
 int           dataSource   = 0;
 unsigned long lastTick     = 0;
 unsigned long lastCycle    = 0;
+unsigned long lastFetchOk  = 0;
 time_t        cacheTimestamp = 0;
 
 // ─── Direct API robustness ────────────────────────────
@@ -106,15 +107,25 @@ int  loggedCount = 0;
 char loggedUnknowns[MAX_UNKNOWNS][6];
 int  loggedUnknownCount = 0;
 
-// ─── Dashboard animation ─────────────────────────────
-AnimState anim = {};
-
 // ─── Diagnostics ──────────────────────────────────────
 unsigned long lastDiagMs = 0;
 
 // ─── Cross-task trigger flags ─────────────────────────
 volatile bool triggerPortal   = false;
 volatile bool triggerGeoFetch = false;
+
+// ─── Async fetch (FreeRTOS background task) ──────────
+#if ASYNC_FETCH
+volatile bool     fetchDone         = false;
+volatile int      fetchResultCount  = -1;
+volatile int      fetchResultSource = 0;
+volatile bool     fetchResultCache  = false;
+volatile bool     wxFetchPending    = false;
+volatile bool     wxFetchDone       = false;
+volatile bool     wxFetchResultOk   = false;
+SemaphoreHandle_t fetchSemaphore    = NULL;
+TaskHandle_t      fetchTaskHandle   = NULL;
+#endif
 
 // ─── Temp WiFi screen helpers (tft direct) ────────────
 static void drawTempHeader() {
@@ -465,14 +476,25 @@ void setup() {
     }
   }
 
+#if ASYNC_FETCH
+  fetchSemaphore = xSemaphoreCreateBinary();
+  xTaskCreatePinnedToCore(fetchTaskFunc, "fetch", 16384, NULL, 1, &fetchTaskHandle, 1);
+  Serial.println("Async fetch task created on core 1");
+
+  initUI();
+  isFetching = true;
+  fetchDone = false;
+  xSemaphoreGive(fetchSemaphore);
+  renderMessage("SCANNING AIRSPACE", "FIRST UPDATE...");
+  countdown = REFRESH_SECS;
+  wxCountdown = 5;
+#else
   initUI();
   fetchFlights();
   if (flightCount == 0) {
-    if (wxReady) renderWeather();
-    else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
+    renderIdleScreen();
   } else {
     currentScreen = SCREEN_FLIGHT;
-    animStart(flights[flightIndex]);
     renderFlight(flights[flightIndex]);
   }
 
@@ -480,6 +502,20 @@ void setup() {
   fetchWeather();
   wxCountdown = WX_REFRESH_SECS;
 #endif
+#endif
+}
+
+static void renderIdleScreen() {
+  if (!wifiOk()) {
+    renderMessage("WIFI DISCONNECTED", "ATTEMPTING RECONNECT...");
+  } else if (WiFi.RSSI() > -70) {
+    if (wxReady) renderWeather();
+    else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
+  } else {
+    char rssiMsg[48];
+    snprintf(rssiMsg, sizeof(rssiMsg), "SIGNAL: %d dBm  (WEAK)", WiFi.RSSI());
+    renderMessage("WEAK WIFI SIGNAL", rssiMsg);
+  }
 }
 
 // ─── Loop ─────────────────────────────────────────────
@@ -512,20 +548,57 @@ void loop() {
     startCaptivePortal();
   }
 
+#if ASYNC_FETCH
+  // ── Handle completed flight fetch ──
+  if (fetchDone) {
+    fetchDone = false;
+    if (fetchResultCount >= 0) {
+      memcpy(flights, newFlights, sizeof(Flight) * fetchResultCount);
+      flightCount = fetchResultCount;
+      flightIndex = 0;
+      dataSource  = fetchResultSource;
+      usingCache  = fetchResultCache;
+      for (int i = 0; i < flightCount; i++) logFlight(flights[i]);
+    }
+    isFetching = false;
+    countdown = REFRESH_SECS;
+    if (fetchResultCount >= 0) lastFetchOk = millis();
+    if (flightCount == 0) renderIdleScreen();
+    else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
+    lastCycle = millis();
+  }
+
+  // ── Handle completed weather fetch ──
+  if (wxFetchDone) {
+    wxFetchDone = false;
+    bool wxOk = wxFetchResultOk;
+    wxCountdown = wxOk ? WX_REFRESH_SECS : 60;
+    if (currentScreen == SCREEN_WEATHER) renderWeather();
+    else if (wxOk && flightCount == 0) renderWeather();
+  }
+
+  // ── Trigger geo fetch via async task ──
+  if (triggerGeoFetch && !isFetching) {
+    triggerGeoFetch = false;
+    isFetching = true;
+    fetchDone = false;
+    xSemaphoreGive(fetchSemaphore);
+    countdown = REFRESH_SECS;
+  }
+#else
   if (triggerGeoFetch) {
     triggerGeoFetch = false;
     fetchFlights();
     if (flightCount == 0) {
-      if (wxReady) renderWeather();
-      else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
+      renderIdleScreen();
     } else {
       currentScreen = SCREEN_FLIGHT;
-      animStart(flights[flightIndex]);
       renderFlight(flights[flightIndex]);
     }
     countdown = REFRESH_SECS;
     lastCycle  = millis();
   }
+#endif
 
   if (now - lastDiagMs >= 60000) {
     lastDiagMs = now;
@@ -564,7 +637,7 @@ void loop() {
       }
     }
 
-    if (currentScreen == SCREEN_FLIGHT && flightCount > 0 && !isFetching) drawStatusBar();
+    if (currentScreen == SCREEN_FLIGHT && flightCount > 0) drawStatusBar();
 
     if (currentScreen == SCREEN_WEATHER) {
       time_t utcNow   = time(NULL);
@@ -578,15 +651,27 @@ void loop() {
       }
     }
 
+#if ASYNC_FETCH
+    if (countdown <= 0 && !isFetching) {
+      isFetching = true;
+      fetchDone = false;
+      xSemaphoreGive(fetchSemaphore);
+      countdown = REFRESH_SECS;
+    }
+
+    if (wxCountdown <= 0 && !isFetching) {
+      wxFetchPending = true;
+      wxFetchDone = false;
+      xSemaphoreGive(fetchSemaphore);
+      wxCountdown = WX_REFRESH_SECS;
+    }
+#else
     if (countdown <= 0) {
       fetchFlights();
       if (flightCount == 0) {
-        anim.active = false;
-        if (wxReady) renderWeather();
-        else         renderMessage("CLEAR SKIES", "NO AC IN RANGE");
+        renderIdleScreen();
       } else {
         currentScreen = SCREEN_FLIGHT;
-        animStart(flights[flightIndex]);
         renderFlight(flights[flightIndex]);
       }
       countdown = REFRESH_SECS;
@@ -599,23 +684,14 @@ void loop() {
       if (currentScreen == SCREEN_WEATHER) renderWeather();
       else if (wxOk && flightCount == 0) renderWeather();
     }
+#endif
   }
 
   if (flightCount > 1 && currentScreen == SCREEN_FLIGHT &&
       !isFetching && now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
     lastCycle = now;
     flightIndex = (flightIndex + 1) % flightCount;
-    animStart(flights[flightIndex]);
     renderFlight(flights[flightIndex]);
-  }
-
-  {
-    static unsigned long lastAnimMs = 0;
-    if (anim.active && currentScreen == SCREEN_FLIGHT
-        && now - lastAnimMs >= ANIM_TICK_MS) {
-      lastAnimMs = now;
-      animTickDashboard();
-    }
   }
 #endif
 }

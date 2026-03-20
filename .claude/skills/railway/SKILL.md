@@ -34,9 +34,9 @@ Parse the user's intent and run the appropriate command(s) below.
 node --check server/server.js
 ```
 
-2. Deploy:
+2. Deploy (MUST run from project root, NOT from server/):
 ```bash
-cd server && railway up
+railway up --service overhead-tracker-proxy
 ```
 
 3. Wait 30 seconds, then verify:

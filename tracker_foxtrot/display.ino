@@ -125,24 +125,22 @@ void drawStatusBar() {
 
   char buf[80];
   if (isFetching) {
-    snprintf(buf, sizeof(buf), "  SCANNING AIRSPACE...");
-  } else if (flightCount == 0) {
-    const char* src = dataSource == 2 ? "CACHE" : dataSource == 1 ? "DIRECT" : "PROXY";
-    snprintf(buf, sizeof(buf), "  CLEAR SKIES   SRC:%s   NEXT:%ds   H:%d",
-             src, countdown, (int)ESP.getFreeHeap());
-  } else if (dataSource == 2 && cacheTimestamp > 0) {
-    time_t now = time(NULL);
-    long ageSec = (now > cacheTimestamp) ? (long)(now - cacheTimestamp) : 0;
-    if (ageSec < 3600)
-      snprintf(buf, sizeof(buf), "  AC %d/%d   SRC:CACHE(%ldm%lds)   NEXT:%ds",
-               flightIndex + 1, flightCount, ageSec / 60, ageSec % 60, countdown);
-    else
-      snprintf(buf, sizeof(buf), "  AC %d/%d   SRC:CACHE(%ldh%ldm)   NEXT:%ds",
-               flightIndex + 1, flightCount, ageSec / 3600, (ageSec % 3600) / 60, countdown);
+    static int scanDots = 0;
+    scanDots = (scanDots + 1) % 4;
+    const char* anim[] = {"  SCANNING AIRSPACE", "  SCANNING AIRSPACE.", "  SCANNING AIRSPACE..", "  SCANNING AIRSPACE..."};
+    snprintf(buf, sizeof(buf), "%s", anim[scanDots]);
   } else {
     const char* src = dataSource == 2 ? "CACHE" : dataSource == 1 ? "DIRECT" : "PROXY";
-    snprintf(buf, sizeof(buf), "  AC %d/%d   SRC:%s   NEXT:%ds   H:%d",
-             flightIndex + 1, flightCount, src, countdown, (int)ESP.getFreeHeap());
+    int ageSec = lastFetchOk ? (int)((millis() - lastFetchOk) / 1000) : 0;
+    if (flightCount == 0) {
+      if (ageSec > 0)
+        snprintf(buf, sizeof(buf), "  CLEAR SKIES   SRC:%s   %ds AGO   NEXT:%ds", src, ageSec, countdown);
+      else
+        snprintf(buf, sizeof(buf), "  CLEAR SKIES   SRC:%s   NEXT:%ds", src, countdown);
+    } else {
+      snprintf(buf, sizeof(buf), "  AC %d/%d   SRC:%s   %ds AGO   NEXT:%ds",
+               flightIndex + 1, flightCount, src, ageSec, countdown);
+    }
   }
   dlbl(8, H - FOOT_H + 6, FONT_XS, C_DIM, buf);
   tft.clearClipRect();
@@ -357,7 +355,7 @@ void renderWeather() {
   char buf[32];
 
   dlbl(lx, cy, FONT_XS, C_DIM, "TEMPERATURE");
-  dlbl(rx, cy, FONT_XS, C_DIM, "FEELS LIKE");
+  dlbl(rx, cy, FONT_XS, C_DIM, "REAL FEEL");
   cy += 22;
   snprintf(buf, sizeof(buf), "%.0f F", wxData.temp * 9.0f / 5.0f + 32.0f);
   dlbl(lx, cy, FONT_SM, C_AMBER, buf);
@@ -386,7 +384,6 @@ void renderWeather() {
   cy += 8;
 
   dlbl(lx, cy, FONT_XS, C_DIM, "UV INDEX");
-  dlbl(rx, cy, FONT_XS, C_DIM, "TIDE");
   cy += 22;
 
   uint16_t uvCol = wxData.uv_index < 3.0f ? C_GREEN :
@@ -395,60 +392,9 @@ void renderWeather() {
   snprintf(buf, sizeof(buf), "%.1f", wxData.uv_index);
   dlbl(lx, cy, FONT_SM, uvCol, buf);
 
-  if (wxData.tide_time[0]) {
-    int tideH = (wxData.tide_time[0] - '0') * 10 + (wxData.tide_time[1] - '0');
-    int tideM = (wxData.tide_time[3] - '0') * 10 + (wxData.tide_time[4] - '0');
-    int tideMins = tideH * 60 + tideM;
-    int nowMins  = t->tm_hour * 60 + t->tm_min;
-    int diff = tideMins - nowMins;
-    if (diff < 0) diff += 24 * 60;
-    uint16_t tideCol = wxData.tide_is_high ? C_TIDE_HI : C_TIDE_LO;
-    if (diff > 0 && diff < 24 * 60) {
-      int dh = diff / 60, dm = diff % 60;
-      if (dh > 0)
-        snprintf(buf, sizeof(buf), "%s %dh%02dm %.1fft",
-          wxData.tide_is_high ? "HI" : "LO", dh, dm, wxData.tide_height * 3.28084f);
-      else
-        snprintf(buf, sizeof(buf), "%s %dm %.1fft",
-          wxData.tide_is_high ? "HI" : "LO", dm, wxData.tide_height * 3.28084f);
-    } else {
-      snprintf(buf, sizeof(buf), "%s %s %.1fft",
-        wxData.tide_is_high ? "HI" : "LO", wxData.tide_time, wxData.tide_height * 3.28084f);
-    }
-    dlbl(rx, cy, FONT_SM, tideCol, buf);
-  }
-
   drawStatusBar();
 }
 
-// ─── Dead-reckoning helpers ─────────────────────────
-
-void animStart(const Flight& f) {
-  anim.baseAlt  = (float)f.alt;
-  anim.baseDist = f.dist;
-  anim.vs       = f.vs;
-  anim.speed    = f.speed;
-  anim.baseMs   = millis();
-
-  if (f.speed > 0 && f.track >= 0 && f.dist > 0.1f) {
-    float bearingToHome = atan2f(
-      sinf((HOME_LON - f.lon) * M_PI / 180.0f) * cosf(HOME_LAT * M_PI / 180.0f),
-      cosf(f.lat * M_PI / 180.0f) * sinf(HOME_LAT * M_PI / 180.0f) -
-      sinf(f.lat * M_PI / 180.0f) * cosf(HOME_LAT * M_PI / 180.0f) *
-      cosf((HOME_LON - f.lon) * M_PI / 180.0f)
-    ) * 180.0f / M_PI;
-    if (bearingToHome < 0) bearingToHome += 360.0f;
-
-    float diff = ((float)f.track - bearingToHome) * M_PI / 180.0f;
-    anim.distRate = -(float)f.speed * 1.15078f / 3600.0f * cosf(diff);
-  } else {
-    anim.distRate = 0.0f;
-  }
-
-  anim.active = (f.alt > 0 || f.dist > 0);
-}
-
-// Clip-based dashboard cell update
 void redrawDashNumbers(float alt, float dist, int spd, int vs) {
   const int CY    = CONTENT_Y;
   const int dashY = CY + CONTENT_H - 90;
@@ -456,12 +402,10 @@ void redrawDashNumbers(float alt, float dist, int spd, int vs) {
 
   int iAlt = (int)(alt + 0.5f);
 
-  // ALT value
   char altBuf[20];
   formatAlt(iAlt, altBuf, sizeof(altBuf));
   dlbl_fill(COL_W + 10, dashY + 20, COL_W - 14, 28, FONT_SM, C_AMBER, C_BG, altBuf);
 
-  // VS value
   if (abs(vs) >= 50) {
     char vsBuf[24];
     if (vs > 0) snprintf(vsBuf, sizeof(vsBuf), "+%d FPM", vs);
@@ -471,7 +415,6 @@ void redrawDashNumbers(float alt, float dist, int spd, int vs) {
     dlbl_fill(COL_W + 10, dashY + 46, COL_W - 14, 22, FONT_XS, C_AMBER, C_BG, "LEVEL");
   }
 
-  // SPD value
   if (spd > 0) {
     char spdBuf[16];
     snprintf(spdBuf, sizeof(spdBuf), "%d KT", spd);
@@ -480,7 +423,6 @@ void redrawDashNumbers(float alt, float dist, int spd, int vs) {
     dlbl_fill(COL_W * 2 + 10, dashY + 20, COL_W - 14, 28, FONT_SM, C_AMBER, C_BG, "---");
   }
 
-  // DIST value
   if (dist > 0) {
     uint16_t dCol = distanceColor(dist, GEOFENCE_MI);
     char distBuf[16];
@@ -489,18 +431,6 @@ void redrawDashNumbers(float alt, float dist, int spd, int vs) {
   } else {
     dlbl_fill(COL_W * 3 + 10, dashY + 20, COL_W - 14, 28, FONT_SM, C_AMBER, C_BG, "---");
   }
-}
-
-void animTickDashboard() {
-  float elapsed = (float)(millis() - anim.baseMs) / 1000.0f;
-  if (elapsed > 30.0f) elapsed = 30.0f;
-
-  float alt  = anim.baseAlt + ((float)anim.vs / 60.0f) * elapsed;
-  if (alt < 0) alt = 0;
-  float dist = anim.baseDist + anim.distRate * elapsed;
-  if (dist < 0) dist = 0;
-
-  redrawDashNumbers(alt, dist, anim.speed, anim.vs);
 }
 
 // ─── Boot sequence ──────────────────────────────────

@@ -45,25 +45,10 @@ struct WeatherData {
   char    wind_cardinal[4];
   float   uv_index;
   int32_t utc_offset_secs;
-  char    tide_dir[8];     // "RISING" or "FALLING" or ""
-  char    tide_time[6];    // "HH:MM" or ""
-  float   tide_height;
-  bool    tide_is_high;    // true = next tide is HIGH
 };
 
 // ─── Airline lookup ───────────────────────────────────
 struct Airline { const char* prefix; const char* name; uint16_t color; };
-
-// ─── Dead-reckoning state ────────────────────────────
-struct AnimState {
-  float         baseAlt;       // altitude at last ping (ft)
-  float         baseDist;      // distance at last ping (mi)
-  int           vs;            // vertical speed (ft/min)
-  float         distRate;      // distance change rate (mi/s), negative = closing
-  int           speed;         // ground speed (kt) — displayed as-is
-  unsigned long baseMs;        // millis() at last ping
-  bool          active;
-};
 
 // ─── Aircraft type lookup ─────────────────────────────
 struct AircraftType { const char* code; const char* name; const char* cat; };

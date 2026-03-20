@@ -62,6 +62,7 @@ bool geocodeLocation(const char* query) {
 
   WiFiClientSecure client;
   client.setInsecure();
+  client.setHandshakeTimeout(8);
   HTTPClient http;
   http.begin(client, url);
   http.addHeader("User-Agent", "OverheadTracker/1.0");

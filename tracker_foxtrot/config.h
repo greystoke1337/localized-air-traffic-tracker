@@ -7,6 +7,7 @@
 #define HAS_TOUCH  1
 #define HAS_SD     1
 #define DEMO_MODE  0
+#define ASYNC_FETCH 1
 
 // ─── Blue-tint diagnostic (0 = off, 1–6 = progressive live init) ──────────
 // 0: normal DEMO_MODE / live mode
@@ -25,10 +26,6 @@
 // ─── Refresh ──────────────────────────────────────────
 #define REFRESH_SECS 15
 #define CYCLE_SECS   8
-
-// ─── Dashboard animation ─────────────────────────────
-#define ANIM_DURATION_MS 1000
-#define ANIM_TICK_MS     100
 
 // ─── Screen ──────────────────────────────────────────
 #define W 800
@@ -52,9 +49,6 @@
 #define C_YELLOW  0xFFE0
 #define C_ORANGE  0xFC60
 #define C_GOLD    0xFE68
-#define C_TIDE_HI 0x43DF
-#define C_TIDE_LO 0x07FF
-
 // ─── Airline brand colours (RGB565) ─────────────────
 #define AL_RED     0xF904
 #define AL_ROSE    0xFA31

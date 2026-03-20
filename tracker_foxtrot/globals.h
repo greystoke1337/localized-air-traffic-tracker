@@ -64,6 +64,7 @@ extern bool          usingCache;
 extern int           dataSource;
 extern unsigned long lastTick;
 extern unsigned long lastCycle;
+extern unsigned long lastFetchOk;
 extern time_t        cacheTimestamp;
 
 // ─── Direct API robustness ────────────────────────────
@@ -82,15 +83,26 @@ extern int  loggedCount;
 extern char loggedUnknowns[MAX_UNKNOWNS][6];
 extern int  loggedUnknownCount;
 
-// ─── Dashboard animation ─────────────────────────────
-extern AnimState anim;
-
 // ─── Diagnostics ──────────────────────────────────────
 extern unsigned long lastDiagMs;
 
 // ─── Cross-task trigger flags ─────────────────────────
 extern volatile bool triggerPortal;
 extern volatile bool triggerGeoFetch;
+
+// ─── Async fetch (FreeRTOS background task) ──────────
+#if ASYNC_FETCH
+#include <freertos/semphr.h>
+extern volatile bool     fetchDone;
+extern volatile int      fetchResultCount;
+extern volatile int      fetchResultSource;
+extern volatile bool     fetchResultCache;
+extern volatile bool     wxFetchPending;
+extern volatile bool     wxFetchDone;
+extern volatile bool     wxFetchResultOk;
+extern SemaphoreHandle_t fetchSemaphore;
+extern TaskHandle_t      fetchTaskHandle;
+#endif
 
 // ─── Forward declarations ─────────────────────────────
 // helpers.ino
@@ -122,10 +134,7 @@ void renderWeather();
 void renderMessage(const char* line1, const char* line2 = nullptr);
 void bootSequence();
 void drawOtaProgress(int pct);
-void animStart(const Flight& f);
-void animTickDashboard();
 void redrawDashNumbers(float alt, float dist, int spd, int vs);
-
 // network.ino
 String fetchFromProxy();
 int fetchAndParseDirectAPI();
@@ -134,6 +143,10 @@ int extractFlights(DynamicJsonDocument& doc);
 void fetchFlights();
 bool fetchWeather();
 void sendHeartbeat();
+#if ASYNC_FETCH
+void fetchFlightsWork();
+void fetchTaskFunc(void* param);
+#endif
 
 // touch.ino
 void initTouch();

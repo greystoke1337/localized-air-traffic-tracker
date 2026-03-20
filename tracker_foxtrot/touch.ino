@@ -69,7 +69,6 @@ void pollTouch() {
         ? (flightIndex - 1 + flightCount) % flightCount
         : (flightIndex + 1) % flightCount;
       lastCycle = millis();
-      animStart(flights[flightIndex]);
       renderFlight(flights[flightIndex]);
     }
   }

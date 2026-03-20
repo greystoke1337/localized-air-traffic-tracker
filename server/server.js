@@ -649,9 +649,12 @@ function enrichRoutes(data) {
     const cs = (ac.flight || '').trim();
     if (cs && !ac.dep && !ac.arr) {
       const hit = routeCache.get(cs);
-      if (hit && (Date.now() - hit.timestamp) < ROUTE_CACHE_MS) {
+      if (hit) {
         if (hit.dep) ac.dep = hit.dep;
         if (hit.arr) ac.arr = hit.arr;
+        if ((Date.now() - hit.timestamp) >= ROUTE_CACHE_MS && !unrouted.includes(cs)) {
+          unrouted.push(cs);  // refresh stale entry in background
+        }
       } else if (!unrouted.includes(cs)) {
         unrouted.push(cs);
       }
@@ -703,7 +706,7 @@ async function lookupRoute(callsign) {
   const hit = routeCache.get(cs);
   if (hit && (Date.now() - hit.timestamp) < ROUTE_CACHE_MS) return hit;
 
-  await routeSem.acquire();
+  try { await routeSem.acquire(10000); } catch { return hit || null; }
   try {
     // Re-check after acquiring semaphore (another request may have filled it)
     const hit2 = routeCache.get(cs);
