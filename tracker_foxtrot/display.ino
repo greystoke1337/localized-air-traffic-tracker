@@ -129,6 +129,14 @@ void drawStatusBar() {
     scanDots = (scanDots + 1) % 4;
     const char* anim[] = {"  SCANNING AIRSPACE", "  SCANNING AIRSPACE.", "  SCANNING AIRSPACE..", "  SCANNING AIRSPACE..."};
     snprintf(buf, sizeof(buf), "%s", anim[scanDots]);
+
+    static int scanX = 0;
+    tft.setFont(FONT_XS);
+    int textEnd = 8 + tft.textWidth(buf) + 4;
+    int rightEdge = W - 16;
+    if (scanX < textEnd || scanX > rightEdge) scanX = textEnd;
+    dlbl(scanX, H - FOOT_H + 6, FONT_XS, C_DIM, ">");
+    scanX += 6;
   } else {
     const char* src = dataSource == 2 ? "CACHE" : dataSource == 1 ? "DIRECT" : "PROXY";
     int ageSec = lastFetchOk ? (int)((millis() - lastFetchOk) / 1000) : 0;

@@ -40,9 +40,8 @@ Both firmware dirs share the same file split: `.ino` (setup/loop), `config.h`, `
 
 ## Branch Policy
 
-Always develop and push directly to **`master`**.
-Do **not** create feature branches.
 Pushes to `master` deploy automatically to GitHub Pages within ~60 seconds.
+Use feature branches and pull requests for non-trivial changes.
 
 ---
 

@@ -379,6 +379,7 @@ const AIRPORT_DB = {
   KHPN:'Westchester',HPN:'Westchester',KMDT:'Harrisburg',MDT:'Harrisburg',
   KABE:'Allentown',ABE:'Allentown',KERI:'Erie',ERI:'Erie',
   KGSO:'Greensboro',GSO:'Greensboro',KGSP:'Greenville',GSP:'Greenville',
+  KBED:'Bedford',BED:'Bedford',
   // US — Southeast
   KBNA:'Nashville',BNA:'Nashville',KMCO:'Orlando',MCO:'Orlando',
   KFLL:'Ft Lauderdale',FLL:'Ft Lauderdale',KTPA:'Tampa',TPA:'Tampa',
@@ -616,32 +617,6 @@ function formatRouteString(dep, arr) {
   return depName + ' > ' + arrName;
 }
 
-// ── Unknown airport tracker (temporary) ──────────────────────────────
-const unknownAirports = new Map(); // code → { count, firstSeen, lastSeen, flights: Set }
-const UNKNOWN_AIRPORT_TTL = 14 * 60 * 60 * 1000; // 14 hours
-
-function trackUnknownAirport(code, callsign) {
-  if (!code) return;
-  code = code.trim().toUpperCase();
-  if (AIRPORT_DB[code]) return; // known
-  if (code.length < 3 || code.length > 4) return; // skip garbage
-  const now = Date.now();
-  const existing = unknownAirports.get(code);
-  if (existing) {
-    existing.count++;
-    existing.lastSeen = now;
-    existing.flights.add(callsign);
-  } else {
-    unknownAirports.set(code, { count: 1, firstSeen: now, lastSeen: now, flights: new Set([callsign]) });
-  }
-}
-
-function pruneUnknownAirports() {
-  const cutoff = Date.now() - UNKNOWN_AIRPORT_TTL;
-  for (const [code, entry] of unknownAirports) {
-    if (entry.lastSeen < cutoff) unknownAirports.delete(code);
-  }
-}
 
 function enrichRoutes(data) {
   const unrouted = [];
@@ -661,8 +636,6 @@ function enrichRoutes(data) {
     }
     const dep = ac.dep || ac.orig_iata || null;
     const arr = ac.arr || ac.dest_iata || null;
-    if (dep) trackUnknownAirport(dep, cs);
-    if (arr) trackUnknownAirport(arr, cs);
     const routeStr = formatRouteString(dep, arr);
     if (routeStr) ac.route = routeStr;
   }
@@ -1048,12 +1021,6 @@ app.get('/', (req, res) => {
 
 // ── Status API ────────────────────────────────────────────────────────
 app.get('/status', async (req, res) => {
-  pruneUnknownAirports();
-  const unknown = [];
-  for (const [code, e] of unknownAirports) {
-    unknown.push({ code, count: e.count, flights: [...e.flights].slice(-10), firstSeen: new Date(e.firstSeen).toISOString(), lastSeen: new Date(e.lastSeen).toISOString() });
-  }
-  unknown.sort((a, b) => b.count - a.count);
   res.json({
     proxyEnabled,
     uptime:  os.uptime(),
@@ -1062,7 +1029,6 @@ app.get('/status', async (req, res) => {
     ram:     { total: os.totalmem(), free: os.freemem() },
     network: networkInfo(),
     pm2:     await pm2Status(),
-    unknownAirports: unknown,
     log:     requestLog,
   });
 });
