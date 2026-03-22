@@ -155,8 +155,12 @@ function airlinePrefix(callsign) {
 let todayFlights = {};
 let todayHourly  = new Array(24).fill(0);
 let todayDate    = '';
-let emailSentToday = false;
-let lastSaveTime   = 0;
+let emailSentToday        = false;
+let statusEmailSentToday  = false;
+let lastSaveTime          = 0;
+let lastBackfillDate      = '';
+let backfillRunning       = false;
+let backfillStats         = { date: '', checked: 0, found: 0 };
 
 function aestNow() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: TZ }));
@@ -717,6 +721,18 @@ function cpuTemp() {
     const raw = fs.readFileSync('/sys/class/thermal/thermal_zone0/temp', 'utf8');
     return (parseInt(raw) / 1000).toFixed(1) + '°C';
   } catch { return 'N/A'; }
+}
+
+function diskStats() {
+  try {
+    const files = fs.readdirSync(REPORTS_DIR);
+    let totalBytes = 0;
+    for (const f of files) {
+      try { totalBytes += fs.statSync(path.join(REPORTS_DIR, f)).size; } catch {}
+    }
+    const routeBytes = (() => { try { return fs.statSync(ROUTE_CACHE_FILE).size; } catch { return 0; } })();
+    return { reportFiles: files.length, reportsMB: (totalBytes / 1048576).toFixed(1), routeCacheKB: (routeBytes / 1024).toFixed(1) };
+  } catch { return { reportFiles: 0, reportsMB: '0.0', routeCacheKB: '0.0' }; }
 }
 
 let pm2Cache = { data: [], timestamp: 0 };
@@ -1289,11 +1305,14 @@ app.get('/weather', async (req, res) => {
     const promise = (async () => {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
         `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,` +
-        `wind_speed_10m,wind_direction_10m,uv_index&wind_speed_unit=kmh&timezone=auto`;
+        `wind_speed_10m,wind_direction_10m,uv_index,visibility&wind_speed_unit=kmh&timezone=auto` +
+        `&daily=sunrise,sunset`;
       const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
       if (!response.ok) throw new Error(`Open-Meteo returned ${response.status}`);
       const raw = await response.json();
       const c = raw.current;
+      const srRaw = raw.daily?.sunrise?.[0] || '';
+      const ssRaw = raw.daily?.sunset?.[0] || '';
       const data = {
         temp:            c.temperature_2m,
         feels_like:      c.apparent_temperature,
@@ -1304,6 +1323,9 @@ app.get('/weather', async (req, res) => {
         wind_dir:        c.wind_direction_10m,
         wind_cardinal:   windCardinal(c.wind_direction_10m),
         uv_index:        c.uv_index,
+        visibility_km:   (c.visibility || 0) / 1000,
+        sunrise:         srRaw.includes('T') ? srRaw.split('T')[1].slice(0, 5) : '--:--',
+        sunset:          ssRaw.includes('T') ? ssRaw.split('T')[1].slice(0, 5) : '--:--',
         utc_offset_secs: raw.utc_offset_seconds,
       };
       const tide = getTideInfo(data.utc_offset_secs);
@@ -1517,6 +1539,137 @@ function renderReportHTML(report) {
   </div>`;
 }
 
+// ── Resend helper ─────────────────────────────────────────────────────
+async function sendViaResend(to, subject, html) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error('RESEND_API_KEY not set');
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: process.env.RESEND_FROM || 'Overhead Tracker <status@overheadtracker.com>',
+      to: [to],
+      subject,
+      html,
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!r.ok) throw new Error(`Resend HTTP ${r.status}: ${await r.text()}`);
+  return await r.json();
+}
+
+function renderStatusHTML(ds) {
+  const S = `font-family:'Courier New',monospace`;
+  const amber = '#ffa600';
+  const bg = '#1a0a00';
+  const dim = '#7a4800';
+  const green = '#44ff88';
+  const red = '#ff4444';
+
+  const mem = process.memoryUsage();
+  const heapMB = (mem.heapUsed / 1048576).toFixed(1);
+  const heapTotalMB = (mem.heapTotal / 1048576).toFixed(1);
+  const uptimeSec = Math.floor(os.uptime());
+  const uptimeStr = `${Math.floor(uptimeSec / 86400)}d ${Math.floor((uptimeSec % 86400) / 3600)}h ${Math.floor((uptimeSec % 3600) / 60)}m`;
+  const ramFreeMB = (os.freemem() / 1048576).toFixed(0);
+  const ramTotalMB = (os.totalmem() / 1048576).toFixed(0);
+
+  const totalReq = stats.totalRequests;
+  const hitRate = totalReq > 0 ? ((stats.cacheHits / totalReq) * 100).toFixed(1) : '0.0';
+  const clients = stats.uniqueClients.size;
+  const routeEntries = routeCache.size;
+  const routePct = ((routeEntries / MAX_ROUTE_ENTRIES) * 100).toFixed(1);
+
+  const disk = diskStats();
+
+  const cutoff = Date.now() - 86400000;
+  const recentErrors = requestLog.filter(e => e.type === 'ERR' && new Date(e.time).getTime() > cutoff).length;
+  const recentCooldowns = requestLog.filter(e => e.type === 'COOLDOWN' && new Date(e.time).getTime() > cutoff).length;
+
+  const deviceRows = Array.from(deviceHeartbeats.entries()).map(([name, hb]) => {
+    const ageSec = Math.round((Date.now() - hb.ts) / 1000);
+    const online = ageSec < 600;
+    const ageStr = ageSec < 60 ? `${ageSec}s ago` : ageSec < 3600 ? `${Math.floor(ageSec/60)}m ago` : `${Math.floor(ageSec/3600)}h ago`;
+    const dot = online ? `<span style="color:${green}">●</span>` : `<span style="color:${red}">●</span>`;
+    return `<tr>
+      <td style="padding:4px 12px 4px 0">${dot} ${name}</td>
+      <td style="padding:4px 12px 4px 0;color:${online ? green : red}">${online ? 'ONLINE' : 'OFFLINE'}</td>
+      <td style="padding:4px 12px 4px 0;color:${dim}">${ageStr}</td>
+      <td style="padding:4px 0;color:${dim}">${hb.fw || '—'} | heap ${hb.heap ? Math.round(hb.heap/1024)+'KB' : '—'} | rssi ${hb.rssi || '—'}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="4" style="color:${dim}">No device heartbeats received</td></tr>`;
+
+  const bf = backfillStats;
+  const bfStr = bf.date
+    ? `${bf.date}: checked ${bf.checked} flights, found ${bf.found} routes`
+    : 'No backfill run recorded yet';
+
+  const row = (label, value, color) =>
+    `<tr><td style="padding:4px 16px 4px 0;color:${dim}">${label}</td><td style="color:${color || amber}">${value}</td></tr>`;
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body { background:${bg}; color:${amber}; ${S}; margin:0; padding:24px; }
+  h1 { color:${amber}; font-size:18px; border-bottom:1px solid ${dim}; padding-bottom:8px; margin-bottom:16px; }
+  h2 { color:${amber}; font-size:13px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:2px; }
+  table { border-collapse:collapse; }
+  td { font-size:13px; vertical-align:top; }
+</style></head><body>
+<h1>⬡ Overhead Tracker — Server Status Report</h1>
+<p style="color:${dim};font-size:12px;margin-top:-8px">${ds} · generated ${new Date().toISOString()}</p>
+
+<h2>Server</h2>
+<table>
+  ${row('Uptime', uptimeStr)}
+  ${row('OS RAM', `${ramFreeMB} MB free / ${ramTotalMB} MB total`)}
+  ${row('Heap', `${heapMB} MB used / ${heapTotalMB} MB total`)}
+  ${row('CPU temp', cpuTemp())}
+</table>
+
+<h2>Traffic (since last restart)</h2>
+<table>
+  ${row('Total requests', totalReq.toLocaleString())}
+  ${row('Cache hit rate', `${hitRate}%`)}
+  ${row('Unique clients', clients.toLocaleString())}
+  ${row('Errors (24h)', recentErrors, recentErrors > 0 ? red : green)}
+  ${row('API cooldowns (24h)', recentCooldowns, recentCooldowns > 0 ? amber : green)}
+</table>
+
+<h2>Route Cache</h2>
+<table>
+  ${row('Entries', `${routeEntries.toLocaleString()} / ${MAX_ROUTE_ENTRIES.toLocaleString()} (${routePct}%)`, routeEntries > MAX_ROUTE_ENTRIES * 0.9 ? red : amber)}
+</table>
+
+<h2>Route Backfill (last run)</h2>
+<table>
+  ${row('Result', bfStr, bf.found > 0 ? green : dim)}
+</table>
+
+<h2>Disk Usage</h2>
+<table>
+  ${row('Report log files', disk.reportFiles)}
+  ${row('Reports dir size', `${disk.reportsMB} MB`)}
+  ${row('Route cache file', `${disk.routeCacheKB} KB`)}
+</table>
+
+<h2>Devices</h2>
+<table>${deviceRows}</table>
+
+</body></html>`;
+}
+
+async function sendStatusEmail(ds) {
+  const to = process.env.REPORT_TO;
+  if (!to || !process.env.RESEND_API_KEY) return;
+  try {
+    const html = renderStatusHTML(ds);
+    await sendViaResend(to, `Server Status — ${ds}`, html);
+    addLog({ type: 'SYS', client: 'system', key: `status email sent: ${ds}` });
+  } catch (e) {
+    addLog({ type: 'ERR', client: 'system', error: `status email failed: ${e.message}` });
+  }
+}
+
 // ── Email ─────────────────────────────────────────────────────────────
 async function sendDailyEmail(ds) {
   const smtpHost = process.env.SMTP_HOST;
@@ -1557,6 +1710,52 @@ async function sendDailyEmail(ds) {
   }
 }
 
+async function backfillMissingRoutes(targetDs) {
+  if (backfillRunning) return;
+  backfillRunning = true;
+  try {
+    const data = loadDayData(targetDs);
+    if (!data?.flights) {
+      addLog({ type: 'SYS', client: 'system', key: `backfill ${targetDs}: no data file` });
+      return;
+    }
+
+    const candidates = Object.values(data.flights).filter(f =>
+      AIRLINE_NAMES[airlinePrefix(f.callsign)] && (!f.dep || !f.arr)
+    );
+
+    if (!candidates.length) {
+      addLog({ type: 'SYS', client: 'system', key: `backfill ${targetDs}: no missing routes` });
+      return;
+    }
+
+    let found = 0;
+    let dirty = false;
+    for (let i = 0; i < candidates.length; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 500));
+      const f = candidates[i];
+      const result = await lookupRoute(f.callsign);
+      if (result && (result.dep || result.arr)) {
+        found++;
+        dirty = true;
+        if (result.dep) f.dep = result.dep;
+        if (result.arr) f.arr = result.arr;
+        f.route = formatRouteString(f.dep, f.arr);
+      }
+    }
+
+    if (dirty) {
+      fs.writeFile(todayFilePath(targetDs), JSON.stringify(data, null, 2), () => {});
+      saveRouteCache();
+    }
+
+    backfillStats = { date: targetDs, checked: candidates.length, found };
+    addLog({ type: 'SYS', client: 'system', key: `backfill ${targetDs}: checked ${candidates.length}, found ${found}` });
+  } finally {
+    backfillRunning = false;
+  }
+}
+
 // ── /report endpoint ──────────────────────────────────────────────────
 app.get('/report', (req, res) => {
   const ds = req.query.date || todayDate;
@@ -1588,6 +1787,23 @@ app.post('/report/send', async (req, res) => {
   res.json({ ok: true, date: ds });
 });
 
+// ── /status/send — manual trigger for server status email ─────────────
+app.post('/status/send', async (req, res) => {
+  if (requireAdmin(req, res)) return;
+  const ds = req.query.date || todayDate;
+  await sendStatusEmail(ds);
+  res.json({ ok: true, date: ds });
+});
+
+// ── /backfill — manual trigger for route backfill ─────────────────────
+app.post('/backfill', async (req, res) => {
+  if (requireAdmin(req, res)) return;
+  const ds = req.query.date || prevDateStr(todayDate, 1);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return res.status(400).json({ error: 'Invalid date' });
+  backfillMissingRoutes(ds);
+  res.json({ ok: true, date: ds });
+});
+
 // ── Periodic save + day rollover + email scheduler ────────────────────
 const periodicTimer = setInterval(() => {
   const now = aestNow();
@@ -1599,13 +1815,27 @@ const periodicTimer = setInterval(() => {
     todayFlights = {};
     todayHourly  = new Array(24).fill(0);
     todayDate    = ds;
-    emailSentToday = false;
+    emailSentToday       = false;
+    statusEmailSentToday = false;
     loadTodayLog(ds);
     console.log(`Day rolled over to ${ds}`);
   }
 
   // Periodic save (every 60s)
   saveTodayLog();
+
+  // Route backfill at 02:00 AEST for yesterday's log
+  const backfillTarget = prevDateStr(ds, 1);
+  if (now.getHours() === 2 && lastBackfillDate !== backfillTarget && !backfillRunning) {
+    lastBackfillDate = backfillTarget;
+    backfillMissingRoutes(backfillTarget);
+  }
+
+  // Server status email at 08:00 AEST
+  if (now.getHours() === 8 && now.getMinutes() < 2 && !statusEmailSentToday) {
+    statusEmailSentToday = true;
+    sendStatusEmail(ds);
+  }
 
   // Send email at 23:55 AEST
   if (now.getHours() === 23 && now.getMinutes() >= 55 && !emailSentToday) {
