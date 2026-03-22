@@ -64,16 +64,11 @@ extern bool          usingCache;
 extern int           dataSource;
 extern unsigned long lastTick;
 extern unsigned long lastCycle;
-extern unsigned long lastFetchOk;
 extern time_t        cacheTimestamp;
 
 // ─── Direct API robustness ────────────────────────────
 extern int           directApiFailCount;
 extern unsigned long directApiNextRetryMs;
-
-// ─── Proxy failover ─────────────────────────────────
-extern int           proxyFailCount;
-extern unsigned long proxySkipUntilMs;
 
 // ─── Session log ──────────────────────────────────────
 extern char loggedCallsigns[MAX_LOGGED][12];
@@ -88,24 +83,14 @@ extern unsigned long lastDiagMs;
 
 // ─── Cross-task trigger flags ─────────────────────────
 extern volatile bool triggerPortal;
-extern volatile bool triggerGeoFetch;
 
-// ─── Async fetch (FreeRTOS background task) ──────────
-#if ASYNC_FETCH
-#include <freertos/semphr.h>
-extern volatile bool     fetchDone;
-extern volatile int      fetchResultCount;
-extern volatile int      fetchResultSource;
-extern volatile bool     fetchResultCache;
-extern volatile bool     wxFetchPending;
-extern volatile bool     wxFetchDone;
-extern volatile bool     wxFetchResultOk;
-extern SemaphoreHandle_t fetchSemaphore;
-extern TaskHandle_t      fetchTaskHandle;
-#endif
+// ─── Telnet log server ────────────────────────────────
+extern WiFiServer logServer;
+extern WiFiClient logClient;
 
 // ─── Forward declarations ─────────────────────────────
 // helpers.ino
+void wlog(const char* fmt, ...);
 bool wifiOk();
 void logTs(const char* tag, const char* fmt, ...);
 bool alreadyLogged(const char* cs);
@@ -134,7 +119,6 @@ void renderWeather();
 void renderMessage(const char* line1, const char* line2 = nullptr);
 void bootSequence();
 void drawOtaProgress(int pct);
-void redrawDashNumbers(float alt, float dist, int spd, int vs);
 // network.ino
 String fetchFromProxy();
 int fetchAndParseDirectAPI();
@@ -142,11 +126,6 @@ int parsePayload(String& payload);
 int extractFlights(DynamicJsonDocument& doc);
 void fetchFlights();
 bool fetchWeather();
-void sendHeartbeat();
-#if ASYNC_FETCH
-void fetchFlightsWork();
-void fetchTaskFunc(void* param);
-#endif
 
 // touch.ino
 void initTouch();

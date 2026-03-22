@@ -44,7 +44,15 @@ void pollTouch() {
       drawNavBar();
       flightCount = 0;
       flightIndex = 0;
-      triggerGeoFetch = true;
+      fetchFlights();
+      if (flightCount == 0) {
+        renderMessage("NO AIRCRAFT", "IN RANGE");
+      } else {
+        currentScreen = SCREEN_FLIGHT;
+        renderFlight(flights[flightIndex]);
+      }
+      countdown = REFRESH_SECS;
+      lastCycle = millis();
       return;
     }
     if (tx >= CFG_BTN_X1 && tx < CFG_BTN_X1 + NAV_BTN_W) {

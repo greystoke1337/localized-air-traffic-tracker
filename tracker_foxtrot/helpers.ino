@@ -5,6 +5,16 @@
 
 bool wifiOk() { return WiFi.status() == WL_CONNECTED; }
 
+void wlog(const char* fmt, ...) {
+  char buf[256];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  Serial.print(buf);
+  if (logClient && logClient.connected()) logClient.print(buf);
+}
+
 void logTs(const char* tag, const char* fmt, ...) {
   char buf[160];
   unsigned long ms = millis();
@@ -13,7 +23,7 @@ void logTs(const char* tag, const char* fmt, ...) {
   va_start(args, fmt);
   vsnprintf(buf + n, sizeof(buf) - n, fmt, args);
   va_end(args);
-  Serial.println(buf);
+  wlog("%s\n", buf);
 }
 
 bool alreadyLogged(const char* cs) {
@@ -119,8 +129,8 @@ void sortFlightsByDist(Flight* f, int count) {
 // ─── Diagnostics: single-line JSON status ─────────────
 void diagReport() {
   const char* src = dataSourceLabel();
-  Serial.printf("{\"heap\":%d,\"maxblk\":%d,\"wifi\":%d,\"rssi\":%d,\"src\":\"%s\","
-                "\"flights\":%d,\"uptime\":%lu,\"frag\":%d}\n",
+  wlog("{\"heap\":%d,\"maxblk\":%d,\"wifi\":%d,\"rssi\":%d,\"src\":\"%s\","
+       "\"flights\":%d,\"uptime\":%lu,\"frag\":%d}\n",
     ESP.getFreeHeap(),
     ESP.getMaxAllocHeap(),
     wifiOk() ? 1 : 0,

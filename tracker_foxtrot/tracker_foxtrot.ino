@@ -35,6 +35,8 @@ LGFX tft;
 
 WebServer  setupServer(80);
 DNSServer  dnsServer;
+WiFiServer logServer(23);
+WiFiClient logClient;
 
 // ─── WiFi ─────────────────────────────────────────────
 char WIFI_SSID[64] = WIFI_SSID_DEFAULT;
@@ -88,16 +90,11 @@ bool          usingCache   = false;
 int           dataSource   = 0;
 unsigned long lastTick     = 0;
 unsigned long lastCycle    = 0;
-unsigned long lastFetchOk  = 0;
 time_t        cacheTimestamp = 0;
 
 // ─── Direct API robustness ────────────────────────────
 int           directApiFailCount   = 0;
 unsigned long directApiNextRetryMs = 0;
-
-// ─── Proxy failover ─────────────────────────────────
-int           proxyFailCount   = 0;
-unsigned long proxySkipUntilMs = 0;
 
 // ─── Session log ──────────────────────────────────────
 char loggedCallsigns[MAX_LOGGED][12];
@@ -110,22 +107,8 @@ int  loggedUnknownCount = 0;
 // ─── Diagnostics ──────────────────────────────────────
 unsigned long lastDiagMs = 0;
 
-// ─── Cross-task trigger flags ─────────────────────────
-volatile bool triggerPortal   = false;
-volatile bool triggerGeoFetch = false;
-
-// ─── Async fetch (FreeRTOS background task) ──────────
-#if ASYNC_FETCH
-volatile bool     fetchDone         = false;
-volatile int      fetchResultCount  = -1;
-volatile int      fetchResultSource = 0;
-volatile bool     fetchResultCache  = false;
-volatile bool     wxFetchPending    = false;
-volatile bool     wxFetchDone       = false;
-volatile bool     wxFetchResultOk   = false;
-SemaphoreHandle_t fetchSemaphore    = NULL;
-TaskHandle_t      fetchTaskHandle   = NULL;
-#endif
+// ─── Trigger flags ───────────────────────────────────
+volatile bool triggerPortal = false;
 
 // ─── Temp WiFi screen helpers (tft direct) ────────────
 static void drawTempHeader() {
@@ -365,6 +348,8 @@ void setup() {
     });
     ArduinoOTA.begin();
     Serial.println("OTA ready — overhead-foxtrot.local");
+    logServer.begin();
+    Serial.printf("Telnet log: %s port 23\n", WiFi.localIP().toString().c_str());
   }
 
   const esp_task_wdt_config_t wdt_cfg = { .timeout_ms = 30000, .idle_core_mask = 0, .trigger_panic = true };
@@ -476,19 +461,6 @@ void setup() {
     }
   }
 
-#if ASYNC_FETCH
-  fetchSemaphore = xSemaphoreCreateBinary();
-  xTaskCreatePinnedToCore(fetchTaskFunc, "fetch", 16384, NULL, 1, &fetchTaskHandle, 1);
-  Serial.println("Async fetch task created on core 1");
-
-  initUI();
-  isFetching = true;
-  fetchDone = false;
-  xSemaphoreGive(fetchSemaphore);
-  renderMessage("SCANNING AIRSPACE", "FIRST UPDATE...");
-  countdown = REFRESH_SECS;
-  wxCountdown = 5;
-#else
   initUI();
   fetchFlights();
   if (flightCount == 0) {
@@ -501,7 +473,7 @@ void setup() {
   countdown = REFRESH_SECS;
   fetchWeather();
   wxCountdown = WX_REFRESH_SECS;
-#endif
+  lastCycle = millis();
 #endif
 }
 
@@ -540,6 +512,10 @@ void loop() {
 
 #else
   ArduinoOTA.handle();
+  if (!logClient || !logClient.connected()) {
+    WiFiClient c = logServer.available();
+    if (c) { logClient = c; logClient.println("=== FOXTROT LOG ==="); }
+  }
   if (Serial.available()) checkSerialCmd();
   pollTouch();
 
@@ -548,69 +524,9 @@ void loop() {
     startCaptivePortal();
   }
 
-#if ASYNC_FETCH
-  // ── Handle completed flight fetch ──
-  if (fetchDone) {
-    fetchDone = false;
-    if (fetchResultCount >= 0) {
-      memcpy(flights, newFlights, sizeof(Flight) * fetchResultCount);
-      flightCount = fetchResultCount;
-      flightIndex = 0;
-      dataSource  = fetchResultSource;
-      usingCache  = fetchResultCache;
-      for (int i = 0; i < flightCount; i++) logFlight(flights[i]);
-    }
-    isFetching = false;
-    countdown = REFRESH_SECS;
-    if (fetchResultCount >= 0) lastFetchOk = millis();
-    if (flightCount == 0) renderIdleScreen();
-    else { currentScreen = SCREEN_FLIGHT; renderFlight(flights[flightIndex]); }
-    lastCycle = millis();
-  }
-
-  // ── Handle completed weather fetch ──
-  if (wxFetchDone) {
-    wxFetchDone = false;
-    bool wxOk = wxFetchResultOk;
-    wxCountdown = wxOk ? WX_REFRESH_SECS : 60;
-    if (currentScreen == SCREEN_WEATHER) renderWeather();
-    else if (wxOk && flightCount == 0) renderWeather();
-  }
-
-  // ── Trigger geo fetch via async task ──
-  if (triggerGeoFetch && !isFetching) {
-    triggerGeoFetch = false;
-    isFetching = true;
-    fetchDone = false;
-    xSemaphoreGive(fetchSemaphore);
-    countdown = REFRESH_SECS;
-  }
-#else
-  if (triggerGeoFetch) {
-    triggerGeoFetch = false;
-    fetchFlights();
-    if (flightCount == 0) {
-      renderIdleScreen();
-    } else {
-      currentScreen = SCREEN_FLIGHT;
-      renderFlight(flights[flightIndex]);
-    }
-    countdown = REFRESH_SECS;
-    lastCycle  = millis();
-  }
-#endif
-
   if (now - lastDiagMs >= 60000) {
     lastDiagMs = now;
     diagReport();
-  }
-
-  {
-    static unsigned long lastHeartbeat = 0;
-    if (now - lastHeartbeat >= 300000) {
-      lastHeartbeat = now;
-      sendHeartbeat();
-    }
   }
 
   if (now - lastTick >= 1000) {
@@ -618,22 +534,11 @@ void loop() {
     countdown--;
     wxCountdown--;
 
-    {
-      static unsigned long wifiLostSince = 0;
+    if (WiFi.status() != WL_CONNECTED) {
       static unsigned long lastReconnect = 0;
-      if (WiFi.status() != WL_CONNECTED) {
-        if (wifiLostSince == 0) wifiLostSince = now;
-        if (now - lastReconnect > 10000) {
-          lastReconnect = now;
-          WiFi.reconnect();
-        }
-        if (now - wifiLostSince > 1800000) {
-          logTs("WIFI", "Disconnected 30+ min, rebooting");
-          delay(500);
-          ESP.restart();
-        }
-      } else {
-        wifiLostSince = 0;
+      if (now - lastReconnect > 10000) {
+        lastReconnect = now;
+        WiFi.reconnect();
       }
     }
 
@@ -651,21 +556,6 @@ void loop() {
       }
     }
 
-#if ASYNC_FETCH
-    if (countdown <= 0 && !isFetching) {
-      isFetching = true;
-      fetchDone = false;
-      xSemaphoreGive(fetchSemaphore);
-      countdown = REFRESH_SECS;
-    }
-
-    if (wxCountdown <= 0 && !isFetching) {
-      wxFetchPending = true;
-      wxFetchDone = false;
-      xSemaphoreGive(fetchSemaphore);
-      wxCountdown = WX_REFRESH_SECS;
-    }
-#else
     if (countdown <= 0) {
       fetchFlights();
       if (flightCount == 0) {
@@ -684,7 +574,6 @@ void loop() {
       if (currentScreen == SCREEN_WEATHER) renderWeather();
       else if (wxOk && flightCount == 0) renderWeather();
     }
-#endif
   }
 
   if (flightCount > 1 && currentScreen == SCREEN_FLIGHT &&

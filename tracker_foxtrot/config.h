@@ -7,7 +7,7 @@
 #define HAS_TOUCH  1
 #define HAS_SD     1
 #define DEMO_MODE  0
-#define ASYNC_FETCH 1
+#define ASYNC_FETCH 0
 
 // ─── Blue-tint diagnostic (0 = off, 1–6 = progressive live init) ──────────
 // 0: normal DEMO_MODE / live mode
@@ -72,10 +72,6 @@
 // ─── Direct API robustness ────────────────────────────
 #define DIRECT_API_MIN_HEAP  40000
 #define DIRECT_API_TIMEOUT   8000
-
-// ─── Proxy failover ─────────────────────────────────
-#define PROXY_FAIL_THRESHOLD  3
-#define PROXY_SKIP_MS         300000
 
 // ─── Session log ──────────────────────────────────────
 #define MAX_LOGGED   200

@@ -44,6 +44,9 @@ struct WeatherData {
   int     wind_dir;
   char    wind_cardinal[4];
   float   uv_index;
+  float   visibility_km;
+  char    sunrise[6];
+  char    sunset[6];
   int32_t utc_offset_secs;
 };
 

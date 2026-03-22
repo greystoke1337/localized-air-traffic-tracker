@@ -93,16 +93,33 @@ const AircraftType AIRCRAFT_TYPES[] = {
   {"RV7","Vans RV-7","LIGHT"},         {"RV8","Vans RV-8","LIGHT"},
   // Seaplanes
   {"DHC2","Beaver","SEAPLANE"},        {"DHC3","Otter","SEAPLANE"},
-  // Business jets
+  // Business jets — Gulfstream
   {"PC12","Pilatus PC-12","BIZ JET"},
   {"GL5T","G550","BIZ JET"},       {"GLEX","Global Express","BIZ JET"},{"GLF6","G650","BIZ JET"},
+  {"GLF5","G-V","BIZ JET"},        {"GLF4","G-IV","BIZ JET"},         {"GLF3","G-III","BIZ JET"},
+  {"GA5C","G500","BIZ JET"},       {"GA6C","G600","BIZ JET"},         {"G280","G280","BIZ JET"},
+  {"ASTR","Astra/G100","BIZ JET"}, {"GALX","Galaxy/G200","BIZ JET"},
+  // Business jets — Citation
   {"C25A","Citation CJ2","BIZ JET"},{"C25B","Citation CJ3","BIZ JET"},
   {"C56X","Citation Excel","BIZ JET"},{"C68A","Citation Lat.","BIZ JET"},
+  {"C750","Citation X","BIZ JET"}, {"C700","Citation Long.","BIZ JET"},
+  {"C510","Citation Mustang","BIZ JET"},{"C525","CitationJet","BIZ JET"},
+  {"C560","Citation V","BIZ JET"}, {"C680","Citation Sov.","BIZ JET"},
+  // Business jets — Learjet
   {"LJ45","Learjet 45","BIZ JET"}, {"LJ75","Learjet 75","BIZ JET"},
+  {"LJ35","Learjet 35","BIZ JET"}, {"LJ60","Learjet 60","BIZ JET"},
+  // Business jets — Dassault Falcon
   {"FA7X","Falcon 7X","BIZ JET"},  {"FA8X","Falcon 8X","BIZ JET"},
   {"F900","Falcon 900","BIZ JET"}, {"FA9X","Falcon 9X","BIZ JET"},
+  {"F2TH","Falcon 2000","BIZ JET"},{"FA50","Falcon 50","BIZ JET"},
+  // Business jets — Bombardier
   {"CL35","Challenger 350","BIZ JET"},{"CL60","Challenger 600","BIZ JET"},
-  {"E55P","Phenom 300","BIZ JET"},
+  {"CL30","Challenger 300","BIZ JET"},{"BD70","Global 7500","BIZ JET"},{"GL7T","Global 7500","BIZ JET"},
+  // Business jets — Embraer
+  {"E55P","Phenom 300","BIZ JET"}, {"E50P","Phenom 100","BIZ JET"},
+  {"E545","Legacy 450","BIZ JET"}, {"E550","Praetor 600","BIZ JET"},
+  // Business jets — Hawker / other
+  {"PRM1","Premier I","BIZ JET"},  {"H25B","Hawker 800","BIZ JET"},   {"HA4T","Hawker 4000","BIZ JET"},
   // Military
   {"C130","C-130 Hercules","MILITARY"},{"P8","P-8 Poseidon","MILITARY"},
   {"C17","C-17 Globemaster","MILITARY"},{"C30J","C-130J Super Herc","MILITARY"},

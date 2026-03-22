@@ -35,10 +35,6 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 -----END CERTIFICATE-----
 )EOF";
 
-// ─── WDT helpers (skip when on async fetch task) ─────
-bool skipWdt();
-static inline void wdtPause()  { if (!skipWdt()) esp_task_wdt_delete(NULL); }
-static inline void wdtResume() { if (!skipWdt()) { esp_task_wdt_add(NULL); esp_task_wdt_reset(); } }
 
 // ─── Parse a String payload (proxy or cache) ──────────
 int parsePayload(String& payload) {
@@ -48,11 +44,11 @@ int parsePayload(String& payload) {
   af["alt_baro"] = af["gs"] = af["baro_rate"] = af["track"] =
   af["squawk"] = af["route"] = af["dep"] = af["arr"] = true;
   g_jsonDoc.clear();
-  Serial.printf("[MEM] Before JSON parse: %d free\n", ESP.getFreeHeap());
+  wlog("[MEM] Before JSON parse: %d free\n", ESP.getFreeHeap());
   DeserializationError err = deserializeJson(g_jsonDoc, &payload[0], payload.length(), DeserializationOption::Filter(filter));
-  Serial.printf("[MEM] After JSON parse: %d free\n", ESP.getFreeHeap());
+  wlog("[MEM] After JSON parse: %d free\n", ESP.getFreeHeap());
   if (err) {
-    Serial.printf("JSON parse error: %s\n", err.c_str());
+    wlog("JSON parse error: %s\n", err.c_str());
     return -1;
   }
   int result = extractFlights(g_jsonDoc);
@@ -63,13 +59,13 @@ int parsePayload(String& payload) {
 
 // ─── Fetch: proxy (returns small String) ──────────────
 String fetchFromProxy() {
-  if (!wifiOk()) { Serial.println("[PROXY] WiFi not connected"); return ""; }
+  if (!wifiOk()) { wlog("[PROXY] WiFi not connected\n"); return ""; }
   unsigned long t0 = millis();
   WiFiClientSecure tcp;
   tcp.setInsecure();
   tcp.setHandshakeTimeout(8);
   if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
-    Serial.printf("[PROXY] Connect failed (%lu ms)\n", millis() - t0);
+    wlog("[PROXY] Connect failed (%lu ms)\n", millis() - t0);
     return "";
   }
   char url[160];
@@ -83,11 +79,11 @@ String fetchFromProxy() {
   if (code == 200) {
     String p = http.getString();
     http.end();
-    Serial.printf("[PROXY] OK %d bytes (%lu ms)\n", p.length(), millis() - t0);
+    wlog("[PROXY] OK %d bytes (%lu ms)\n", p.length(), millis() - t0);
     return p;
   }
   http.end();
-  Serial.printf("[PROXY] HTTP %d (%lu ms)\n", code, millis() - t0);
+  wlog("[PROXY] HTTP %d (%lu ms)\n", code, millis() - t0);
   return "";
 }
 
@@ -120,18 +116,18 @@ static int readNumber(WiFiClient* s, char* buf, int maxLen) {
 // ─── Fetch: direct API — zero-allocation stream scanner ──
 int fetchAndParseDirectAPI() {
   if (!wifiOk()) {
-    Serial.println("[DIRECT] WiFi not connected, skipping");
+    wlog("[DIRECT] WiFi not connected, skipping\n");
     return -1;
   }
   int freeHeap = ESP.getFreeHeap();
-  Serial.printf("[DIRECT] Free heap: %d\n", freeHeap);
+  wlog("[DIRECT] Free heap: %d\n", freeHeap);
   if (freeHeap < DIRECT_API_MIN_HEAP) {
-    Serial.println("[DIRECT] Insufficient heap for TLS, skipping");
+    wlog("[DIRECT] Insufficient heap for TLS, skipping\n");
     return -1;
   }
   if (directApiFailCount > 0 && millis() < directApiNextRetryMs) {
-    Serial.printf("[DIRECT] Backoff active, %lu ms remaining\n",
-                  directApiNextRetryMs - millis());
+    wlog("[DIRECT] Backoff active, %lu ms remaining\n",
+         directApiNextRetryMs - millis());
     return -1;
   }
 
@@ -152,31 +148,31 @@ int fetchAndParseDirectAPI() {
   tlsClient.setTimeout(DIRECT_API_TIMEOUT / 1000);
   bool connected = false;
   for (int i = 0; i < 2; i++) {
-    Serial.printf("[DIRECT] Trying %s...\n", apiNames[i]);
+    wlog("[DIRECT] Trying %s...\n", apiNames[i]);
     http.begin(tlsClient, urls[i]);
     http.setTimeout(DIRECT_API_TIMEOUT);
     int code = http.GET();
     if (code == 200) {
-      Serial.printf("[DIRECT] %s OK\n", apiNames[i]);
+      wlog("[DIRECT] %s OK\n", apiNames[i]);
       connected = true;
       break;
     }
     http.end();
-    Serial.printf("[DIRECT] %s failed (%d)\n", apiNames[i], code);
+    wlog("[DIRECT] %s failed (%d)\n", apiNames[i], code);
   }
   if (!connected) {
     directApiFailCount++;
     unsigned long backoffMs = min(120000UL, 15000UL * (1UL << min(directApiFailCount - 1, 3)));
     directApiNextRetryMs = millis() + backoffMs;
-    Serial.printf("[DIRECT] All APIs failed, backoff %lu ms (fail #%d)\n", backoffMs, directApiFailCount);
+    wlog("[DIRECT] All APIs failed, backoff %lu ms (fail #%d)\n", backoffMs, directApiFailCount);
     return -1;
   }
   directApiFailCount = 0;
 
-  Serial.printf("[MEM] Direct stream scan start: %d free\n", ESP.getFreeHeap());
+  wlog("[MEM] Direct stream scan start: %d free\n", ESP.getFreeHeap());
 
   WiFiClient* s = http.getStreamPtr();
-  if (!s) { Serial.println("[DIRECT] Null stream"); http.end(); return -1; }
+  if (!s) { wlog("[DIRECT] Null stream\n"); http.end(); return -1; }
   int newCount = 0;
   int depth = 0;
   bool inString = false;
@@ -239,7 +235,7 @@ int fetchAndParseDirectAPI() {
   unsigned long deadline = millis() + DIRECT_API_TIMEOUT;
   int c;
   while (millis() < deadline) {
-    if (!wifiOk()) { Serial.println("[DIRECT] WiFi lost during stream"); break; }
+    if (!wifiOk()) { wlog("[DIRECT] WiFi lost during stream\n"); break; }
     if (!s->available()) { delay(5); continue; }
     c = s->read();
     if (c == -1) break;
@@ -275,7 +271,7 @@ int fetchAndParseDirectAPI() {
   }
 
   http.end();
-  Serial.printf("[MEM] Direct scan done: %d free, found %d\n", ESP.getFreeHeap(), newCount);
+  wlog("[MEM] Direct scan done: %d free, found %d\n", ESP.getFreeHeap(), newCount);
   sortFlightsByDist(newFlights, newCount);
   return newCount;
 }
@@ -322,76 +318,7 @@ int extractFlights(DynamicJsonDocument& doc) {
   return newCount;
 }
 
-// ─── Main fetch orchestrator ───────────────────────────
-
-#if ASYNC_FETCH
-// Async version: stages results in volatile globals for the main loop to apply
-void fetchFlightsWork() {
-  logTs("FETCH", "Start (heap %d, maxblk %d)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-  memset(newFlights, 0, sizeof(newFlights));
-
-  int newCount = -1;
-  bool fromCache = false;
-  int  source = 0;
-
-  if (wifiOk()) {
-    bool skipProxy = (proxyFailCount >= PROXY_FAIL_THRESHOLD && millis() < proxySkipUntilMs);
-    if (skipProxy) {
-      logTs("FETCH", "Proxy skipped (failed %dx, direct-first for %lu ms)",
-            proxyFailCount, proxySkipUntilMs - millis());
-    }
-
-    if (!skipProxy) {
-      int maxBlock = ESP.getMaxAllocHeap();
-      if (maxBlock >= 8000) {
-        String payload = fetchFromProxy();
-        if (!payload.isEmpty()) {
-          writeCache(payload);
-          newCount = parsePayload(payload);
-          payload = String();
-          source = 0;
-          proxyFailCount = 0;
-        } else {
-          proxyFailCount++;
-          if (proxyFailCount >= PROXY_FAIL_THRESHOLD) {
-            proxySkipUntilMs = millis() + PROXY_SKIP_MS;
-            logTs("FETCH", "Proxy failed %dx, switching to direct-first for %d s",
-                  proxyFailCount, PROXY_SKIP_MS / 1000);
-          }
-        }
-      } else {
-        logTs("FETCH", "WARN: heap fragmented (maxblk %d), skipping proxy", maxBlock);
-      }
-    }
-    if (newCount < 0) {
-      logTs("FETCH", "Trying direct API...");
-      newCount = fetchAndParseDirectAPI();
-      if (newCount >= 0) source = 1;
-    }
-  } else {
-    logTs("FETCH", "WiFi not connected, skipping network");
-  }
-
-  if (newCount < 0) {
-    logTs("FETCH", "Network failed, trying SD cache...");
-    String payload = readCache();
-    if (!payload.isEmpty()) {
-      newCount = parsePayload(payload);
-      payload = String();
-      fromCache = true;
-      source = 2;
-      Serial.println("Using cached data.");
-    }
-  }
-
-  fetchResultCount  = newCount;
-  fetchResultSource = source;
-  fetchResultCache  = fromCache;
-  logTs("HEAP", "Free:%d MaxBlock:%d", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-}
-#endif
-
-// Synchronous version: used during setup and DIAG_STEP (blocks until complete)
+// ─── Main fetch orchestrator (synchronous) ──────────
 void fetchFlights() {
   logTs("FETCH", "Start (heap %d, maxblk %d)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
   esp_task_wdt_delete(NULL);
@@ -402,33 +329,12 @@ void fetchFlights() {
   bool fromCache = false;
 
   if (wifiOk()) {
-    bool skipProxy = (proxyFailCount >= PROXY_FAIL_THRESHOLD && millis() < proxySkipUntilMs);
-    if (skipProxy) {
-      logTs("FETCH", "Proxy skipped (failed %dx, direct-first for %lu ms)",
-            proxyFailCount, proxySkipUntilMs - millis());
-    }
-
-    if (!skipProxy) {
-      int maxBlock = ESP.getMaxAllocHeap();
-      if (maxBlock >= 8000) {
-        String payload = fetchFromProxy();
-        if (!payload.isEmpty()) {
-          writeCache(payload);
-          newCount = parsePayload(payload);
-          payload = String();
-          dataSource = 0;
-          proxyFailCount = 0;
-        } else {
-          proxyFailCount++;
-          if (proxyFailCount >= PROXY_FAIL_THRESHOLD) {
-            proxySkipUntilMs = millis() + PROXY_SKIP_MS;
-            logTs("FETCH", "Proxy failed %dx, switching to direct-first for %d s",
-                  proxyFailCount, PROXY_SKIP_MS / 1000);
-          }
-        }
-      } else {
-        logTs("FETCH", "WARN: heap fragmented (maxblk %d), skipping proxy", maxBlock);
-      }
+    String payload = fetchFromProxy();
+    if (!payload.isEmpty()) {
+      writeCache(payload);
+      newCount = parsePayload(payload);
+      payload = String();
+      dataSource = 0;
     }
     if (newCount < 0) {
       logTs("FETCH", "Trying direct API...");
@@ -447,7 +353,6 @@ void fetchFlights() {
       payload = String();
       fromCache = true;
       dataSource = 2;
-      Serial.println("Using cached data.");
     } else {
       isFetching = false;
       esp_task_wdt_add(NULL);
@@ -475,10 +380,10 @@ void fetchFlights() {
   logTs("HEAP", "Free:%d MaxBlock:%d", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 }
 
-// ─── Fetch weather from Pi proxy (Open-Meteo) ─────────
+// ─── Fetch weather from proxy (Open-Meteo) ──────────
 bool fetchWeather() {
-  wdtPause();
-  if (!wifiOk()) { Serial.println("[WX] WiFi not connected"); wdtResume(); return false; }
+  esp_task_wdt_delete(NULL);
+  if (!wifiOk()) { wlog("[WX] WiFi not connected\n"); esp_task_wdt_add(NULL); esp_task_wdt_reset(); return false; }
   char url[160];
   snprintf(url, sizeof(url),
     "https://%s/weather?lat=%.4f&lon=%.4f",
@@ -486,14 +391,14 @@ bool fetchWeather() {
 
   for (int attempt = 1; attempt <= 2; attempt++) {
     if (attempt > 1) {
-      Serial.println("[WX] Retrying...");
+      wlog("[WX] Retrying...\n");
       delay(2000);
     }
     WiFiClientSecure tcp;
     tcp.setInsecure();
     tcp.setHandshakeTimeout(8);
     if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
-      Serial.printf("[WX] Connect failed (attempt %d/2)\n", attempt);
+      wlog("[WX] Connect failed (attempt %d/2)\n", attempt);
       continue;
     }
     HTTPClient http;
@@ -501,15 +406,15 @@ bool fetchWeather() {
     http.setTimeout(5000);
     int code = http.GET();
     if (code != 200) {
-      Serial.printf("[WX] Fetch failed (%d) (attempt %d/2)\n", code, attempt);
+      wlog("[WX] Fetch failed (%d) (attempt %d/2)\n", code, attempt);
       http.end();
       continue;
     }
     String body = http.getString();
     http.end();
-    StaticJsonDocument<640> doc;
+    StaticJsonDocument<1024> doc;
     if (deserializeJson(doc, body) != DeserializationError::Ok) {
-      Serial.printf("[WX] JSON parse error (attempt %d/2)\n", attempt);
+      wlog("[WX] JSON parse error (attempt %d/2)\n", attempt);
       continue;
     }
     wxData.temp            = doc["temp"]            | 0.0f;
@@ -518,73 +423,25 @@ bool fetchWeather() {
     wxData.wind_speed      = doc["wind_speed"]      | 0.0f;
     wxData.wind_dir        = doc["wind_dir"]        | 0;
     wxData.uv_index        = doc["uv_index"]        | 0.0f;
+    wxData.visibility_km   = doc["visibility_km"]   | 0.0f;
     wxData.utc_offset_secs = doc["utc_offset_secs"] | 0;
     const char* cond = doc["condition"] | "---";
     strlcpy(wxData.condition, cond, sizeof(wxData.condition));
     const char* wc = doc["wind_cardinal"] | "?";
     strlcpy(wxData.wind_cardinal, wc, sizeof(wxData.wind_cardinal));
+    const char* sr = doc["sunrise"] | "--:--";
+    strlcpy(wxData.sunrise, sr, sizeof(wxData.sunrise));
+    const char* ss = doc["sunset"] | "--:--";
+    strlcpy(wxData.sunset, ss, sizeof(wxData.sunset));
     wxReady = true;
-    Serial.printf("[WX] %.1f C  %s  UV %.1f\n",
+    wlog("[WX] %.1f C  %s  UV %.1f\n",
       wxData.temp, wxData.condition, wxData.uv_index);
-    wdtResume();
+    esp_task_wdt_add(NULL);
+    esp_task_wdt_reset();
     return true;
   }
-  Serial.println("[WX] All attempts failed");
-  wdtResume();
+  wlog("[WX] All attempts failed\n");
+  esp_task_wdt_add(NULL);
+  esp_task_wdt_reset();
   return false;
 }
-
-// ─── Device heartbeat ────────────────────────────────
-void sendHeartbeat() {
-  if (!wifiOk()) return;
-  wdtPause();
-  WiFiClientSecure tcp;
-  tcp.setInsecure();
-  tcp.setHandshakeTimeout(8);
-  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
-    Serial.println("[HB] Connect failed");
-    wdtResume();
-    return;
-  }
-  char body[256];
-  snprintf(body, sizeof(body),
-    "{\"device\":\"foxtrot\",\"fw\":\"%s\",\"heap\":%d,\"uptime\":%lu,"
-    "\"rssi\":%d,\"flights\":%d,\"source\":%d,\"location\":\"%s\"}",
-    FW_VERSION, ESP.getFreeHeap(), millis() / 1000,
-    WiFi.RSSI(), flightCount, dataSource, LOCATION_NAME);
-  HTTPClient http;
-  char url[96];
-  snprintf(url, sizeof(url), "https://%s/device/heartbeat", PROXY_HOST);
-  http.begin(tcp, url);
-  http.setTimeout(5000);
-  http.addHeader("Content-Type", "application/json");
-  int code = http.POST(body);
-  http.end();
-  wdtResume();
-  if (code == 200) Serial.println("[HB] OK");
-  else Serial.printf("[HB] HTTP %d\n", code);
-}
-
-// ─── Async fetch task (runs on core 1) ───────────────
-#if ASYNC_FETCH
-static bool onFetchTask = false;
-
-bool skipWdt() { return onFetchTask; }
-
-void fetchTaskFunc(void* param) {
-  onFetchTask = true;
-  for (;;) {
-    xSemaphoreTake(fetchSemaphore, portMAX_DELAY);
-    if (wxFetchPending) {
-      wxFetchPending = false;
-      wxFetchResultOk = fetchWeather();
-      wxFetchDone = true;
-    } else {
-      fetchFlightsWork();
-      fetchDone = true;
-    }
-  }
-}
-#else
-bool skipWdt() { return false; }
-#endif
