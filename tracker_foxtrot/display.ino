@@ -6,6 +6,9 @@
 #define FONT_MD  (&lgfx::fonts::DejaVu40)
 #define FONT_LG  (&lgfx::fonts::DejaVu40)
 #define FONT_XL  (&lgfx::fonts::FreeMonoBold24pt7b)
+#define FONT_XXL (&lgfx::fonts::DejaVu56)
+#define FONT_3XL (&lgfx::fonts::DejaVu72)
+#define FONT_MDS (&lgfx::fonts::FreeSansBold18pt7b)
 
 // ─── CFG button confirmation state ──────────────────
 static bool          cfgConfirming    = false;
@@ -172,7 +175,7 @@ void renderFlight(const Flight& f) {
   }
 
   // ── Callsign ──
-  dlbl(20, CY + yOff + 8, FONT_XL, C_AMBER, f.callsign[0] ? f.callsign : "SEARCHING");
+  dlbl(20, CY + yOff + 4, FONT_XXL, C_AMBER, f.callsign[0] ? f.callsign : "SEARCHING");
 
   // ── Airline ──
   int alY = CY + yOff + 72;
@@ -194,11 +197,11 @@ void renderFlight(const Flight& f) {
   int routeDivY = divY + 56;
   int dashY     = CY + CONTENT_H - 90;
   tft.drawFastHLine(14, routeDivY, W - 28, C_DIMMER);
-  dlbl(20, routeDivY + 8, FONT_XS, C_DIM, "ROUTE");
+  dlbl(20, routeDivY + 13, FONT_XS, C_DIM, "ROUTE");
   if (f.route[0])
-    dlbl(20, routeDivY + 30, FONT_SM, C_YELLOW, f.route);
+    dlbl(20, routeDivY + 36, FONT_MD, C_YELLOW, f.route);
   else
-    dlbl(20, routeDivY + 30, FONT_SM, C_DIMMER, "NO ROUTE DATA");
+    dlbl(20, routeDivY + 36, FONT_MD, C_DIMMER, "NO ROUTE DATA");
 
   // ── Dashboard ──
   int COL_W = W / 4;
@@ -207,51 +210,51 @@ void renderFlight(const Flight& f) {
   uint16_t sCol = statusColor(f.status);
   tft.fillRect(0, dashY + 1, 5, 89, sCol);
 
-  dlbl(10, dashY + 4, FONT_XS, C_DIM, "PHASE");
-  dlbl(14, dashY + 22, FONT_SM, sCol, statusLabel(f.status));
+  dlbl(10, dashY + 12, FONT_XS, C_DIM, "PHASE");
+  dlbl(14, dashY + 30, FONT_SM, sCol, statusLabel(f.status));
 
   const char* sqLabel = strcmp(f.squawk,"7700")==0 ? "MAYDAY" :
                         strcmp(f.squawk,"7600")==0 ? "NORDO"  :
                         strcmp(f.squawk,"7500")==0 ? "HIJACK" : f.squawk;
   char sqBuf[24];
   snprintf(sqBuf, sizeof(sqBuf), "SQK %s", sqLabel);
-  dlbl(14, dashY + 48, FONT_XS, hasEmergency ? C_RED : C_DIM, sqBuf);
+  dlbl(14, dashY + 56, FONT_XS, hasEmergency ? C_RED : C_DIM, sqBuf);
 
   tft.fillRect(COL_W, dashY + 4, 1, 78, C_DIMMER);
-  dlbl(COL_W + 10, dashY + 4, FONT_XS, C_DIM, "ALT");
+  dlbl(COL_W + 10, dashY + 13, FONT_XS, C_DIM, "ALT");
 
   char altBuf[20];
   formatAlt(f.alt, altBuf, sizeof(altBuf));
-  dlbl(COL_W + 10, dashY + 20, FONT_SM, C_AMBER, altBuf);
+  dlbl(COL_W + 10, dashY + 29, FONT_SM, C_AMBER, altBuf);
 
   if (abs(f.vs) >= 50) {
     char vsBuf[24];
     if (f.vs > 0) snprintf(vsBuf, sizeof(vsBuf), "+%d FPM", f.vs);
     else          snprintf(vsBuf, sizeof(vsBuf), "%d FPM",  f.vs);
-    dlbl(COL_W + 10, dashY + 46, FONT_XS, f.vs > 0 ? C_GREEN : C_RED, vsBuf);
+    dlbl(COL_W + 10, dashY + 55, FONT_XS, f.vs > 0 ? C_GREEN : C_RED, vsBuf);
   } else {
-    dlbl(COL_W + 10, dashY + 46, FONT_XS, C_AMBER, "LEVEL");
+    dlbl(COL_W + 10, dashY + 55, FONT_XS, C_AMBER, "LEVEL");
   }
 
   tft.fillRect(COL_W * 2, dashY + 4, 1, 78, C_DIMMER);
-  dlbl(COL_W * 2 + 10, dashY + 4, FONT_XS, C_DIM, "SPD");
+  dlbl(COL_W * 2 + 10, dashY + 14, FONT_XS, C_DIM, "SPD");
   if (f.speed > 0) {
     char spdBuf[16];
     snprintf(spdBuf, sizeof(spdBuf), "%d KT", f.speed);
-    dlbl(COL_W * 2 + 10, dashY + 20, FONT_SM, C_AMBER, spdBuf);
+    dlbl(COL_W * 2 + 10, dashY + 32, FONT_MD, C_AMBER, spdBuf);
   } else {
-    dlbl(COL_W * 2 + 10, dashY + 20, FONT_SM, C_AMBER, "---");
+    dlbl(COL_W * 2 + 10, dashY + 32, FONT_MD, C_AMBER, "---");
   }
 
   tft.fillRect(COL_W * 3, dashY + 4, 1, 78, C_DIMMER);
-  dlbl(COL_W * 3 + 10, dashY + 4, FONT_XS, C_DIM, "DIST");
+  dlbl(COL_W * 3 + 10, dashY + 14, FONT_XS, C_DIM, "DIST");
   if (f.dist > 0) {
     uint16_t dCol = distanceColor(f.dist, GEOFENCE_MI);
     char distBuf[16];
     snprintf(distBuf, sizeof(distBuf), "%.1f MI", f.dist);
-    dlbl(COL_W * 3 + 10, dashY + 20, FONT_SM, dCol, distBuf);
+    dlbl(COL_W * 3 + 10, dashY + 32, FONT_MD, dCol, distBuf);
   } else {
-    dlbl(COL_W * 3 + 10, dashY + 20, FONT_SM, C_AMBER, "---");
+    dlbl(COL_W * 3 + 10, dashY + 32, FONT_MD, C_AMBER, "---");
   }
 
   drawStatusBar();
@@ -276,10 +279,10 @@ void renderWeather() {
   char timeBuf[8];
   if (ntpOk) snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", t->tm_hour, t->tm_min);
   else       strlcpy(timeBuf, "--:--", sizeof(timeBuf));
-  tft.setFont(FONT_XL);
+  tft.setFont(FONT_3XL);
   tft.setTextColor(C_AMBER);
   tft.setTextDatum(lgfx::top_center);
-  tft.drawString(timeBuf, W / 2, CY + 10);
+  tft.drawString(timeBuf, W / 2, CY + 6);
   tft.setTextDatum(lgfx::top_left);
 
   if (ntpOk) {
@@ -290,13 +293,13 @@ void renderWeather() {
     tft.setFont(FONT_SM);
     tft.setTextColor(C_DIM);
     tft.setTextDatum(lgfx::top_center);
-    tft.drawString(dateBuf, W / 2, CY + 74);
+    tft.drawString(dateBuf, W / 2, CY + 82);
     tft.setTextDatum(lgfx::top_left);
   }
 
-  int cy = CY + 100;
+  int cy = CY + 108;
   tft.drawFastHLine(14, cy, W - 28, C_DIMMER);
-  cy += 10;
+  cy += 8;
 
   if (!wxReady) {
     dlbl(20, cy + 14, FONT_SM, C_DIMMER, "WEATHER LOADING...");
@@ -310,36 +313,42 @@ void renderWeather() {
 
   dlbl(lx, cy, FONT_XS, C_DIM, "TEMPERATURE");
   dlbl(rx, cy, FONT_XS, C_DIM, "REAL FEEL");
-  cy += 22;
+  cy += 20;
   snprintf(buf, sizeof(buf), "%.0f F", wxData.temp * 9.0f / 5.0f + 32.0f);
   dlbl(lx, cy, FONT_SM, C_AMBER, buf);
   snprintf(buf, sizeof(buf), "%.0f F", wxData.feels_like * 9.0f / 5.0f + 32.0f);
-  dlbl(rx, cy, FONT_SM, C_AMBER, buf);
+  dlbl(rx, cy, FONT_SM, C_CYAN, buf);
   cy += 26;
   tft.drawFastHLine(14, cy, W - 28, C_DIMMER);
-  cy += 6;
+  cy += 4;
 
   dlbl(lx, cy, FONT_XS, C_DIM, "CONDITIONS");
-  cy += 22;
+  dlbl(rx, cy, FONT_XS, C_DIM, "PRECIPITATION");
+  cy += 20;
   dlbl(lx, cy, FONT_SM, C_YELLOW, wxData.condition);
+  uint16_t precipCol = wxData.precipitation_mm < 0.1f ? C_GREEN :
+                       wxData.precipitation_mm < 2.5f ? C_YELLOW :
+                       wxData.precipitation_mm < 7.5f ? C_AMBER  : C_RED;
+  snprintf(buf, sizeof(buf), "%.2f IN", wxData.precipitation_mm * 0.0393701f);
+  dlbl(rx, cy, FONT_SM, precipCol, buf);
   cy += 26;
   tft.drawFastHLine(14, cy, W - 28, C_DIMMER);
-  cy += 6;
+  cy += 4;
 
   dlbl(lx, cy, FONT_XS, C_DIM, "HUMIDITY");
   dlbl(rx, cy, FONT_XS, C_DIM, "WIND");
-  cy += 22;
+  cy += 20;
   snprintf(buf, sizeof(buf), "%d%%", wxData.humidity);
   dlbl(lx, cy, FONT_SM, C_AMBER, buf);
   snprintf(buf, sizeof(buf), "%.0f MPH %s", wxData.wind_speed * 0.621371f, wxData.wind_cardinal);
   dlbl(rx, cy, FONT_SM, C_AMBER, buf);
   cy += 26;
   tft.drawFastHLine(14, cy, W - 28, C_DIMMER);
-  cy += 6;
+  cy += 4;
 
   dlbl(lx, cy, FONT_XS, C_DIM, "UV INDEX");
   dlbl(rx, cy, FONT_XS, C_DIM, "VISIBILITY");
-  cy += 22;
+  cy += 20;
 
   uint16_t uvCol = wxData.uv_index < 3.0f ? C_GREEN :
                    wxData.uv_index < 6.0f ? C_YELLOW :
@@ -347,10 +356,11 @@ void renderWeather() {
   snprintf(buf, sizeof(buf), "%.1f", wxData.uv_index);
   dlbl(lx, cy, FONT_SM, uvCol, buf);
 
-  uint16_t visCol = wxData.visibility_km >= 10.0f ? C_GREEN :
-                    wxData.visibility_km >=  5.0f ? C_YELLOW :
-                    wxData.visibility_km >=  2.0f ? C_AMBER  : C_RED;
-  snprintf(buf, sizeof(buf), "%.0f KM", wxData.visibility_km);
+  float visMi = wxData.visibility_km * 0.621371f;
+  uint16_t visCol = visMi >= 6.0f ? C_GREEN :
+                    visMi >= 3.0f ? C_YELLOW :
+                    visMi >= 1.2f ? C_AMBER  : C_RED;
+  snprintf(buf, sizeof(buf), "%.0f MI", visMi);
   dlbl(rx, cy, FONT_SM, visCol, buf);
   cy += 26;
 

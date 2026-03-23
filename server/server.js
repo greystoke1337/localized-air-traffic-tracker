@@ -1378,7 +1378,7 @@ app.get('/weather', async (req, res) => {
     const promise = (async () => {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
         `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,` +
-        `wind_speed_10m,wind_direction_10m,uv_index,visibility&wind_speed_unit=kmh&timezone=auto` +
+        `wind_speed_10m,wind_direction_10m,uv_index,visibility,precipitation&wind_speed_unit=kmh&timezone=auto` +
         `&daily=sunrise,sunset`;
       const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
       if (!response.ok) throw new Error(`Open-Meteo returned ${response.status}`);
@@ -1397,6 +1397,7 @@ app.get('/weather', async (req, res) => {
         wind_cardinal:   windCardinal(c.wind_direction_10m),
         uv_index:        c.uv_index,
         visibility_km:   (c.visibility || 0) / 1000,
+        precipitation_mm: c.precipitation || 0,
         sunrise:         srRaw.includes('T') ? srRaw.split('T')[1].slice(0, 5) : '--:--',
         sunset:          ssRaw.includes('T') ? ssRaw.split('T')[1].slice(0, 5) : '--:--',
         utc_offset_secs: raw.utc_offset_seconds,

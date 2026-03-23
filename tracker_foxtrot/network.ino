@@ -450,8 +450,9 @@ bool fetchWeather() {
     wxData.wind_speed      = doc["wind_speed"]      | 0.0f;
     wxData.wind_dir        = doc["wind_dir"]        | 0;
     wxData.uv_index        = doc["uv_index"]        | 0.0f;
-    wxData.visibility_km   = doc["visibility_km"]   | 0.0f;
-    wxData.utc_offset_secs = doc["utc_offset_secs"] | 0;
+    wxData.visibility_km      = doc["visibility_km"]      | 0.0f;
+    wxData.precipitation_mm   = doc["precipitation_mm"]   | 0.0f;
+    wxData.utc_offset_secs    = doc["utc_offset_secs"]    | 0;
     const char* cond = doc["condition"] | "---";
     strlcpy(wxData.condition, cond, sizeof(wxData.condition));
     const char* wc = doc["wind_cardinal"] | "?";
