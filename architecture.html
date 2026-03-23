@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Overhead Tracker — System Architecture</title>
+<script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a08;
+    color: #ffa200;
+    font-family: 'Courier New', Courier, monospace;
+    overflow: hidden;
+    height: 100vh;
+  }
+  #header {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #181008 0%, #0a0a08 100%);
+    border-bottom: 1px solid #3a2800;
+    position: relative;
+    z-index: 10;
+  }
+  #header h1 {
+    font-size: 16px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: #ffa200;
+    text-shadow: 0 0 12px rgba(255,162,0,0.4);
+    font-weight: normal;
+  }
+  #header .subtitle {
+    position: absolute;
+    right: 16px;
+    font-size: 10px;
+    color: #7a5200;
+    letter-spacing: 2px;
+  }
+  #cy {
+    position: absolute;
+    top: 48px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  /* CRT scanline overlay */
+  #cy::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+  #legend {
+    position: absolute;
+    top: 58px;
+    right: 10px;
+    background: rgba(10,10,8,0.92);
+    border: 1px solid #3a2800;
+    padding: 12px 14px;
+    z-index: 20;
+    font-size: 11px;
+    line-height: 1.8;
+    max-width: 220px;
+  }
+  #legend h3 {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #ffa200;
+    margin-bottom: 8px;
+    font-weight: normal;
+    border-bottom: 1px solid #3a2800;
+    padding-bottom: 4px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #c88400;
+  }
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .legend-divider {
+    border-top: 1px solid #2a1a00;
+    margin: 6px 0;
+  }
+  .legend-edge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #c88400;
+  }
+  .legend-line {
+    width: 24px;
+    height: 4px;
+    flex-shrink: 0;
+  }
+  #controls {
+    position: absolute;
+    bottom: 14px;
+    right: 14px;
+    display: flex;
+    gap: 6px;
+    z-index: 20;
+  }
+  #controls button {
+    width: 36px;
+    height: 36px;
+    background: rgba(10,10,8,0.9);
+    border: 1px solid #3a2800;
+    color: #ffa200;
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #controls button:hover {
+    background: #1a1008;
+    border-color: #ffa200;
+  }
+  #tooltip {
+    position: absolute;
+    display: none;
+    background: rgba(10,10,8,0.95);
+    border: 1px solid #ffa200;
+    color: #ffa200;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 10px 12px;
+    pointer-events: none;
+    z-index: 30;
+    max-width: 320px;
+    line-height: 1.6;
+    box-shadow: 0 0 20px rgba(255,162,0,0.15);
+  }
+  #tooltip .tt-title {
+    font-size: 12px;
+    color: #ffb840;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+  #tooltip .tt-tech {
+    color: #7a5200;
+    font-size: 10px;
+    margin-bottom: 6px;
+  }
+  #tooltip .tt-desc {
+    color: #c88400;
+  }
+  @media (max-width: 700px) {
+    #legend { display: none; }
+    #header h1 { font-size: 12px; letter-spacing: 3px; }
+    #header .subtitle { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>System Architecture</h1>
+  <span class="subtitle">OVERHEAD TRACKER</span>
+</div>
+
+<div id="cy"></div>
+
+<div id="legend">
+  <h3>Nodes</h3>
+  <div class="legend-item"><span class="legend-swatch" style="background:#3a2000;border:1.5px solid #ffa200"></span> User-Facing</div>
+  <div class="legend-item"><span class="legend-swatch" style="background:#1a3a5c;border:1.5px solid #3a7abf"></span> Cloud / Hosting</div>
+  <div class="legend-item"><span class="legend-swatch" style="background:#1a2a1a;border:1.5px solid #4a8a4a"></span> Proxy Internals</div>
+  <div class="legend-item"><span class="legend-swatch" style="background:#2a1a1a;border:1.5px solid #8a4a4a"></span> ADS-B APIs</div>
+  <div class="legend-item"><span class="legend-swatch" style="background:#2a1a2a;border:1.5px solid #8a4a8a"></span> External APIs</div>
+  <div class="legend-item"><span class="legend-swatch" style="background:#1a1a2a;border:1.5px solid #4a4a8a"></span> Build / Deploy</div>
+  <div class="legend-divider"></div>
+  <h3>Edges</h3>
+  <div class="legend-edge"><svg class="legend-line" viewBox="0 0 24 4"><line x1="0" y1="2" x2="24" y2="2" stroke="#ffa200" stroke-width="2"/></svg> Primary data</div>
+  <div class="legend-edge"><svg class="legend-line" viewBox="0 0 24 4"><line x1="0" y1="2" x2="24" y2="2" stroke="#ff6644" stroke-width="2"/></svg> Raced API</div>
+  <div class="legend-edge"><svg class="legend-line" viewBox="0 0 24 4"><line x1="0" y1="2" x2="24" y2="2" stroke="#7a5200" stroke-width="2" stroke-dasharray="4,3"/></svg> Fallback</div>
+  <div class="legend-edge"><svg class="legend-line" viewBox="0 0 24 4"><line x1="0" y1="2" x2="24" y2="2" stroke="#4a8a4a" stroke-width="2" stroke-dasharray="2,3"/></svg> Email / Scheduled</div>
+  <div class="legend-edge"><svg class="legend-line" viewBox="0 0 24 4"><line x1="0" y1="2" x2="24" y2="2" stroke="#3a7abf" stroke-width="1.5"/></svg> Hosting / Serving</div>
+</div>
+
+<div id="controls">
+  <button onclick="cy.zoom(cy.zoom()*1.2);cy.center()" title="Zoom in">+</button>
+  <button onclick="cy.zoom(cy.zoom()/1.2);cy.center()" title="Zoom out">&minus;</button>
+  <button onclick="cy.fit(undefined,40)" title="Reset view">R</button>
+</div>
+
+<div id="tooltip">
+  <div class="tt-title"></div>
+  <div class="tt-tech"></div>
+  <div class="tt-desc"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────
+// Layout: left-to-right data flow
+//
+//   COLUMN 1 (x≈140)    ADS-B data sources (top) + device fallback targets
+//   COLUMN 2 (x≈460)    Clients: Web App, Echo, Foxtrot, Pi (vertical stack)
+//   COLUMN 3 (x≈830)    PROXY HUB  (single gateway node)
+//   COLUMN 4 (x≈1160)   Proxy internals (2×4 grid)
+//   COLUMN 5 (x≈1500)   External services (route, weather, email)
+//
+//   Web-app-only APIs sit below the web app (col 2 area)
+//   Build/deploy tools sit below their device
+// ─────────────────────────────────────────────────
+
+const nodes = [
+  // ─── COLUMN 1 (x=150): CLIENTS ───
+  { data: { id: 'web-app', label: 'Web App\nindex.html', tech: 'Vanilla JS, Leaflet, ~120KB', desc: 'Single-file browser app. Interactive map with geofence, flight table, aircraft photos, route info. No framework, no build step.' }, classes: 'user-facing', position: { x: 150, y: 350 } },
+  { data: { id: 'echo', label: 'Echo\nESP32 4.0"', tech: 'ESP32, TFT_eSPI, 480x320, COM4', desc: 'Personal device at Russell Lea, Sydney. SPI TFT display, capacitive touch. WiFi config via captive portal.' }, classes: 'user-facing', position: { x: 150, y: 550 } },
+  { data: { id: 'foxtrot', label: 'Foxtrot\nESP32-S3 4.3"', tech: 'LovyanGFX, 800x480, COM7', desc: 'Customer device in Chicago. RGB IPS display, 16MB flash, 8MB PSRAM. LovyanGFX immediate-mode rendering.' }, classes: 'user-facing', position: { x: 150, y: 720 } },
+  { data: { id: 'pi-display', label: 'Pi Display\nRPi 3B+ TFT', tech: 'Python/Pygame, 480x320', desc: 'Status dashboard at Russell Lea. 3-page rotation (flights, proxy stats, server health). Renders to /dev/fb1.' }, classes: 'user-facing', position: { x: 150, y: 910 } },
+
+  // ─── Web-app services (above, fanning out right) ───
+  { data: { id: 'github-pages', label: 'GitHub Pages\noverheadtracker.com', tech: 'Auto-deploy on push to master', desc: 'Hosts the web app (index.html). Custom domain via CNAME. Deploys within ~60 seconds of push.' }, classes: 'cloud', position: { x: 150, y: 140 } },
+  { data: { id: 'planespotters', label: 'Planespotters', tech: 'HTTPS, no auth', desc: 'Aircraft photo API. /pub/photos/hex/{hex}. Returns photos by ICAO hex or registration. Used by web app only.' }, classes: 'external-api', position: { x: 400, y: 90 } },
+  { data: { id: 'nominatim', label: 'Nominatim\nOpenStreetMap', tech: 'HTTPS, no auth', desc: 'Geocoding API. Converts location names to lat/lon coordinates. Used for the location search in the web app.' }, classes: 'external-api', position: { x: 400, y: 230 } },
+  { data: { id: 'cartodb', label: 'CartoDB\nMap Tiles', tech: 'HTTPS, no auth', desc: 'Dark/light map tile server for Leaflet. basemaps.cartocdn.com. Used as the map background in the web app.' }, classes: 'external-api', position: { x: 610, y: 90 } },
+  { data: { id: 'adsbdb-web', label: 'adsbdb\n(web app)', tech: 'HTTPS, no auth', desc: 'Route lookup from web app. /v0/callsign/{cs} returns departure and arrival airports.' }, classes: 'external-api', position: { x: 610, y: 230 } },
+
+  // ─── Build / Deploy (below their devices) ───
+  { data: { id: 'arduino-cli', label: 'arduino-cli\nbuild.sh', tech: 'USB flash + OTA', desc: 'Compiles and flashes ESP32 firmware. Echo via build.sh (COM4), Foxtrot via arduino-cli direct (COM7). OTA supported.' }, classes: 'build', position: { x: 150, y: 635 } },
+  { data: { id: 'pm2', label: 'PM2\nwatchdog.sh', tech: 'Process manager on Pi', desc: 'Manages display (id 0) and tunnel (id 1) processes on the Pi. Watchdog.sh monitors health via cron every 60s.' }, classes: 'build', position: { x: 370, y: 910 } },
+
+  // ─── COLUMN 2 (x=560): PROXY HUB ───
+  { data: { id: 'proxy', label: 'Railway Proxy\napi.overheadtracker.com', tech: 'Node.js / Express, port 3000', desc: 'Central proxy server on Railway. Races 4 ADS-B APIs, caches flights (45s), routes (30min), weather (10min). Rate limited 100 req/min/IP.' }, classes: 'cloud proxy-hub', position: { x: 560, y: 600 } },
+
+  // ─── COLUMN 3 (x=850): ADS-B Data Sources ───
+  { data: { id: 'adsb-lol', label: 'adsb.lol', tech: 'HTTPS, no auth', desc: 'Primary ADS-B data source. /v2/point/{lat}/{lon}/{radius}. Rate limited (429 → 60s cooldown).' }, classes: 'adsb-api', position: { x: 850, y: 380 } },
+  { data: { id: 'adsb-fi', label: 'adsb.fi', tech: 'HTTPS, no auth', desc: 'Secondary ADS-B source. /api/v3/lat/{lat}/lon/{lon}/dist/{radius}. Round-robin raced with others.' }, classes: 'adsb-api', position: { x: 850, y: 520 } },
+  { data: { id: 'airplanes-live', label: 'airplanes.live', tech: 'HTTPS, no auth', desc: 'Tertiary ADS-B source. /v2/point/{lat}/{lon}/{radius}. Also used as direct fallback by ESP32 devices.' }, classes: 'adsb-api', position: { x: 850, y: 660 } },
+  { data: { id: 'adsb-one', label: 'adsb-one', tech: 'HTTPS, no auth', desc: 'Quaternary ADS-B source. /v2/point/{lat}/{lon}/{radius}. Newest addition to the race pool.' }, classes: 'adsb-api', position: { x: 850, y: 800 } },
+
+  // ─── COLUMN 4 (x=560): Proxy Internals (below proxy, 2-column grid) ───
+  { data: { id: 'flight-cache', label: 'Flight Cache\n45s TTL', tech: 'In-memory LRU, max 500', desc: 'Geo-bucketed cache keyed by lat/lon (rounded to 2 decimals) + radius. Nearby clients share cache hits. Dedup via inFlight map.' }, classes: 'proxy-internal', position: { x: 1120, y: 380 } },
+  { data: { id: 'flight-logger', label: 'Flight Logger\ndaily JSON', tech: 'Auto-save every 60s', desc: 'Logs unique flights per day to flights-{date}.json. Tracks min/max altitude, distance, speed, first/last seen.' }, classes: 'proxy-internal', position: { x: 1320, y: 380 } },
+  { data: { id: 'route-cache', label: 'Route Cache\n30min TTL', tech: 'Max 5000, persisted to disk', desc: 'Maps callsigns to dep/arr airports. Persisted to route-cache.json. Background fire-and-forget lookups via adsbdb.' }, classes: 'proxy-internal', position: { x: 1120, y: 530 } },
+  { data: { id: 'route-discovery', label: 'Route Discovery\n20K routes', tech: 'known-routes.json', desc: 'Detects new "City > City" route pairs. Persistent storage. Backfill runs at 02:00 AEST for yesterday\'s flights.' }, classes: 'proxy-internal', position: { x: 1320, y: 530 } },
+  { data: { id: 'weather-cache', label: 'Weather Cache\n10min TTL', tech: 'Geo-bucketed + tide data', desc: 'Caches Open-Meteo weather data + BOM tide predictions (from embedded tides-2026.json).' }, classes: 'proxy-internal', position: { x: 1120, y: 680 } },
+  { data: { id: 'device-registry', label: 'Device Registry\nheartbeats', tech: '10min timeout', desc: 'Tracks device health via POST /device/heartbeat. Stores fw version, heap, RSSI, uptime, flights count. Online if < 600s old.' }, classes: 'proxy-internal', position: { x: 1320, y: 680 } },
+  { data: { id: 'email-scheduler', label: 'Email Scheduler\n3 daily', tech: '08:00 / 21:00 / 23:55 AEST', desc: 'Status email (08:00), route discovery (21:00), daily flight report (23:55). All via Resend API. HTML amber aesthetic.' }, classes: 'proxy-internal', position: { x: 1220, y: 840 } },
+
+  // ─── COLUMN 5 (x=1560): External Services (proxy-side) ───
+  { data: { id: 'adsbdb', label: 'adsbdb\n(proxy)', tech: 'HTTPS, no auth, 5s timeout', desc: 'Route lookup API. /v0/callsign/{cs} returns departure and arrival airports. Results cached 30min on proxy.' }, classes: 'external-api', position: { x: 1560, y: 460 } },
+  { data: { id: 'open-meteo', label: 'Open-Meteo', tech: 'HTTPS, no auth, 8s timeout', desc: 'Weather forecast API. Returns temp, humidity, wind, UV, visibility, precipitation, sunrise/sunset.' }, classes: 'external-api', position: { x: 1560, y: 610 } },
+  { data: { id: 'resend', label: 'Resend', tech: 'HTTPS, Bearer token', desc: 'Transactional email API. Sends all 3 daily emails (status, route discovery, flight report). From: status@overheadtracker.com.' }, classes: 'external-api', position: { x: 1560, y: 770 } },
+];
+
+const edges = [
+  // ── Proxy ↔ ADS-B APIs (raced, all 4) ──
+  { data: { source: 'proxy', target: 'adsb-lol', label: 'raced', id: 'e-proxy-lol' }, classes: 'raced' },
+  { data: { source: 'proxy', target: 'adsb-fi', label: 'raced', id: 'e-proxy-fi' }, classes: 'raced' },
+  { data: { source: 'proxy', target: 'airplanes-live', label: 'raced', id: 'e-proxy-al' }, classes: 'raced' },
+  { data: { source: 'proxy', target: 'adsb-one', label: 'raced', id: 'e-proxy-one' }, classes: 'raced' },
+
+  // ── Proxy → internals ──
+  { data: { source: 'proxy', target: 'flight-cache', label: '', id: 'e-p-fc' }, classes: 'internal' },
+  { data: { source: 'proxy', target: 'weather-cache', label: '', id: 'e-p-wc' }, classes: 'internal' },
+  { data: { source: 'proxy', target: 'device-registry', label: '', id: 'e-p-dr' }, classes: 'internal' },
+  { data: { source: 'flight-cache', target: 'flight-logger', label: '', id: 'e-fc-fl' }, classes: 'internal' },
+  { data: { source: 'flight-logger', target: 'route-discovery', label: '', id: 'e-fl-rd' }, classes: 'internal' },
+  { data: { source: 'route-discovery', target: 'route-cache', label: '', id: 'e-rd-rc' }, classes: 'internal' },
+  { data: { source: 'route-discovery', target: 'email-scheduler', label: '', id: 'e-rd-es' }, classes: 'internal' },
+  { data: { source: 'flight-logger', target: 'email-scheduler', label: '', id: 'e-fl-es' }, classes: 'internal' },
+
+  // ── Proxy internals → external services ──
+  { data: { source: 'route-cache', target: 'adsbdb', label: '/callsign', id: 'e-rc-adsbdb' }, classes: 'primary' },
+  { data: { source: 'weather-cache', target: 'open-meteo', label: '/forecast', id: 'e-wc-meteo' }, classes: 'primary' },
+  { data: { source: 'email-scheduler', target: 'resend', label: '3 daily emails', id: 'e-es-resend' }, classes: 'email' },
+
+  // ── Clients → Proxy ──
+  { data: { source: 'web-app', target: 'proxy', label: '/flights\n/weather', id: 'e-web-proxy' }, classes: 'primary' },
+  { data: { source: 'echo', target: 'proxy', label: '/flights 15s\nheartbeat 60s', id: 'e-echo-proxy' }, classes: 'primary' },
+  { data: { source: 'foxtrot', target: 'proxy', label: '/flights 15s\nheartbeat 60s', id: 'e-fox-proxy' }, classes: 'primary' },
+  { data: { source: 'pi-display', target: 'proxy', label: '/flights /stats\n/peak /weather\n/device/*/status', id: 'e-pi-proxy' }, classes: 'primary' },
+
+  // ── Device fallbacks (direct to ADS-B, bypassing proxy) ──
+  { data: { source: 'echo', target: 'adsb-lol', label: 'fallback', id: 'e-echo-lol' }, classes: 'fallback' },
+  { data: { source: 'echo', target: 'airplanes-live', label: 'fallback', id: 'e-echo-al' }, classes: 'fallback' },
+  { data: { source: 'foxtrot', target: 'adsb-lol', label: 'fallback', id: 'e-fox-lol' }, classes: 'fallback' },
+  { data: { source: 'foxtrot', target: 'airplanes-live', label: 'fallback', id: 'e-fox-al' }, classes: 'fallback' },
+
+  // ── Web App → its own APIs ──
+  { data: { source: 'web-app', target: 'planespotters', label: 'photos', id: 'e-web-ps' }, classes: 'primary' },
+  { data: { source: 'web-app', target: 'nominatim', label: 'geocode', id: 'e-web-nom' }, classes: 'primary' },
+  { data: { source: 'web-app', target: 'cartodb', label: 'tiles', id: 'e-web-carto' }, classes: 'primary' },
+  { data: { source: 'web-app', target: 'adsbdb-web', label: '/callsign', id: 'e-web-adsbdb' }, classes: 'primary' },
+
+  // ── Hosting ──
+  { data: { source: 'github-pages', target: 'web-app', label: 'serves', id: 'e-gh-web' }, classes: 'hosting' },
+
+  // ── Build / Deploy ──
+  { data: { source: 'arduino-cli', target: 'echo', label: 'USB COM4 + OTA', id: 'e-build-echo' }, classes: 'build-edge' },
+  { data: { source: 'arduino-cli', target: 'foxtrot', label: 'USB COM7 + OTA', id: 'e-build-fox' }, classes: 'build-edge' },
+  { data: { source: 'pm2', target: 'pi-display', label: 'manages', id: 'e-pm2-pi' }, classes: 'build-edge' },
+];
+
+const cy = cytoscape({
+  container: document.getElementById('cy'),
+  elements: {
+    nodes: nodes,
+    edges: edges
+  },
+  layout: { name: 'preset' },
+  style: [
+    // ── Base node ──
+    {
+      selector: 'node',
+      style: {
+        'label': 'data(label)',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'font-family': '"Courier New", Courier, monospace',
+        'font-size': '11px',
+        'color': '#ffa200',
+        'text-wrap': 'wrap',
+        'text-max-width': '130px',
+        'width': '150',
+        'height': '60',
+        'shape': 'roundrectangle',
+        'border-width': 2,
+        'text-outline-color': '#0a0a08',
+        'text-outline-width': 1,
+      }
+    },
+    // ── Category styles ──
+    {
+      selector: 'node.cloud',
+      style: {
+        'background-color': '#1a3a5c',
+        'border-color': '#3a7abf',
+      }
+    },
+    {
+      selector: 'node.proxy-hub',
+      style: {
+        'width': '200',
+        'height': '80',
+        'font-size': '13px',
+        'text-max-width': '180px',
+        'border-width': 3,
+        'background-color': '#1a3a5c',
+        'border-color': '#5abaff',
+      }
+    },
+    {
+      selector: 'node.user-facing',
+      style: {
+        'background-color': '#3a2000',
+        'border-color': '#ffa200',
+      }
+    },
+    {
+      selector: 'node.proxy-internal',
+      style: {
+        'background-color': '#1a2a1a',
+        'border-color': '#4a8a4a',
+        'width': '130',
+        'height': '50',
+        'font-size': '10px',
+        'text-max-width': '120px',
+      }
+    },
+    {
+      selector: 'node.adsb-api',
+      style: {
+        'background-color': '#2a1a1a',
+        'border-color': '#8a4a4a',
+        'width': '130',
+        'height': '48',
+        'font-size': '11px',
+      }
+    },
+    {
+      selector: 'node.external-api',
+      style: {
+        'background-color': '#2a1a2a',
+        'border-color': '#8a4a8a',
+        'width': '130',
+        'height': '48',
+        'font-size': '10px',
+      }
+    },
+    {
+      selector: 'node.build',
+      style: {
+        'background-color': '#1a1a2a',
+        'border-color': '#4a4a8a',
+        'width': '120',
+        'height': '44',
+        'font-size': '10px',
+      }
+    },
+    // ── Hover state ──
+    {
+      selector: 'node:active',
+      style: { 'overlay-opacity': 0 }
+    },
+    {
+      selector: 'node.hover',
+      style: {
+        'border-width': 3,
+        'border-color': '#ffcc44',
+        'z-index': 999,
+      }
+    },
+    // ── Base edge ──
+    {
+      selector: 'edge',
+      style: {
+        'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle',
+        'arrow-scale': 0.7,
+        'width': 1.5,
+        'label': 'data(label)',
+        'font-family': '"Courier New", monospace',
+        'font-size': '9px',
+        'text-rotation': 'autorotate',
+        'text-background-color': '#0a0a08',
+        'text-background-opacity': 0.9,
+        'text-background-padding': '3px',
+        'text-wrap': 'wrap',
+        'line-color': '#ffa200',
+        'target-arrow-color': '#ffa200',
+        'color': '#c88400',
+        'text-outline-width': 0,
+      }
+    },
+    // ── Edge types ──
+    {
+      selector: 'edge.primary',
+      style: {
+        'line-color': '#ffa200',
+        'target-arrow-color': '#ffa200',
+      }
+    },
+    {
+      selector: 'edge.raced',
+      style: {
+        'line-color': '#ff6644',
+        'target-arrow-color': '#ff6644',
+        'color': '#ff8866',
+      }
+    },
+    {
+      selector: 'edge.fallback',
+      style: {
+        'line-style': 'dashed',
+        'line-color': '#7a5200',
+        'target-arrow-color': '#7a5200',
+        'color': '#7a5200',
+        'line-dash-pattern': [6, 4],
+      }
+    },
+    {
+      selector: 'edge.email',
+      style: {
+        'line-style': 'dotted',
+        'line-color': '#4a8a4a',
+        'target-arrow-color': '#4a8a4a',
+        'color': '#4a8a4a',
+        'line-dash-pattern': [2, 4],
+      }
+    },
+    {
+      selector: 'edge.hosting',
+      style: {
+        'line-color': '#3a7abf',
+        'target-arrow-color': '#3a7abf',
+        'color': '#3a7abf',
+        'width': 1,
+      }
+    },
+    {
+      selector: 'edge.internal',
+      style: {
+        'line-color': '#3a6a3a',
+        'target-arrow-color': '#3a6a3a',
+        'width': 1,
+        'arrow-scale': 0.5,
+        'line-style': 'dotted',
+        'line-dash-pattern': [2, 3],
+      }
+    },
+    {
+      selector: 'edge.build-edge',
+      style: {
+        'line-color': '#4a4a8a',
+        'target-arrow-color': '#4a4a8a',
+        'color': '#4a4a8a',
+        'width': 1,
+        'line-style': 'dashed',
+        'line-dash-pattern': [4, 4],
+      }
+    },
+    // ── Highlight / dim for click interaction ──
+    {
+      selector: 'node.dimmed',
+      style: { 'opacity': 0.2 }
+    },
+    {
+      selector: 'edge.dimmed',
+      style: { 'opacity': 0.08 }
+    },
+    {
+      selector: 'edge.highlighted',
+      style: {
+        'width': 3,
+        'opacity': 1,
+        'z-index': 999,
+      }
+    },
+  ],
+  minZoom: 0.3,
+  maxZoom: 3,
+  wheelSensitivity: 0.4,
+});
+
+// ── Tooltip ──
+const tooltip = document.getElementById('tooltip');
+const ttTitle = tooltip.querySelector('.tt-title');
+const ttTech = tooltip.querySelector('.tt-tech');
+const ttDesc = tooltip.querySelector('.tt-desc');
+
+cy.on('mouseover', 'node', function(e) {
+  const node = e.target;
+  node.addClass('hover');
+  const d = node.data();
+  ttTitle.textContent = d.label ? d.label.replace(/\n/g, ' — ') : d.id;
+  ttTech.textContent = d.tech || '';
+  ttDesc.textContent = d.desc || '';
+  tooltip.style.display = 'block';
+});
+
+cy.on('mousemove', 'node', function(e) {
+  const r = e.renderedPosition;
+  const cRect = document.getElementById('cy').getBoundingClientRect();
+  let left = cRect.left + r.x + 16;
+  let top = cRect.top + r.y + 16;
+  // Keep tooltip on screen
+  if (left + 320 > window.innerWidth) left = left - 340;
+  if (top + 150 > window.innerHeight) top = top - 160;
+  tooltip.style.left = left + 'px';
+  tooltip.style.top = top + 'px';
+});
+
+cy.on('mouseout', 'node', function(e) {
+  e.target.removeClass('hover');
+  tooltip.style.display = 'none';
+});
+
+// ── Click to highlight connected edges ──
+let highlighted = false;
+cy.on('tap', 'node', function(e) {
+  const node = e.target;
+  // Clear previous
+  cy.elements().removeClass('dimmed highlighted');
+  // Dim everything
+  cy.elements().addClass('dimmed');
+  // Highlight this node and its neighborhood
+  const neighborhood = node.neighborhood().add(node);
+  neighborhood.removeClass('dimmed');
+  neighborhood.edges().addClass('highlighted');
+  highlighted = true;
+});
+
+cy.on('tap', function(e) {
+  if (e.target === cy && highlighted) {
+    cy.elements().removeClass('dimmed highlighted');
+    highlighted = false;
+  }
+});
+
+// ── Fit on load ──
+cy.ready(function() {
+  cy.fit(undefined, 40);
+});
+
+// ── Responsive ──
+window.addEventListener('resize', function() {
+  cy.fit(undefined, 40);
+});
+</script>
+</body>
+</html>

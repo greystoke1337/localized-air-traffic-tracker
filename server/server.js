@@ -12,7 +12,6 @@ const fetch   = (url, opts = {}) => {
 const os      = require('os');
 const fs      = require('fs');
 const path    = require('path');
-const nodemailer = require('nodemailer');
 const rateLimit  = require('express-rate-limit');
 
 const app      = express();
@@ -1778,12 +1777,10 @@ async function sendStatusEmail(ds) {
 
 // ── Email ─────────────────────────────────────────────────────────────
 async function sendDailyEmail(ds) {
-  const smtpHost = process.env.SMTP_HOST;
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
+  if (!process.env.RESEND_API_KEY) return;
   const reportTo = process.env.REPORT_TO;
-  if (!smtpHost || !smtpUser || !smtpPass || !reportTo) {
-    console.log('Email not configured — skipping daily report email');
+  if (!reportTo) {
+    console.log('REPORT_TO not configured — skipping daily report email');
     return;
   }
 
@@ -1794,20 +1791,8 @@ async function sendDailyEmail(ds) {
   }
 
   const html = renderReportHTML(report);
-  const transport = nodemailer.createTransport({
-    host: smtpHost,
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: false,
-    auth: { user: smtpUser, pass: smtpPass },
-  });
-
   try {
-    await transport.sendMail({
-      from: process.env.REPORT_FROM || `Overhead Tracker <${smtpUser}>`,
-      to: reportTo,
-      subject: `Air Traffic Report — ${ds} — ${report.total} flights`,
-      html,
-    });
+    await sendViaResend(reportTo, `Air Traffic Report — ${ds} — ${report.total} flights`, html);
     console.log(`Daily report email sent for ${ds}`);
     addLog({ type: 'SYS', client: 'system', key: `email sent: ${ds} (${report.total} flights)` });
   } catch (e) {
