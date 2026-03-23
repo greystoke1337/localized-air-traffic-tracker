@@ -29,6 +29,9 @@ PEAK_URL        = BASE + '/peak'
 _api_radius     = int(math.ceil(RADIUS_KM / 1.852 * 4.0))
 FLIGHTS_URL     = f'{BASE}/flights?lat={HOME_LAT}&lon={HOME_LON}&radius={_api_radius}'
 WEATHER_URL     = f'{BASE}/weather?lat={HOME_LAT}&lon={HOME_LON}'
+STATUS_URL      = BASE + '/status'
+DEVICE_ECHO_URL = BASE + '/device/echo/status'
+DEVICE_FOX_URL  = BASE + '/device/foxtrot/status'
 
 # ── Colors ───────────────────────────────────────────────
 BG     = (15,  15,  25)
@@ -55,7 +58,7 @@ PHASE_COLORS = {
     'UNKNOWN':  DIM,
 }
 
-PAGE_COUNT = 2
+PAGE_COUNT = 3
 FETCH_FAILED = 'FETCH_FAILED'
 
 # ── Pygame init ──────────────────────────────────────────
@@ -174,6 +177,18 @@ def fetch_weather():
         return requests.get(WEATHER_URL, timeout=5).json()
     except Exception:
         return None
+
+
+def fetch_server_status():
+    results = {}
+    for name, url in [('status', STATUS_URL),
+                       ('echo', DEVICE_ECHO_URL),
+                       ('foxtrot', DEVICE_FOX_URL)]:
+        try:
+            results[name] = requests.get(url, timeout=3).json()
+        except Exception:
+            results[name] = None
+    return results.get('status'), results.get('echo'), results.get('foxtrot')
 
 
 # ── Drawing helpers ──────────────────────────────────────
@@ -386,16 +401,135 @@ def render_page_dashboard(stats, peak, page):
     flush_to_fb()
 
 
+# ── Page 2: Server System + Devices ─────────────────────
+
+def format_uptime_short(secs):
+    if secs is None:
+        return '---'
+    d = int(secs) // 86400
+    h = (int(secs) % 86400) // 3600
+    m = (int(secs) % 3600) // 60
+    if d > 0:
+        return f'{d}d {h}h'
+    if h > 0:
+        return f'{h}h {m}m'
+    return f'{m}m'
+
+
+def render_page_server(server_status, echo_hb, foxtrot_hb, peak, page):
+    screen.fill(BG)
+    has_data = server_status is not None
+    draw_title_bar(has_data, page)
+
+    # Server system section
+    draw_text('SERVER SYSTEM', font_sm, DIM, 10, 30)
+
+    if server_status:
+        col_w = W // 3
+
+        # OS uptime
+        os_up = format_uptime_short(server_status.get('uptime'))
+        draw_text(os_up, font_md, WHITE, 10, 48)
+        draw_text('OS UPTIME', font_sm, DIM, 10, 68)
+
+        # CPU temp
+        temp_str = server_status.get('temp', '---')
+        draw_text(str(temp_str), font_md, WHITE, col_w + 10, 48)
+        draw_text('CPU TEMP', font_sm, DIM, col_w + 10, 68)
+
+        # RAM
+        ram = server_status.get('ram', {})
+        ram_total = ram.get('total', 0)
+        ram_free = ram.get('free', 0)
+        if ram_total > 0:
+            ram_pct = int(((ram_total - ram_free) / ram_total) * 100)
+            ram_used_mb = int((ram_total - ram_free) / 1048576)
+            ram_col = GREEN if ram_pct < 70 else (AMBER if ram_pct < 90 else RED)
+            draw_text(f'{ram_pct}%', font_md, ram_col, col_w * 2 + 10, 48)
+            draw_text(f'RAM ({ram_used_mb} MB)', font_sm, DIM, col_w * 2 + 10, 68)
+        else:
+            draw_text('---', font_md, DIM, col_w * 2 + 10, 48)
+            draw_text('RAM', font_sm, DIM, col_w * 2 + 10, 68)
+
+        # Load average
+        load = server_status.get('loadAvg', [])
+        if load:
+            load_str = ' / '.join(f'{l:.2f}' for l in load[:3])
+            draw_text(load_str, font_sm, DIM, 10, 90)
+            draw_text('LOAD AVG (1/5/15)', font_sm, DIM, 250, 90)
+    else:
+        draw_text('-- server unreachable --', font_md, RED, W // 2, 60, 'center')
+
+    # Device heartbeats section
+    device_y = 114
+    pygame.draw.line(screen, DIM, (10, device_y - 4), (W - 10, device_y - 4), 1)
+    draw_text('CONNECTED DEVICES', font_sm, DIM, 10, device_y)
+
+    devices = [('ECHO', echo_hb), ('FOXTROT', foxtrot_hb)]
+    for i, (name, hb) in enumerate(devices):
+        bx = 10 + i * (W // 2)
+        by = device_y + 18
+        box_w = W // 2 - 15
+
+        pygame.draw.rect(screen, ROW_BG, (bx, by, box_w, 72))
+
+        if hb and hb.get('online'):
+            pygame.draw.circle(screen, GREEN, (bx + 10, by + 12), 4)
+            draw_text(name, font_md, WHITE, bx + 20, by + 4)
+
+            # Firmware version
+            fw = hb.get('fw', '---')
+            draw_text(fw, font_sm, DIM, bx + box_w - 4, by + 6, 'right')
+
+            # Heap + RSSI + uptime
+            heap = hb.get('heap')
+            if heap:
+                heap_kb = int(heap) // 1024
+                heap_col = GREEN if heap_kb > 100 else (AMBER if heap_kb > 50 else RED)
+                draw_text(f'{heap_kb} KB', font_sm, heap_col, bx + 10, by + 26)
+                draw_text('HEAP', font_sm, DIM, bx + 10, by + 40)
+
+            rssi = hb.get('rssi')
+            if rssi is not None:
+                rssi_val = int(rssi)
+                rssi_col = GREEN if rssi_val > -60 else (AMBER if rssi_val > -75 else RED)
+                draw_text(f'{rssi_val} dBm', font_sm, rssi_col, bx + 80, by + 26)
+                draw_text('RSSI', font_sm, DIM, bx + 80, by + 40)
+
+            dev_up = hb.get('uptime')
+            if dev_up is not None:
+                draw_text(format_uptime_short(dev_up), font_sm, WHITE, bx + 160, by + 26)
+                draw_text('UP', font_sm, DIM, bx + 160, by + 40)
+
+            # Age
+            age_sec = hb.get('ageSec', 0)
+            age_col = GREEN if age_sec < 120 else (AMBER if age_sec < 600 else RED)
+            draw_text(f'{age_sec}s ago', font_sm, age_col, bx + 10, by + 56)
+        else:
+            pygame.draw.circle(screen, RED, (bx + 10, by + 12), 4)
+            draw_text(name, font_md, DIM, bx + 20, by + 4)
+            draw_text('OFFLINE', font_sm, RED, bx + 10, by + 30)
+
+    draw_histogram(peak, 228)
+    draw_data_age(last_fetch, 306)
+    flush_to_fb()
+
+
 # ── Main loop ────────────────────────────────────────────
 
 stats_data, peak_data, flights_raw = None, None, None
 weather_data      = None
+server_status     = None
+echo_heartbeat    = None
+foxtrot_heartbeat = None
 processed_flights = []
 flights_ok        = True
 current_page      = 0
 last_page_switch  = time.time()
 last_fetch        = 0
 last_wx_fetch     = 0
+last_srv_fetch    = 0
+SERVER_REFRESH    = 30
 
 while True:
     now = time.time()
@@ -416,13 +550,25 @@ while True:
             weather_data = wx
         last_wx_fetch = now
 
+    if now - last_srv_fetch >= SERVER_REFRESH:
+        srv, echo_hb, fox_hb = fetch_server_status()
+        if srv is not None:
+            server_status = srv
+        if echo_hb is not None:
+            echo_heartbeat = echo_hb
+        if fox_hb is not None:
+            foxtrot_heartbeat = fox_hb
+        last_srv_fetch = now
+
     if now - last_page_switch >= PAGE_ROTATE_SEC:
         current_page = (current_page + 1) % PAGE_COUNT
         last_page_switch = now
 
     if current_page == 0:
         render_page_flights(processed_flights, weather_data, peak_data, current_page, flights_ok)
-    else:
+    elif current_page == 1:
         render_page_dashboard(stats_data, peak_data, current_page)
+    else:
+        render_page_server(server_status, echo_heartbeat, foxtrot_heartbeat, peak_data, current_page)
 
     time.sleep(1)

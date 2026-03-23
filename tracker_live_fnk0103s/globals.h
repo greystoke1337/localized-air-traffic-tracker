@@ -122,6 +122,7 @@ int parsePayload(String& payload);
 int extractFlights(DynamicJsonDocument& doc);
 void fetchFlights();
 bool fetchWeather();
+void sendHeartbeat();
 
 // touch.ino
 #if HAS_TOUCH

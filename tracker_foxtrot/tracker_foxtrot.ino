@@ -107,6 +107,10 @@ int  loggedUnknownCount = 0;
 // ─── Diagnostics ──────────────────────────────────────
 unsigned long lastDiagMs = 0;
 
+// ─── Heartbeat ───────────────────────────────────────
+unsigned long lastHeartbeatMs = 0;
+const unsigned long HEARTBEAT_INTERVAL_MS = 60000;
+
 // ─── Trigger flags ───────────────────────────────────
 volatile bool triggerPortal = false;
 
@@ -527,6 +531,11 @@ void loop() {
   if (now - lastDiagMs >= 60000) {
     lastDiagMs = now;
     diagReport();
+  }
+
+  if (now - lastHeartbeatMs >= HEARTBEAT_INTERVAL_MS) {
+    lastHeartbeatMs = now;
+    sendHeartbeat();
   }
 
   if (now - lastTick >= 1000) {

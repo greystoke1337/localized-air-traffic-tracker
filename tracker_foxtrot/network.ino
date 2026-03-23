@@ -276,6 +276,33 @@ int fetchAndParseDirectAPI() {
   return newCount;
 }
 
+// ─── Send heartbeat to proxy ─────────────────────────
+void sendHeartbeat() {
+  if (!wifiOk()) return;
+  WiFiClientSecure tcp;
+  tcp.setInsecure();
+  tcp.setHandshakeTimeout(5);
+  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 3000)) {
+    wlog("[HB] Connect failed\n");
+    return;
+  }
+  char body[256];
+  snprintf(body, sizeof(body),
+    "{\"device\":\"foxtrot\",\"fw\":\"%s\",\"heap\":%d,\"uptime\":%lu,"
+    "\"rssi\":%d,\"flights\":%d,\"source\":%d,\"location\":\"%s\"}",
+    FW_VERSION, ESP.getFreeHeap(), millis() / 1000,
+    WiFi.RSSI(), flightCount, dataSource, LOCATION_NAME);
+  char url[120];
+  snprintf(url, sizeof(url), "https://%s/device/heartbeat", PROXY_HOST);
+  HTTPClient http;
+  http.begin(tcp, url);
+  http.setTimeout(5000);
+  http.addHeader("Content-Type", "application/json");
+  int code = http.POST(body);
+  http.end();
+  wlog("[HB] Heartbeat sent (%d)\n", code);
+}
+
 // ─── Extract flights from a parsed JSON doc ────────────
 int extractFlights(DynamicJsonDocument& doc) {
   JsonArray ac = doc["ac"].as<JsonArray>();

@@ -1,6 +1,9 @@
 #pragma once
 #include "board.h"
 
+// ─── Firmware version ────────────────────────────────
+#define FW_VERSION "1.0.0"
+
 // ─── Feature flags ───────────────────────────────────
 #ifdef BOARD_2P8
   #define HAS_TOUCH 0
