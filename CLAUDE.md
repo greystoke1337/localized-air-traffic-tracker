@@ -55,7 +55,7 @@ Use feature branches and pull requests for non-trivial changes.
 | Planespotters.net | Aircraft photos by registration | None |
 | CartoDB | Dark map tiles (Leaflet) | None |
 
-The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B APIs in parallel and uses the fastest response. Results are cached for 10 s. Route lookups are non-blocking (fire-and-forget, cached for next request).
+The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B APIs in parallel and uses the fastest response. Results are cached for 10 s. Route lookups are non-blocking (fire-and-forget, cached for next request). New routes are tracked in `known-routes.json` (persistent) and surfaced via `/routes/new`, daily reports, and a nightly discovery email at 21:00 AEST.
 
 ---
 
@@ -65,6 +65,7 @@ The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B
 - **Altitude floor**: Filters out aircraft below a configurable altitude (200–5 000 ft AGL).
 - **Flight phase detection**: LANDING / TAKING OFF / APPROACH / DESCENDING / CLIMBING / CRUISING / OVERHEAD / UNKNOWN — derived from speed, altitude, and vertical rate.
 - **TFT preview**: `tft-preview.html` mirrors the ESP32 display rendering in the browser. Same pixel coordinates, colors, and lookup tables. Use it to verify layout changes before flashing.
+- **Route discovery**: The proxy tracks every unique `"City > City"` route pair in `known-routes.json`. New routes are detected in real time, persisted in daily flight logs, and emailed nightly via Resend. API: `GET /routes/new?date=YYYY-MM-DD`.
 - **No build step**: `index.html` is deployed as-is; never introduce a bundler or external dependency that requires a build pipeline.
 - **No framework**: The web app uses vanilla JS and the browser's built-in APIs only. Do not add React, Vue, or similar.
 

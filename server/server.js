@@ -20,8 +20,10 @@ const PORT     = parseInt(process.env.PORT, 10) || 3000;
 const CACHE_MS         = 45000;
 const ROUTE_CACHE_MS   = 30 * 60 * 1000;
 const ROUTE_CACHE_FILE = process.env.ROUTE_CACHE_FILE || __dirname + '/route-cache.json';
+const KNOWN_ROUTES_FILE = process.env.KNOWN_ROUTES_FILE || __dirname + '/known-routes.json';
 const MAX_CACHE_ENTRIES    = 500;   // evict oldest when exceeded
 const MAX_ROUTE_ENTRIES    = 5000;  // cap route cache size
+const MAX_KNOWN_ROUTES     = 20000; // cap known routes file
 const MAX_UPSTREAM_CONCURRENT = 20; // max simultaneous upstream API calls
 const SEMAPHORE_TIMEOUT_MS    = 10000; // fail fast if queued too long
 const MAX_ROUTE_CONCURRENT    = 5;  // max simultaneous route lookups
@@ -30,6 +32,9 @@ const cache        = new Map();
 const inFlight     = new Map();  // key → Promise (dedup concurrent upstream fetches)
 const routeCache   = new Map();  // callsign -> { dep, arr, timestamp }
 const apiCooldowns = new Map();  // apiName → cooldownExpiresAt (timestamp)
+const knownRoutes  = new Map();  // "DEP>ARR" → firstSeen date string
+let knownRoutesDirty = false;
+let todayNewRoutes = [];         // [{ route, callsign, time }] — new routes discovered today
 const COOLDOWN_MS  = 60000;
 let apiRoundRobin  = 0;         // rotates across upstream APIs to spread load
 
@@ -157,6 +162,7 @@ let todayHourly  = new Array(24).fill(0);
 let todayDate    = '';
 let emailSentToday        = false;
 let statusEmailSentToday  = false;
+let routeEmailSentToday   = false;
 let lastSaveTime          = 0;
 let lastBackfillDate      = '';
 let backfillRunning       = false;
@@ -181,11 +187,13 @@ function logFlights(acArray) {
   const iso  = new Date().toISOString();
 
   if (ds !== todayDate) {
-    if (todayDate) saveTodayLog(todayDate);
+    if (todayDate) { saveTodayLog(todayDate); saveKnownRoutes(); }
     todayFlights = {};
     todayHourly  = new Array(24).fill(0);
+    todayNewRoutes = [];
     todayDate    = ds;
     emailSentToday = false;
+    routeEmailSentToday = false;
     loadTodayLog(ds);
   }
 
@@ -223,6 +231,7 @@ function logFlights(acArray) {
         minDist:  dist,
         maxGs:    ac.gs || null,
       };
+      if (ac.route) checkNewRoute(ac.route, cs, ds);
     }
   }
 }
@@ -241,7 +250,7 @@ function buildSummary() {
 function saveTodayLog(ds) {
   ds = ds || todayDate;
   if (!ds) return;
-  const data = { date: ds, summary: buildSummary(), flights: todayFlights };
+  const data = { date: ds, summary: buildSummary(), flights: todayFlights, newRoutes: todayNewRoutes };
   fs.writeFile(todayFilePath(ds), JSON.stringify(data, null, 2), () => {});
 }
 
@@ -250,6 +259,7 @@ function loadTodayLog(ds) {
     const raw = JSON.parse(fs.readFileSync(todayFilePath(ds), 'utf8'));
     todayFlights = raw.flights || {};
     todayHourly  = raw.summary?.hourly || new Array(24).fill(0);
+    todayNewRoutes = raw.newRoutes || [];
     console.log(`Loaded ${Object.keys(todayFlights).length} flights from ${ds}`);
   } catch { /* no file yet */ }
 }
@@ -651,6 +661,66 @@ try {
   for (const [cs, entry] of Object.entries(saved)) routeCache.set(cs, entry);
   console.log(`Loaded ${routeCache.size} routes from disk cache`);
 } catch { /* file absent on first run */ }
+
+// ── Known routes (route discovery tracking) ──────────────────────────
+let knownRoutesBootstrapped = false;
+try {
+  const saved = JSON.parse(fs.readFileSync(KNOWN_ROUTES_FILE, 'utf8'));
+  for (const [route, firstSeen] of Object.entries(saved)) knownRoutes.set(route, firstSeen);
+  knownRoutesBootstrapped = true;
+  console.log(`Loaded ${knownRoutes.size} known routes from disk`);
+} catch { /* file absent on first run */ }
+
+function saveKnownRoutes() {
+  if (!knownRoutesDirty) return;
+  knownRoutesDirty = false;
+  const obj = {};
+  for (const [route, firstSeen] of knownRoutes) obj[route] = firstSeen;
+  fs.writeFile(KNOWN_ROUTES_FILE, JSON.stringify(obj, null, 2), () => {});
+}
+
+function checkNewRoute(routeStr, callsign, ds) {
+  if (!routeStr || routeStr.includes('?')) return;
+  const key = routeStr;
+  if (knownRoutes.has(key)) return;
+  knownRoutes.set(key, ds);
+  knownRoutesDirty = true;
+  todayNewRoutes.push({ route: key, callsign, time: new Date().toISOString() });
+  // Evict oldest if over cap
+  if (knownRoutes.size > MAX_KNOWN_ROUTES) {
+    let oldestKey = null, oldestDate = 'Z';
+    for (const [k, v] of knownRoutes) {
+      if (v < oldestDate) { oldestDate = v; oldestKey = k; }
+    }
+    if (oldestKey) knownRoutes.delete(oldestKey);
+  }
+}
+
+// Bootstrap: seed known routes from all existing flight logs on first run
+if (!knownRoutesBootstrapped) {
+  try {
+    const files = fs.readdirSync(REPORTS_DIR).filter(f => f.startsWith('flights-') && f.endsWith('.json')).sort();
+    let seeded = 0;
+    for (const file of files) {
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(REPORTS_DIR, file), 'utf8'));
+        const ds = data.date || file.replace('flights-', '').replace('.json', '');
+        for (const f of Object.values(data.flights || {})) {
+          if (f.route && !f.route.includes('?') && !knownRoutes.has(f.route)) {
+            knownRoutes.set(f.route, ds);
+            seeded++;
+          }
+        }
+      } catch { /* skip corrupt files */ }
+    }
+    if (seeded > 0) {
+      knownRoutesDirty = true;
+      saveKnownRoutes();
+      console.log(`Bootstrapped ${seeded} known routes from ${files.length} flight logs`);
+    }
+  } catch { /* no reports dir yet */ }
+}
+
 let   proxyEnabled = true; // ← soft on/off toggle
 
 const startTime = Date.now();
@@ -731,8 +801,9 @@ function diskStats() {
       try { totalBytes += fs.statSync(path.join(REPORTS_DIR, f)).size; } catch {}
     }
     const routeBytes = (() => { try { return fs.statSync(ROUTE_CACHE_FILE).size; } catch { return 0; } })();
-    return { reportFiles: files.length, reportsMB: (totalBytes / 1048576).toFixed(1), routeCacheKB: (routeBytes / 1024).toFixed(1) };
-  } catch { return { reportFiles: 0, reportsMB: '0.0', routeCacheKB: '0.0' }; }
+    const knownBytes = (() => { try { return fs.statSync(KNOWN_ROUTES_FILE).size; } catch { return 0; } })();
+    return { reportFiles: files.length, reportsMB: (totalBytes / 1048576).toFixed(1), routeCacheKB: (routeBytes / 1024).toFixed(1), knownRoutesKB: (knownBytes / 1024).toFixed(1) };
+  } catch { return { reportFiles: 0, reportsMB: '0.0', routeCacheKB: '0.0', knownRoutesKB: '0.0' }; }
 }
 
 let pm2Cache = { data: [], timestamp: 0 };
@@ -1180,6 +1251,8 @@ app.get('/stats', (req, res) => {
     uniqueClients: stats.uniqueClients.size,
     cacheEntries:  cache.size,
     routeCacheEntries: routeCache.size,
+    knownRoutes:    knownRoutes.size,
+    newRoutesToday: todayNewRoutes.length,
     activeUpstream: upstreamSem.active,
     activeRoutes:   routeSem.active,
     inFlightKeys:   inFlight.size,
@@ -1409,6 +1482,14 @@ function generateReport(ds) {
     trends.vs7day = { diff, pct, avg: avg7 };
   }
 
+  // New routes discovered this day
+  let newRoutes;
+  if (ds === todayDate) {
+    newRoutes = todayNewRoutes;
+  } else {
+    newRoutes = data.newRoutes || [];
+  }
+
   // Sort flights by firstSeen
   flights.sort((a, b) => (a.firstSeen || '').localeCompare(b.firstSeen || ''));
 
@@ -1420,6 +1501,7 @@ function generateReport(ds) {
     topTypes,
     topRoutes,
     trends,
+    newRoutes,
     flights,
   };
 }
@@ -1433,7 +1515,7 @@ function trendArrow(diff, pct) {
 function renderReportHTML(report) {
   if (!report) return '<p>No data for this date.</p>';
 
-  const { date, total, summary, topAirlines, topTypes, topRoutes, trends, flights } = report;
+  const { date, total, summary, topAirlines, topTypes, topRoutes, trends, newRoutes, flights } = report;
 
   const hourLabels = summary.hourly.map((c, i) =>
     `<td style="text-align:center;padding:2px 4px;${i === summary.peakHour ? 'color:#60ff90;font-weight:bold' : 'opacity:0.7'}">${c}</td>`
@@ -1516,6 +1598,22 @@ function renderReportHTML(report) {
         <table style="border-collapse:collapse;width:100%;border:1px solid #7a5200">${rankRows(topRoutes, 'Route')}</table>
       </div>
     </div>
+
+    ${newRoutes && newRoutes.length > 0 ? `
+    <div style="margin-bottom:20px">
+      <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">▸ NEW ROUTES DISCOVERED (${newRoutes.length})</div>
+      <div style="border:1px solid #7a5200;padding:8px;background:rgba(96,255,144,0.03)">
+        ${newRoutes.map(nr => {
+          const time = nr.time ? new Date(nr.time).toLocaleTimeString('en-AU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }) : '';
+          return `<div style="padding:2px 0;font-size:0.85rem"><span style="color:#60ff90">${escapeHtml(nr.route)}</span><span style="opacity:0.4;margin-left:8px">${escapeHtml(nr.callsign)}${time ? ' · ' + time : ''}</span></div>`;
+        }).join('')}
+      </div>
+      <div style="opacity:0.3;font-size:0.65rem;margin-top:4px">${knownRoutes.size.toLocaleString()} total known routes</div>
+    </div>` : `
+    <div style="margin-bottom:20px">
+      <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">▸ NEW ROUTES DISCOVERED</div>
+      <div style="opacity:0.3;font-size:0.8rem;padding:8px">No new routes today</div>
+    </div>`}
 
     <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">▸ ALL FLIGHTS (${total})</div>
     <div style="overflow-x:auto">
@@ -1640,6 +1738,12 @@ function renderStatusHTML(ds) {
   ${row('Entries', `${routeEntries.toLocaleString()} / ${MAX_ROUTE_ENTRIES.toLocaleString()} (${routePct}%)`, routeEntries > MAX_ROUTE_ENTRIES * 0.9 ? red : amber)}
 </table>
 
+<h2>Route Discovery</h2>
+<table>
+  ${row('Known routes (all-time)', knownRoutes.size.toLocaleString())}
+  ${row('New routes today', todayNewRoutes.length.toString(), todayNewRoutes.length > 0 ? green : dim)}
+</table>
+
 <h2>Route Backfill (last run)</h2>
 <table>
   ${row('Result', bfStr, bf.found > 0 ? green : dim)}
@@ -1650,6 +1754,7 @@ function renderStatusHTML(ds) {
   ${row('Report log files', disk.reportFiles)}
   ${row('Reports dir size', `${disk.reportsMB} MB`)}
   ${row('Route cache file', `${disk.routeCacheKB} KB`)}
+  ${row('Known routes file', `${disk.knownRoutesKB} KB`)}
 </table>
 
 <h2>Devices</h2>
@@ -1710,6 +1815,150 @@ async function sendDailyEmail(ds) {
   }
 }
 
+function renderRouteDiscoveryHTML(ds, newRoutes) {
+  const amber = '#ffa600';
+  const bg = '#1a0a00';
+  const green = '#60ff90';
+  const dim = '#7a4800';
+  const totalKnown = knownRoutes.size;
+  const count = newRoutes.length;
+
+  // Fun stats: categorize routes
+  const longHaul = [];
+  const domestic = [];
+  const auCities = new Set(['Sydney','Melbourne','Brisbane','Perth','Adelaide','Canberra','Gold Coast','Cairns','Hobart','Darwin','Townsville','Newcastle','Launceston','Ballina','Mackay']);
+  const usCities = new Set(['Chicago','New York','Los Angeles','San Francisco','Dallas','Houston','Atlanta','Miami','Denver','Seattle','Boston','Phoenix','Orlando','Las Vegas','Washington','Philadelphia','Charlotte','Minneapolis','Detroit','Tampa','Portland','Salt Lake City','Nashville','Austin','San Diego','San Jose','Raleigh','Indianapolis','Columbus','Cincinnati','Cleveland','Milwaukee','Kansas City','Memphis','Baltimore','Buffalo','Pittsburgh','Sacramento','Oakland','San Antonio','Honolulu','New Orleans','Jacksonville','Hartford','Richmond','Norfolk','Rochester','Syracuse','Albany']);
+
+  for (const nr of newRoutes) {
+    const parts = nr.route.split(' > ');
+    if (parts.length !== 2) continue;
+    const [dep, arr] = parts;
+    const bothAu = auCities.has(dep) && auCities.has(arr);
+    const bothUs = usCities.has(dep) && usCities.has(arr);
+    if (bothAu || bothUs) {
+      domestic.push(nr);
+    } else {
+      longHaul.push(nr);
+    }
+  }
+
+  // Find most exotic (longest route name as rough proxy for interesting)
+  const exotic = [...newRoutes].sort((a, b) => b.route.length - a.route.length).slice(0, 3);
+
+  // Airlines that brought new routes
+  const airlines = {};
+  for (const nr of newRoutes) {
+    const prefix = nr.callsign.replace(/[0-9]/g, '').substring(0, 3).toUpperCase();
+    const name = AIRLINE_NAMES[prefix] || prefix;
+    airlines[name] = (airlines[name] || 0) + 1;
+  }
+  const topDiscoverers = Object.entries(airlines).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const routeRows = newRoutes.map(nr => {
+    const time = nr.time ? new Date(nr.time).toLocaleTimeString('en-AU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }) : '';
+    const prefix = nr.callsign.replace(/[0-9]/g, '').substring(0, 3).toUpperCase();
+    const airline = AIRLINE_NAMES[prefix] || '';
+    return `<tr style="border-bottom:1px solid ${dim}">
+      <td style="padding:4px 8px;color:${green}">${escapeHtml(nr.route)}</td>
+      <td style="padding:4px 8px;opacity:0.7">${escapeHtml(nr.callsign)}</td>
+      <td style="padding:4px 8px;opacity:0.7">${escapeHtml(airline)}</td>
+      <td style="padding:4px 8px;opacity:0.7">${time}</td>
+    </tr>`;
+  }).join('');
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+  <body style="margin:0;background:${bg};font-family:'Courier New',monospace;color:${amber}">
+  <div style="max-width:700px;margin:0 auto;padding:24px">
+    <h1 style="font-size:1.3rem;margin:0 0 4px;text-shadow:0 0 8px #ff8000">NEW ROUTE DISCOVERIES</h1>
+    <p style="opacity:0.5;margin:0 0 20px;font-size:0.85rem">${ds} · Overhead Tracker</p>
+
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+      <div style="border:1px solid ${dim};padding:12px 16px;flex:1;min-width:120px;background:rgba(96,255,144,0.03)">
+        <div style="opacity:0.5;font-size:0.7rem">NEW TODAY</div>
+        <div style="font-size:1.8rem;color:${green};text-shadow:0 0 8px ${green}">${count}</div>
+      </div>
+      <div style="border:1px solid ${dim};padding:12px 16px;flex:1;min-width:120px;background:rgba(255,166,0,0.03)">
+        <div style="opacity:0.5;font-size:0.7rem">ALL-TIME KNOWN</div>
+        <div style="font-size:1.8rem;text-shadow:0 0 8px #ff8000">${totalKnown.toLocaleString()}</div>
+      </div>
+      <div style="border:1px solid ${dim};padding:12px 16px;flex:1;min-width:120px;background:rgba(255,166,0,0.03)">
+        <div style="opacity:0.5;font-size:0.7rem">BREAKDOWN</div>
+        <div style="font-size:0.85rem;margin-top:4px">${longHaul.length} international</div>
+        <div style="font-size:0.85rem">${domestic.length} domestic</div>
+      </div>
+    </div>
+
+    ${exotic.length > 0 ? `
+    <div style="margin-bottom:20px;border:1px solid ${dim};padding:12px;background:rgba(96,255,144,0.03)">
+      <div style="opacity:0.5;font-size:0.7rem;margin-bottom:8px">MOST NOTABLE</div>
+      ${exotic.map(nr => {
+        const prefix = nr.callsign.replace(/[0-9]/g, '').substring(0, 3).toUpperCase();
+        const airline = AIRLINE_NAMES[prefix] || prefix;
+        return `<div style="font-size:0.95rem;margin-bottom:4px"><span style="color:${green}">${escapeHtml(nr.route)}</span> <span style="opacity:0.5">— ${escapeHtml(airline)} (${escapeHtml(nr.callsign)})</span></div>`;
+      }).join('')}
+    </div>` : ''}
+
+    ${topDiscoverers.length > 0 ? `
+    <div style="margin-bottom:20px">
+      <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">TOP DISCOVERERS</div>
+      <table style="border-collapse:collapse;width:100%;border:1px solid ${dim}">
+        ${topDiscoverers.map(([name, n]) =>
+          `<tr><td style="padding:3px 8px">${escapeHtml(name)}</td><td style="padding:3px 8px;text-align:right">${n} route${n > 1 ? 's' : ''}</td></tr>`
+        ).join('')}
+      </table>
+    </div>` : ''}
+
+    <div style="opacity:0.5;font-size:0.72rem;margin-bottom:6px">ALL NEW ROUTES (${count})</div>
+    <div style="overflow-x:auto">
+      <table style="border-collapse:collapse;width:100%;border:1px solid ${dim};font-size:0.8rem">
+        <tr style="opacity:0.5;border-bottom:1px solid ${dim}">
+          <th style="padding:4px 8px;text-align:left">Route</th>
+          <th style="padding:4px 8px;text-align:left">Callsign</th>
+          <th style="padding:4px 8px;text-align:left">Airline</th>
+          <th style="padding:4px 8px;text-align:left">Time</th>
+        </tr>
+        ${routeRows}
+      </table>
+    </div>
+
+    <p style="opacity:0.3;font-size:0.7rem;margin-top:20px;text-align:center">
+      <a href="https://api.overheadtracker.com/routes/new?date=${ds}" style="color:${amber};opacity:0.6">View JSON</a> ·
+      <a href="https://api.overheadtracker.com/report?date=${ds}" style="color:${amber};opacity:0.6">Full report</a> ·
+      Overhead Tracker
+    </p>
+  </div></body></html>`;
+}
+
+async function sendRouteDiscoveryEmail(ds) {
+  if (!process.env.RESEND_API_KEY) return;
+  const to = process.env.ROUTE_EMAIL_TO || process.env.REPORT_TO;
+  if (!to) return;
+
+  let routes;
+  if (ds === todayDate) {
+    routes = todayNewRoutes;
+  } else {
+    const data = loadDayData(ds);
+    routes = data?.newRoutes || [];
+  }
+
+  if (routes.length === 0) {
+    console.log(`No new routes for ${ds} — skipping route discovery email`);
+    addLog({ type: 'SYS', client: 'system', key: `route email skipped: ${ds} (0 new)` });
+    return;
+  }
+
+  try {
+    const html = renderRouteDiscoveryHTML(ds, routes);
+    await sendViaResend(to, `${routes.length} New Route${routes.length > 1 ? 's' : ''} Discovered — ${ds}`, html);
+    console.log(`Route discovery email sent for ${ds} (${routes.length} routes)`);
+    addLog({ type: 'SYS', client: 'system', key: `route email sent: ${ds} (${routes.length} new routes)` });
+  } catch (e) {
+    console.error('Failed to send route discovery email:', e.message);
+    addLog({ type: 'ERR', client: 'system', error: `route email failed: ${e.message}` });
+  }
+}
+
 async function backfillMissingRoutes(targetDs) {
   if (backfillRunning) return;
   backfillRunning = true;
@@ -1741,12 +1990,14 @@ async function backfillMissingRoutes(targetDs) {
         if (result.dep) f.dep = result.dep;
         if (result.arr) f.arr = result.arr;
         f.route = formatRouteString(f.dep, f.arr);
+        if (f.route) checkNewRoute(f.route, f.callsign, targetDs);
       }
     }
 
     if (dirty) {
       fs.writeFile(todayFilePath(targetDs), JSON.stringify(data, null, 2), () => {});
       saveRouteCache();
+      saveKnownRoutes();
     }
 
     backfillStats = { date: targetDs, checked: candidates.length, found };
@@ -1755,6 +2006,20 @@ async function backfillMissingRoutes(targetDs) {
     backfillRunning = false;
   }
 }
+
+// ── /routes/new endpoint ──────────────────────────────────────────────
+app.get('/routes/new', (req, res) => {
+  const ds = req.query.date || todayDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return res.status(400).json({ error: 'Invalid date format' });
+  let routes;
+  if (ds === todayDate) {
+    routes = todayNewRoutes;
+  } else {
+    const data = loadDayData(ds);
+    routes = data?.newRoutes || [];
+  }
+  res.json({ date: ds, count: routes.length, totalKnown: knownRoutes.size, routes });
+});
 
 // ── /report endpoint ──────────────────────────────────────────────────
 app.get('/report', (req, res) => {
@@ -1795,6 +2060,14 @@ app.post('/status/send', async (req, res) => {
   res.json({ ok: true, date: ds });
 });
 
+// ── /routes/send — manual trigger for route discovery email ────────────
+app.post('/routes/send', async (req, res) => {
+  if (requireAdmin(req, res)) return;
+  const ds = req.query.date || todayDate;
+  await sendRouteDiscoveryEmail(ds);
+  res.json({ ok: true, date: ds });
+});
+
 // ── /backfill — manual trigger for route backfill ─────────────────────
 app.post('/backfill', async (req, res) => {
   if (requireAdmin(req, res)) return;
@@ -1812,17 +2085,21 @@ const periodicTimer = setInterval(() => {
   // Day rollover
   if (ds !== todayDate) {
     saveTodayLog(todayDate);
+    saveKnownRoutes();
     todayFlights = {};
     todayHourly  = new Array(24).fill(0);
+    todayNewRoutes = [];
     todayDate    = ds;
     emailSentToday       = false;
     statusEmailSentToday = false;
+    routeEmailSentToday  = false;
     loadTodayLog(ds);
     console.log(`Day rolled over to ${ds}`);
   }
 
   // Periodic save (every 60s)
   saveTodayLog();
+  saveKnownRoutes();
 
   // Route backfill at 02:00 AEST for yesterday's log
   const backfillTarget = prevDateStr(ds, 1);
@@ -1837,6 +2114,12 @@ const periodicTimer = setInterval(() => {
     sendStatusEmail(ds);
   }
 
+  // Route discovery email at 21:00 AEST
+  if (now.getHours() === 21 && now.getMinutes() < 2 && !routeEmailSentToday) {
+    routeEmailSentToday = true;
+    sendRouteDiscoveryEmail(ds);
+  }
+
   // Send email at 23:55 AEST
   if (now.getHours() === 23 && now.getMinutes() >= 55 && !emailSentToday) {
     emailSentToday = true;
@@ -1848,6 +2131,7 @@ const periodicTimer = setInterval(() => {
 function gracefulShutdown(signal) {
   console.log(`${signal} received — shutting down gracefully`);
   saveRouteCache();
+  saveKnownRoutes();
   saveTodayLog();
   if (server) {
     server.close(() => {
@@ -1876,7 +2160,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  app, cache, inFlight, routeCache, stats, requestLog,
+  app, cache, inFlight, routeCache, knownRoutes, stats, requestLog,
   haversine, airlineName, airlinePrefix, airportName,
   formatRouteString, enrichRoutes, validateCoord, escapeHtml, formatUptime,
   windCardinal, addLog, cacheSet, routeCacheSet,
