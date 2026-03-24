@@ -16,7 +16,7 @@ const rateLimit  = require('express-rate-limit');
 
 const app      = express();
 const PORT     = parseInt(process.env.PORT, 10) || 3000;
-const CACHE_MS         = 45000;
+const CACHE_MS         = 15000;
 const ROUTE_CACHE_MS   = 30 * 60 * 1000;
 const ROUTE_CACHE_FILE = process.env.ROUTE_CACHE_FILE || __dirname + '/route-cache.json';
 const KNOWN_ROUTES_FILE = process.env.KNOWN_ROUTES_FILE || __dirname + '/known-routes.json';
@@ -1199,14 +1199,18 @@ app.get('/flights', async (req, res) => {
         }
         if (!data) throw new Error('All ADS-B APIs failed');
 
-        // Attach cached routes immediately, fire background lookups for misses
+        // Attach cached routes, await lookups for misses (with timeout)
         const unrouted = enrichRoutes(data);
 
-        // Fire-and-forget route lookups so they're cached for next request
         if (unrouted.length > 0) {
-          Promise.allSettled(unrouted.map(cs => lookupRoute(cs)))
-            .then(() => saveRouteCache())
-            .catch(() => {});
+          try {
+            await Promise.race([
+              Promise.allSettled(unrouted.map(cs => lookupRoute(cs))),
+              new Promise(resolve => setTimeout(resolve, 3000))
+            ]);
+            saveRouteCache();
+            enrichRoutes(data);  // re-enrich now that cache is populated
+          } catch { /* timeout — routes will be cached for next request */ }
         }
 
         const fetchedAt = Date.now();

@@ -19,7 +19,7 @@
 #endif
 
 // ─── Refresh ──────────────────────────────────────────
-#define REFRESH_SECS 15
+#define REFRESH_SECS 10
 #define CYCLE_SECS   8
 
 // ─── Screen ──────────────────────────────────────────

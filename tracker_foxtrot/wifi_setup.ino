@@ -160,13 +160,14 @@ static void handleSetupSave() {
 void startCaptivePortal() {
   tft.fillScreen(C_BG);
   tft.fillRect(0, 0, W, HDR_H, C_AMBER);
-  tft.setFont(&lgfx::fonts::DejaVu24);
+  tft.setFont(GLCD_FONT);
+  tft.setTextSize(SZ_SM);
   tft.setTextColor(C_BG, C_AMBER);
   tft.setTextDatum(lgfx::middle_left);
   tft.drawString("OVERHEAD TRACKER", 16, HDR_H / 2);
   tft.setTextDatum(lgfx::top_left);
 
-  tft.setFont(&lgfx::fonts::DejaVu40);
+  tft.setTextSize(SZ_MD);
   tft.setTextColor(C_AMBER);
   tft.drawString("SETUP MODE", 20, HDR_H + 24);
 
@@ -177,7 +178,7 @@ void startCaptivePortal() {
     "   (PAGE OPENS AUTOMATICALLY)",
     "   OR: 192.168.4.1",
   };
-  tft.setFont(&lgfx::fonts::DejaVu18);
+  tft.setTextSize(SZ_XS);
   tft.setTextColor(C_DIM);
   int sy = HDR_H + 80;
   for (int i = 0; i < 5; i++) {

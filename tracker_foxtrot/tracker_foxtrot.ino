@@ -117,15 +117,17 @@ volatile bool triggerPortal = false;
 // ─── Temp WiFi screen helpers (tft direct) ────────────
 static void drawTempHeader() {
   tft.fillRect(0, 0, W, HDR_H, C_AMBER);
-  tft.setFont(&lgfx::fonts::DejaVu24);
+  tft.setFont(GLCD_FONT);
+  tft.setTextSize(SZ_SM);
   tft.setTextColor(C_BG, C_AMBER);
   tft.setTextDatum(lgfx::middle_left);
   tft.drawString("OVERHEAD TRACKER", 16, HDR_H / 2);
   tft.setTextDatum(lgfx::top_left);
 }
 
-static void drawTempMsg(int y, const lgfx::IFont* f, uint16_t col, const char* txt) {
-  tft.setFont(f);
+static void drawTempMsg(int y, float sz, uint16_t col, const char* txt) {
+  tft.setFont(GLCD_FONT);
+  tft.setTextSize(sz);
   tft.setTextColor(col);
   tft.setTextDatum(lgfx::top_left);
   tft.drawString(txt, 20, y);
@@ -293,37 +295,80 @@ void setup() {
     startCaptivePortal();
   }
 
-  // WiFi connecting screen
+  // WiFi connecting screen — terminal style
   tft.fillScreen(C_BG);
   drawTempHeader();
-  int yBase = HDR_H + 24;
-  drawTempMsg(yBase,      &lgfx::fonts::DejaVu40, C_AMBER, "CONNECTING TO WIFI");
-  char netBuf[80];
-  snprintf(netBuf, sizeof(netBuf), "NETWORK: %s", WIFI_SSID);
-  drawTempMsg(yBase + 52, &lgfx::fonts::DejaVu24, C_DIM,   netBuf);
 
-  // Progress bar
-  int barY = yBase + 100;
-  tft.drawRect(20, barY, W - 40, 14, C_DIMMER);
+  int lineH = 20;  // line height for SZ_XS terminal output
+  int termY = HDR_H + 16;
+  int termX = 20;
+  char lineBuf[80];
+
+  // Helper lambda: print a terminal line and advance Y
+  auto termLine = [&](uint16_t col, const char* txt) {
+    drawTempMsg(termY, SZ_XS, col, txt);
+    termY += lineH;
+    delay(60);
+  };
+
+  termLine(C_DIM,   "> WIFI SUBSYSTEM INIT");
+  snprintf(lineBuf, sizeof(lineBuf), "  SSID: %s", WIFI_SSID);
+  termLine(C_AMBER, lineBuf);
+  termLine(C_DIM,   "  AUTH: WPA2-PSK");
+
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  snprintf(lineBuf, sizeof(lineBuf), "  MAC:  %02X:%02X:%02X:%02X:%02X:%02X",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  termLine(C_DIM, lineBuf);
+
+  snprintf(lineBuf, sizeof(lineBuf), "  CHIP: ESP32-S3 @ %d MHz", getCpuFrequencyMhz());
+  termLine(C_DIM, lineBuf);
+
+  snprintf(lineBuf, sizeof(lineBuf), "  HEAP: %d KB FREE", ESP.getFreeHeap() / 1024);
+  termLine(C_DIM, lineBuf);
+
+  snprintf(lineBuf, sizeof(lineBuf), "  PSRAM: %d KB FREE", ESP.getFreePsram() / 1024);
+  termLine(C_DIM, lineBuf);
+
+  termLine(C_AMBER, "> CONNECTING...");
 
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   int attempts = 0;
+  int dotLineY = termY;
   while (WiFi.status() != WL_CONNECTED && attempts < 40) {
-    int barW = (int)((W - 40) * (attempts + 1) / 40);
-    tft.fillRect(20, barY, barW, 14, C_AMBER);
-    char countBuf[24];
-    snprintf(countBuf, sizeof(countBuf), "ATTEMPT %d / 40", attempts + 1);
-    tft.fillRect(20, barY + 24, W - 40, 24, C_BG);
-    drawTempMsg(barY + 24, &lgfx::fonts::DejaVu18, C_DIMMER, countBuf);
+    // Overwrite the dots line each attempt
+    tft.fillRect(termX, dotLineY, W - 40, lineH, C_BG);
+    int dots = (attempts % 4) + 1;
+    char dotBuf[48];
+    snprintf(dotBuf, sizeof(dotBuf), "  ATTEMPT %02d/40 %.*s", attempts + 1, dots, "....");
+    drawTempMsg(dotLineY, SZ_XS, C_DIMMER, dotBuf);
     delay(500);
     attempts++;
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    tft.fillRect(20, barY, W - 40, 14, C_GREEN);
-    tft.fillRect(20, barY + 24, W - 40, 24, C_BG);
-    drawTempMsg(barY + 24, &lgfx::fonts::DejaVu18, C_GREEN, "CONNECTED");
-    delay(500);
+    // Clear the dots line and print connected info
+    tft.fillRect(termX, dotLineY, W - 40, lineH, C_BG);
+    termY = dotLineY;
+
+    snprintf(lineBuf, sizeof(lineBuf), "  LINK UP  [%d ATTEMPTS]", attempts);
+    termLine(C_GREEN, lineBuf);
+
+    snprintf(lineBuf, sizeof(lineBuf), "  IP:   %s", WiFi.localIP().toString().c_str());
+    termLine(C_AMBER, lineBuf);
+
+    snprintf(lineBuf, sizeof(lineBuf), "  GW:   %s", WiFi.gatewayIP().toString().c_str());
+    termLine(C_DIM, lineBuf);
+
+    snprintf(lineBuf, sizeof(lineBuf), "  DNS:  %s", WiFi.dnsIP().toString().c_str());
+    termLine(C_DIM, lineBuf);
+
+    snprintf(lineBuf, sizeof(lineBuf), "  RSSI: %d dBm  CH: %d", WiFi.RSSI(), WiFi.channel());
+    termLine(C_DIM, lineBuf);
+
+    termLine(C_GREEN, "> NETWORK READY");
+    delay(400);
 
     configTime(0, 0, "pool.ntp.org");
     Serial.println("NTP sync started");
@@ -334,14 +379,14 @@ void setup() {
       drawOtaProgress(progress * 100 / total);
     });
     ArduinoOTA.onEnd([]() {
-      tft.setFont(&lgfx::fonts::DejaVu40);
+      tft.setFont(GLCD_FONT); tft.setTextSize(SZ_MD);
       tft.setTextColor(C_GREEN);
       tft.setTextDatum(lgfx::middle_center);
       tft.drawString("Restarting...", W / 2, H / 2);
       tft.setTextDatum(lgfx::top_left);
     });
     ArduinoOTA.onError([](ota_error_t error) {
-      tft.setFont(&lgfx::fonts::DejaVu40);
+      tft.setFont(GLCD_FONT); tft.setTextSize(SZ_MD);
       tft.setTextColor(C_RED);
       tft.setTextDatum(lgfx::middle_center);
       char buf[32]; snprintf(buf, sizeof(buf), "OTA Error [%u]", error);
@@ -384,15 +429,15 @@ void setup() {
 
     tft.fillScreen(C_BG);
     drawTempHeader();
-    drawTempMsg(HDR_H + 24, &lgfx::fonts::DejaVu40, C_RED,   "WIFI FAILED");
+    drawTempMsg(HDR_H + 24, SZ_MD, C_RED,   "WIFI FAILED");
     char ssidBuf[80];
     snprintf(ssidBuf, sizeof(ssidBuf), "Could not connect to: %s", WIFI_SSID);
-    drawTempMsg(HDR_H + 76, &lgfx::fonts::DejaVu24, C_DIM, ssidBuf);
+    drawTempMsg(HDR_H + 76, SZ_SM, C_DIM, ssidBuf);
 
     int btnY = HDR_H + 130;
     // RECONFIGURE button
     tft.fillRect(20, btnY, 340, 70, C_DIMMER);
-    tft.setFont(&lgfx::fonts::DejaVu24);
+    tft.setFont(GLCD_FONT); tft.setTextSize(SZ_SM);
     tft.setTextColor(C_AMBER, C_DIMMER);
     tft.setTextDatum(lgfx::middle_center);
     tft.drawString("RECONFIGURE", 20 + 170, btnY + 35);
@@ -424,8 +469,8 @@ void setup() {
   if (needsGeocode && HOME_QUERY[0]) {
     tft.fillScreen(C_BG);
     drawTempHeader();
-    drawTempMsg(HDR_H + 24, &lgfx::fonts::DejaVu40, C_AMBER, "LOCATING...");
-    drawTempMsg(HDR_H + 76, &lgfx::fonts::DejaVu24, C_DIM,   HOME_QUERY);
+    drawTempMsg(HDR_H + 24, SZ_MD, C_AMBER, "LOCATING...");
+    drawTempMsg(HDR_H + 76, SZ_SM, C_DIM,   HOME_QUERY);
 
     if (!geocodeLocation(HOME_QUERY)) {
       static volatile bool geoReconfigFlag = false;
@@ -433,12 +478,12 @@ void setup() {
 
       tft.fillScreen(C_BG);
       drawTempHeader();
-      drawTempMsg(HDR_H + 24, &lgfx::fonts::DejaVu40, C_RED, "LOCATION NOT FOUND");
+      drawTempMsg(HDR_H + 24, SZ_MD, C_RED, "LOCATION NOT FOUND");
 
       int btnY2 = HDR_H + 130;
       tft.fillRect(20,  btnY2, 340, 70, C_DIMMER);
       tft.fillRect(440, btnY2, 340, 70, C_DIMMER);
-      tft.setFont(&lgfx::fonts::DejaVu24);
+      tft.setFont(GLCD_FONT); tft.setTextSize(SZ_SM);
       tft.setTextColor(C_AMBER);
       tft.setTextDatum(lgfx::middle_center);
       tft.drawString("RECONFIGURE", 20 + 170,  btnY2 + 35);

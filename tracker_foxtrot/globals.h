@@ -9,6 +9,19 @@
 
 extern LGFX tft;
 
+// ─── GLCD bitmap font (Adafruit 6x8) with size multipliers ──
+#define GLCD_FONT (&lgfx::fonts::Font0)
+#define SZ_XS   2.0f  // 16px
+#define SZ_SM   3.0f  // 24px
+#define SZ_MD   5.0f  // 40px
+#define SZ_LG   5.0f  // 40px
+#define SZ_XL   4.0f  // 32px
+#define SZ_XXL  7.0f  // 56px
+#define SZ_3XL  9.0f  // 72px
+#define SZ_MDS  3.0f  // 24px
+#define SZ_RT   3.5f  // 28px — route data
+#define SZ_DASH 3.2f  // 26px — dashboard spd/dist
+
 // ─── Hardware ─────────────────────────────────────────
 extern WebServer  setupServer;
 extern DNSServer  dnsServer;
