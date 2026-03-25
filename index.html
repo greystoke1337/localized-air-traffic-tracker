@@ -2084,10 +2084,12 @@
         });
       }
 
-      // Runway prediction for LANDING / APPROACH flights
-      const isLanding = phase.cls === 'phase-landing' || phase.cls === 'phase-approach';
+      // Runway prediction for inbound flights (landing, approach, descending, overhead-low)
+      const isInbound = phase.cls === 'phase-landing' || phase.cls === 'phase-approach'
+        || phase.cls === 'phase-descending'
+        || (phase.cls === 'phase-overhead' && typeof f.alt_baro === 'number' && f.alt_baro < 5000);
       const arrIcao = f.arr || null;
-      if (isLanding && arrIcao && f.track != null) {
+      if (isInbound && arrIcao && f.track != null) {
         fetchRunways(arrIcao).then(runways => {
           if (flights[flightIndex] !== f) return;
           const rwy = predictRunway(f.track, runways);
