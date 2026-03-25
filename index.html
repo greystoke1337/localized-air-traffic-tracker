@@ -76,6 +76,33 @@
     .wx-label { opacity: 0.4; margin-right: 6px; letter-spacing: 0.1em; }
     .wx-sep   { opacity: 0.3; margin: 0 5px; }
 
+    /* ATC strip */
+    #atc-strip {
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      line-height: 1.7;
+      opacity: 0.85;
+      border-top: 1px solid rgba(255,166,0,0.15);
+      margin-top: 6px;
+      padding-top: 4px;
+      display: flex;
+      align-items: baseline;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+    .atc-label { opacity: 0.4; margin-right: 6px; letter-spacing: 0.1em; }
+    .atc-sep   { opacity: 0.3; margin: 0 5px; }
+    #atc-link {
+      color: var(--c-main);
+      text-decoration: none;
+      border: 1px solid var(--c-dim);
+      padding: 1px 6px;
+      margin-left: auto;
+      font-size: 0.65rem;
+      letter-spacing: 0.04em;
+    }
+    #atc-link:hover { border-color: var(--c-main); background: color-mix(in srgb, var(--c-main) 13%, transparent); }
+
     /* Flight info block — left border changes colour with flight phase */
     #info-wrap {
       position: relative; /* needed so the altitude bar can sit inside */
@@ -647,6 +674,12 @@
       <button id="unit-toggle" onclick="toggleUnits()" data-tip="Switch metric/imperial for distances and weather.">METRIC</button>
     </div>
 
+    <!-- ATC strip — nearest airport with LiveATC link, hidden until location set -->
+    <div id="atc-strip" style="display:none">
+      <span class="atc-label">ATC</span><span id="atc-airport"></span><span class="atc-sep">&middot;</span><span id="atc-dist"></span>
+      <a id="atc-link" href="#" target="_blank" rel="noopener noreferrer">LISTEN LIVE &#x2197;</a>
+    </div>
+
     <!-- Keyboard shortcut overlay -->
     <div id="kbd-overlay" aria-hidden="true" onclick="hideKbdHelp()">
       <div id="kbd-panel" role="dialog" aria-modal="true" aria-labelledby="kbd-panel-title" onclick="event.stopPropagation()">
@@ -820,6 +853,7 @@
             locationLon  = lon;
             document.getElementById('location-input').value = name;
             document.getElementById('location-display').textContent = locationName;
+            updateAtcStrip();
           }
         }
       } catch(e) {}
@@ -832,6 +866,27 @@
       const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
       const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function findNearestAtcAirport() {
+      if (!locationLat && !locationLon) return null;
+      let best = null, bestDist = Infinity;
+      for (const ap of ATC_AIRPORTS) {
+        const d = haversineKm(locationLat, locationLon, ap.lat, ap.lon);
+        if (d < bestDist) { bestDist = d; best = ap; }
+      }
+      return best ? { ...best, distKm: bestDist } : null;
+    }
+
+    function updateAtcStrip() {
+      const el = document.getElementById('atc-strip');
+      const ap = findNearestAtcAirport();
+      if (!ap) { el.style.display = 'none'; return; }
+      document.getElementById('atc-airport').textContent = ap.icao + ' ' + ap.name.toUpperCase();
+      const dist = useMetric ? Math.round(ap.distKm) + ' KM' : Math.round(ap.distKm * 0.621371) + ' MI';
+      document.getElementById('atc-dist').textContent = dist;
+      document.getElementById('atc-link').href = 'https://www.liveatc.net/listen/' + ap.icao.toLowerCase();
+      el.style.display = '';
     }
 
 
@@ -1001,6 +1056,7 @@
       try { localStorage.setItem('useMetric', useMetric); } catch(e) {}
       updateUnitLabels();
       renderWeather();
+      updateAtcStrip();
       if (flights.length) render(flights[flightIndex]);
     }
 
@@ -1774,6 +1830,136 @@
       KHXD:'Hilton Head',
     };
 
+    const ATC_AIRPORTS = [
+      // Australia & NZ
+      {icao:'YSSY',name:'Sydney',lat:-33.9461,lon:151.1772},
+      {icao:'YMML',name:'Melbourne',lat:-37.6733,lon:144.8433},
+      {icao:'YBBN',name:'Brisbane',lat:-27.3842,lon:153.1175},
+      {icao:'YPAD',name:'Adelaide',lat:-34.9450,lon:138.5306},
+      {icao:'YPPH',name:'Perth',lat:-31.9403,lon:115.9672},
+      {icao:'YSCB',name:'Canberra',lat:-35.3069,lon:149.1950},
+      {icao:'YMHB',name:'Hobart',lat:-42.8361,lon:147.5106},
+      {icao:'YPDN',name:'Darwin',lat:-12.4147,lon:130.8767},
+      {icao:'YBTL',name:'Townsville',lat:-19.2525,lon:146.7656},
+      {icao:'YBCS',name:'Cairns',lat:-16.8858,lon:145.7553},
+      {icao:'YBCG',name:'Gold Coast',lat:-28.1644,lon:153.5047},
+      {icao:'NZAA',name:'Auckland',lat:-37.0081,lon:174.7850},
+      {icao:'NZWN',name:'Wellington',lat:-41.3272,lon:174.8053},
+      {icao:'NZCH',name:'Christchurch',lat:-43.4894,lon:172.5322},
+      // USA — Major hubs
+      {icao:'KJFK',name:'New York JFK',lat:40.6413,lon:-73.7781},
+      {icao:'KLGA',name:'New York LGA',lat:40.7769,lon:-73.8740},
+      {icao:'KEWR',name:'Newark',lat:40.6895,lon:-74.1745},
+      {icao:'KLAX',name:'Los Angeles',lat:33.9425,lon:-118.4081},
+      {icao:'KSFO',name:'San Francisco',lat:37.6213,lon:-122.3790},
+      {icao:'KORD',name:'Chicago O\'Hare',lat:41.9742,lon:-87.9073},
+      {icao:'KMDW',name:'Chicago Midway',lat:41.7868,lon:-87.7522},
+      {icao:'KATL',name:'Atlanta',lat:33.6407,lon:-84.4277},
+      {icao:'KDFW',name:'Dallas/Fort Worth',lat:32.8998,lon:-97.0403},
+      {icao:'KDEN',name:'Denver',lat:39.8561,lon:-104.6737},
+      {icao:'KMIA',name:'Miami',lat:25.7959,lon:-80.2870},
+      {icao:'KFLL',name:'Fort Lauderdale',lat:26.0726,lon:-80.1527},
+      {icao:'KTPA',name:'Tampa',lat:27.9755,lon:-82.5332},
+      {icao:'KMCO',name:'Orlando',lat:28.4312,lon:-81.3081},
+      {icao:'KSEA',name:'Seattle',lat:47.4502,lon:-122.3088},
+      {icao:'KBOS',name:'Boston',lat:42.3656,lon:-71.0096},
+      {icao:'KPHL',name:'Philadelphia',lat:39.8744,lon:-75.2424},
+      {icao:'KDCA',name:'Washington Reagan',lat:38.8512,lon:-77.0402},
+      {icao:'KIAD',name:'Washington Dulles',lat:38.9531,lon:-77.4565},
+      {icao:'KBWI',name:'Baltimore',lat:39.1774,lon:-76.6684},
+      {icao:'KMSP',name:'Minneapolis',lat:44.8848,lon:-93.2223},
+      {icao:'KDTW',name:'Detroit',lat:42.2124,lon:-83.3534},
+      {icao:'KCLT',name:'Charlotte',lat:35.2140,lon:-80.9431},
+      {icao:'KSLC',name:'Salt Lake City',lat:40.7884,lon:-111.9778},
+      {icao:'KLAS',name:'Las Vegas',lat:36.0840,lon:-115.1537},
+      {icao:'KPHX',name:'Phoenix',lat:33.4373,lon:-112.0078},
+      {icao:'KSAN',name:'San Diego',lat:32.7338,lon:-117.1933},
+      {icao:'KPDX',name:'Portland',lat:45.5898,lon:-122.5951},
+      {icao:'KIAH',name:'Houston IAH',lat:29.9844,lon:-95.3414},
+      {icao:'KHOU',name:'Houston Hobby',lat:29.6454,lon:-95.2789},
+      {icao:'KAUS',name:'Austin',lat:30.1975,lon:-97.6664},
+      {icao:'KSTL',name:'St Louis',lat:38.7487,lon:-90.3700},
+      {icao:'KMEM',name:'Memphis',lat:35.0424,lon:-89.9767},
+      {icao:'KBNA',name:'Nashville',lat:36.1264,lon:-86.6774},
+      {icao:'KMKE',name:'Milwaukee',lat:42.9472,lon:-87.8966},
+      {icao:'KRDU',name:'Raleigh-Durham',lat:35.8776,lon:-78.7875},
+      {icao:'KPIT',name:'Pittsburgh',lat:40.4915,lon:-80.2329},
+      {icao:'KCLE',name:'Cleveland',lat:41.4117,lon:-81.8498},
+      {icao:'KCVG',name:'Cincinnati',lat:39.0488,lon:-84.6678},
+      {icao:'KSMF',name:'Sacramento',lat:38.6954,lon:-121.5908},
+      {icao:'KOAK',name:'Oakland',lat:37.7213,lon:-122.2208},
+      {icao:'KSJC',name:'San Jose',lat:37.3626,lon:-121.9291},
+      {icao:'PANC',name:'Anchorage',lat:61.1743,lon:-149.9963},
+      {icao:'PHNL',name:'Honolulu',lat:21.3187,lon:-157.9225},
+      // Canada
+      {icao:'CYYZ',name:'Toronto',lat:43.6777,lon:-79.6248},
+      {icao:'CYVR',name:'Vancouver',lat:49.1967,lon:-123.1815},
+      {icao:'CYUL',name:'Montreal',lat:45.4706,lon:-73.7408},
+      {icao:'CYOW',name:'Ottawa',lat:45.3225,lon:-75.6692},
+      {icao:'CYYC',name:'Calgary',lat:51.1215,lon:-114.0076},
+      {icao:'CYEG',name:'Edmonton',lat:53.3097,lon:-113.5800},
+      // Europe
+      {icao:'EGLL',name:'London Heathrow',lat:51.4700,lon:-0.4543},
+      {icao:'EGKK',name:'London Gatwick',lat:51.1537,lon:-0.1821},
+      {icao:'EGSS',name:'London Stansted',lat:51.8860,lon:0.2389},
+      {icao:'EGLC',name:'London City',lat:51.5053,lon:0.0553},
+      {icao:'EHAM',name:'Amsterdam',lat:52.3105,lon:4.7683},
+      {icao:'EDDF',name:'Frankfurt',lat:50.0379,lon:8.5622},
+      {icao:'EDDM',name:'Munich',lat:48.3538,lon:11.7861},
+      {icao:'EDDB',name:'Berlin',lat:52.3667,lon:13.5033},
+      {icao:'LFPG',name:'Paris CDG',lat:49.0097,lon:2.5479},
+      {icao:'LFPO',name:'Paris Orly',lat:48.7253,lon:2.3594},
+      {icao:'LEMD',name:'Madrid',lat:40.4983,lon:-3.5676},
+      {icao:'LEBL',name:'Barcelona',lat:41.2971,lon:2.0785},
+      {icao:'LIRF',name:'Rome Fiumicino',lat:41.8003,lon:12.2389},
+      {icao:'LSZH',name:'Zurich',lat:47.4647,lon:8.5492},
+      {icao:'LOWW',name:'Vienna',lat:48.1103,lon:16.5697},
+      {icao:'EKCH',name:'Copenhagen',lat:55.6180,lon:12.6561},
+      {icao:'ESSA',name:'Stockholm',lat:59.6519,lon:17.9186},
+      {icao:'ENGM',name:'Oslo',lat:60.1939,lon:11.1004},
+      {icao:'EFHK',name:'Helsinki',lat:60.3172,lon:24.9633},
+      {icao:'EIDW',name:'Dublin',lat:53.4264,lon:-6.2499},
+      {icao:'LPPT',name:'Lisbon',lat:38.7756,lon:-9.1354},
+      {icao:'EBBR',name:'Brussels',lat:50.9014,lon:4.4844},
+      {icao:'EPWA',name:'Warsaw',lat:52.1657,lon:20.9671},
+      {icao:'LKPR',name:'Prague',lat:50.1008,lon:14.2600},
+      {icao:'LHBP',name:'Budapest',lat:47.4369,lon:19.2556},
+      {icao:'LTFM',name:'Istanbul',lat:41.2608,lon:28.7419},
+      {icao:'LGAV',name:'Athens',lat:37.9364,lon:23.9445},
+      // Middle East
+      {icao:'OMDB',name:'Dubai',lat:25.2532,lon:55.3657},
+      {icao:'OMAA',name:'Abu Dhabi',lat:24.4330,lon:54.6511},
+      {icao:'OEJN',name:'Jeddah',lat:21.6796,lon:39.1565},
+      {icao:'OTHH',name:'Doha',lat:25.2731,lon:51.6081},
+      // Asia
+      {icao:'RJTT',name:'Tokyo Haneda',lat:35.5494,lon:139.7798},
+      {icao:'RJAA',name:'Tokyo Narita',lat:35.7720,lon:140.3929},
+      {icao:'RKSI',name:'Seoul Incheon',lat:37.4602,lon:126.4407},
+      {icao:'VHHH',name:'Hong Kong',lat:22.3080,lon:113.9185},
+      {icao:'WSSS',name:'Singapore',lat:1.3502,lon:103.9944},
+      {icao:'VTBS',name:'Bangkok',lat:13.6900,lon:100.7501},
+      {icao:'WMKK',name:'Kuala Lumpur',lat:2.7456,lon:101.7099},
+      {icao:'RPLL',name:'Manila',lat:14.5086,lon:121.0198},
+      {icao:'WIII',name:'Jakarta',lat:-6.1256,lon:106.6558},
+      {icao:'VIDP',name:'Delhi',lat:28.5562,lon:77.1000},
+      {icao:'VABB',name:'Mumbai',lat:19.0896,lon:72.8656},
+      {icao:'ZBAA',name:'Beijing',lat:40.0799,lon:116.6031},
+      {icao:'ZSPD',name:'Shanghai Pudong',lat:31.1443,lon:121.8083},
+      {icao:'ZGGG',name:'Guangzhou',lat:23.3924,lon:113.2988},
+      {icao:'RCTP',name:'Taipei',lat:25.0777,lon:121.2330},
+      // Africa
+      {icao:'FAOR',name:'Johannesburg',lat:-26.1392,lon:28.2460},
+      {icao:'FACT',name:'Cape Town',lat:-33.9715,lon:18.6021},
+      {icao:'HECA',name:'Cairo',lat:30.1219,lon:31.4056},
+      // South America
+      {icao:'SBGR',name:'Sao Paulo',lat:-23.4356,lon:-46.4731},
+      {icao:'SCEL',name:'Santiago',lat:-33.3930,lon:-70.7858},
+      {icao:'SAEZ',name:'Buenos Aires',lat:-34.8222,lon:-58.5358},
+      {icao:'SKBO',name:'Bogota',lat:4.7016,lon:-74.1469},
+      {icao:'MMMX',name:'Mexico City',lat:19.4363,lon:-99.0721},
+      {icao:'MMUN',name:'Cancun',lat:21.0365,lon:-86.8771},
+    ];
+
     function airportName(code) {
       if (!code) return null;
       code = code.trim().toUpperCase();
@@ -2277,6 +2463,7 @@
         updateGeofenceCircle();
         try { localStorage.setItem('location', JSON.stringify({ name: input, lat, lon })); } catch(e) {}
         fetchWeather();
+        updateAtcStrip();
         await fetchFlights();
       } catch(e) {
         document.getElementById('error').textContent = 'LOCATION ERR: ' + e.message;
