@@ -340,39 +340,37 @@
         <div class="tl-tags">
           <span class="tl-tag implemented">IMPLEMENTED</span>
           <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
         </div>
       </div>
       <div class="tl-item done">
         <div class="tl-dot"></div>
-        <div class="tl-label">Network resilience &mdash; sticky proxy failover</div>
-        <div class="tl-detail">Skip proxy for 5 min after 3 consecutive failures, direct API fallback</div>
+        <div class="tl-label">Network resilience</div>
+        <div class="tl-detail">Sticky proxy failover (skip after 3 failures), direct API fallback, WiFi auto-reconnect every 10s, full reboot after 30 min disconnection</div>
         <div class="tl-tags">
           <span class="tl-tag implemented">IMPLEMENTED</span>
-        </div>
-      </div>
-      <div class="tl-item done">
-        <div class="tl-dot"></div>
-        <div class="tl-label">Network resilience &mdash; WiFi auto-reboot</div>
-        <div class="tl-detail">Auto-reboot after 30 min WiFi disconnection</div>
-        <div class="tl-tags">
-          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
         </div>
       </div>
       <div class="tl-item done">
         <div class="tl-dot"></div>
         <div class="tl-label">Device heartbeat</div>
-        <div class="tl-detail">ESP32 POSTs health data every 5 min (heap, RSSI, uptime, firmware version). Server endpoints ready, not yet deployed.</div>
+        <div class="tl-detail">ESP32 POSTs health data every minute (heap, RSSI, uptime, firmware version, flight count). Live at /device/foxtrot/status.</div>
         <div class="tl-tags">
           <span class="tl-tag implemented">IMPLEMENTED</span>
           <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
         </div>
       </div>
       <div class="tl-item done">
         <div class="tl-dot"></div>
         <div class="tl-label">Firmware update tool</div>
-        <div class="tl-detail">Browser-based Web Serial flasher (Chrome, esptool.js) &mdash; no Arduino IDE needed</div>
+        <div class="tl-detail">Browser-based Web Serial flasher (Chrome/Edge, esptool.js) &mdash; no Arduino IDE needed. Zero-install on Windows, one-time driver on macOS.</div>
         <div class="tl-tags">
           <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
         </div>
       </div>
       <div class="tl-item done">
@@ -381,6 +379,8 @@
         <div class="tl-detail">Live dashboard with proxy health, device status, and architecture diagram</div>
         <div class="tl-tags">
           <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
         </div>
       </div>
       <div class="tl-item done">
@@ -390,15 +390,17 @@
         <div class="tl-tags">
           <span class="tl-tag implemented">IMPLEMENTED</span>
           <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
         </div>
       </div>
       <div class="tl-item done">
         <div class="tl-dot"></div>
         <div class="tl-label">Device flash &amp; end-to-end test</div>
-        <div class="tl-detail">Firmware compiled and flashed. Clean boot, stable proxy fetches, 20 flights, heap stable at 243KB.</div>
+        <div class="tl-detail">Firmware compiled and flashed. Clean boot, stable proxy fetches, 6 flights live, heap stable at 243KB.</div>
         <div class="tl-tags">
           <span class="tl-tag implemented">IMPLEMENTED</span>
           <span class="tl-tag tested">TESTED</span>
+          <span class="tl-tag validated">VALIDATED</span>
         </div>
       </div>
       <div class="tl-item pending">

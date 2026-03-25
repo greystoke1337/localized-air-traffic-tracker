@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overhead Tracker — Firmware Update</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: #0C1117;
+      color: #c0c0c0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 15px;
+      margin: 0;
+      padding: 24px 16px;
+      min-height: 100dvh;
+    }
+
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px, transparent 3px,
+        rgba(0,0,0,0.02) 3px, rgba(0,0,0,0.02) 4px
+      );
+      pointer-events: none;
+      z-index: 99;
+    }
+
+    .container {
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: #ffaa00;
+      font-size: 1.3rem;
+      letter-spacing: 0.12em;
+      margin: 0 0 6px 0;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      color: #999;
+      font-size: 0.92rem;
+      letter-spacing: 0.08em;
+      margin-bottom: 28px;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #444;
+      margin: 24px 0;
+    }
+
+    h2 {
+      color: #ffaa00;
+      font-size: 0.9rem;
+      letter-spacing: 0.1em;
+      margin: 0 0 14px 0;
+      font-weight: 600;
+    }
+
+    /* ── Firmware info ── */
+
+    .fw-info {
+      background: #141B22;
+      border: 1px solid rgba(255, 170, 0, 0.25);
+      padding: 18px;
+      margin-bottom: 20px;
+    }
+
+    .fw-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.95rem;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .fw-row:last-of-type { border-bottom: none; }
+    .fw-row .label { color: #999; }
+    .fw-row .value { color: #c0c0c0; text-align: right; }
+
+    /* ── Steps ── */
+
+    .step {
+      background: #141B22;
+      border: 1px solid rgba(255, 170, 0, 0.15);
+      padding: 18px;
+      margin-bottom: 14px;
+      position: relative;
+    }
+
+    .step.active { border-color: rgba(255, 170, 0, 0.5); }
+    .step.done { border-color: rgba(68, 255, 68, 0.3); }
+    .step.error { border-color: rgba(255, 68, 68, 0.3); }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .step-num {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      border: 2px solid #ffaa00;
+      background: #0C1117;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      color: #ffaa00;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .step.done .step-num {
+      background: #44ff44;
+      border-color: #44ff44;
+      color: #0C1117;
+    }
+
+    .step.error .step-num {
+      background: #ff4444;
+      border-color: #ff4444;
+      color: #0C1117;
+    }
+
+    .step-title {
+      font-size: 0.95rem;
+      color: #c0c0c0;
+    }
+
+    .step-body {
+      font-size: 0.88rem;
+      color: #888;
+      margin-left: 34px;
+    }
+
+    /* ── Buttons ── */
+
+    .btn {
+      display: inline-block;
+      background: rgba(255, 170, 0, 0.15);
+      border: 1px solid #ffaa00;
+      color: #ffaa00;
+      font-family: inherit;
+      font-size: 0.92rem;
+      letter-spacing: 0.08em;
+      padding: 10px 24px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background 0.15s;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: rgba(255, 170, 0, 0.3);
+    }
+
+    .btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    /* ── Progress ── */
+
+    .progress-wrap {
+      margin-top: 12px;
+      display: none;
+    }
+
+    .progress-wrap.visible { display: block; }
+
+    .progress-bar {
+      height: 18px;
+      background: #1a2230;
+      border: 1px solid rgba(255, 170, 0, 0.2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #ffaa00;
+      width: 0%;
+      transition: width 0.2s;
+    }
+
+    .progress-text {
+      font-size: 0.82rem;
+      color: #999;
+      margin-top: 4px;
+      text-align: right;
+    }
+
+    /* ── Terminal log ── */
+
+    .terminal {
+      background: #0a0e13;
+      border: 1px solid rgba(255, 170, 0, 0.12);
+      padding: 12px;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 12px;
+      color: #888;
+      display: none;
+    }
+
+    .terminal.visible { display: block; }
+
+    .terminal .info { color: #888; }
+    .terminal .success { color: #44ff44; }
+    .terminal .error { color: #ff4444; }
+    .terminal .warn { color: #ffaa00; }
+
+    /* ── Driver help ── */
+
+    .driver-help {
+      margin-top: 24px;
+    }
+
+    .driver-toggle {
+      background: none;
+      border: none;
+      color: #666;
+      font-family: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+      padding: 0;
+      letter-spacing: 0.06em;
+    }
+
+    .driver-toggle:hover { color: #999; }
+
+    .driver-content {
+      display: none;
+      margin-top: 12px;
+      padding: 14px;
+      background: #141B22;
+      border: 1px solid rgba(255, 170, 0, 0.12);
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: #888;
+    }
+
+    .driver-content.visible { display: block; }
+    .driver-content a { color: #ffaa00; }
+
+    /* ── Browser warning ── */
+
+    .browser-warning {
+      background: rgba(255, 68, 68, 0.1);
+      border: 1px solid rgba(255, 68, 68, 0.3);
+      padding: 14px;
+      font-size: 0.88rem;
+      color: #ff8888;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .browser-warning.visible { display: block; }
+    .browser-warning a { color: #ff8888; text-decoration: underline; }
+
+    /* ── Back link ── */
+
+    .back-link {
+      display: inline-block;
+      color: #666;
+      font-size: 0.82rem;
+      text-decoration: none;
+      letter-spacing: 0.06em;
+      margin-top: 24px;
+    }
+
+    .back-link:hover { color: #999; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>OVERHEAD TRACKER</h1>
+    <div class="subtitle">FIRMWARE UPDATE</div>
+
+    <div class="browser-warning" id="browserWarning">
+      Your browser does not support Web Serial. Please use
+      <a href="https://www.google.com/chrome/">Google Chrome</a> or Microsoft Edge.
+    </div>
+
+    <h2>FIRMWARE</h2>
+    <div class="fw-info" id="fwInfo">
+      <div class="fw-row"><span class="label">Version</span><span class="value" id="fwVersion">loading...</span></div>
+      <div class="fw-row"><span class="label">Date</span><span class="value" id="fwDate">—</span></div>
+      <div class="fw-row"><span class="label">Board</span><span class="value" id="fwBoard">—</span></div>
+      <div class="fw-row"><span class="label">Changelog</span><span class="value" id="fwChangelog">—</span></div>
+    </div>
+
+    <div class="step" id="step1">
+      <div class="step-header">
+        <div class="step-num">1</div>
+        <div class="step-title">Connect device</div>
+      </div>
+      <div class="step-body">
+        Plug in your Overhead Tracker via USB, then click Connect.
+        <br>
+        <button class="btn" id="btnConnect" disabled>CONNECT</button>
+        <span id="connectStatus" style="margin-left:10px;font-size:0.82rem"></span>
+      </div>
+    </div>
+
+    <div class="step" id="step2">
+      <div class="step-header">
+        <div class="step-num">2</div>
+        <div class="step-title">Flash firmware</div>
+      </div>
+      <div class="step-body">
+        This will overwrite the current firmware. Do not unplug during flash.
+        <br>
+        <button class="btn" id="btnFlash" disabled>FLASH FIRMWARE</button>
+        <div class="progress-wrap" id="progressWrap">
+          <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-text" id="progressText">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step" id="step3">
+      <div class="step-header">
+        <div class="step-num">3</div>
+        <div class="step-title">Done</div>
+      </div>
+      <div class="step-body" id="doneBody">
+        Device will reboot automatically after flashing.
+      </div>
+    </div>
+
+    <div class="terminal" id="terminal"></div>
+
+    <div class="driver-help">
+      <button class="driver-toggle" id="driverToggle">[ + ] DRIVER HELP</button>
+      <div class="driver-content" id="driverContent">
+        <div id="driverWindows" style="display:none">
+          <strong style="color:#c0c0c0">Windows 10/11</strong><br>
+          The CH343 USB driver installs automatically via Windows Update.
+          If the device does not appear, open Device Manager and check under
+          Ports (COM &amp; LPT) for USB-SERIAL CH343.
+        </div>
+        <div id="driverMac" style="display:none">
+          <strong style="color:#c0c0c0">macOS</strong><br>
+          A one-time driver install is required:<br>
+          1. Download the CH343 driver from
+          <a href="https://www.wch.cn/downloads/CH34XSER_MAC_ZIP.html" target="_blank" rel="noopener">WCH official site</a><br>
+          2. Open the DMG and run the installer<br>
+          3. Go to System Settings &gt; Privacy &amp; Security and allow the extension<br>
+          4. Restart Chrome
+        </div>
+        <div id="driverLinux" style="display:none">
+          <strong style="color:#c0c0c0">Linux</strong><br>
+          Works out of the box. The ch341 kernel module handles CH343 devices.
+          If your user does not have serial port access, run:
+          sudo usermod -a -G dialout $USER and log out/in.
+        </div>
+      </div>
+    </div>
+
+    <a href="/" class="back-link">&lt; BACK TO TRACKER</a>
+  </div>
+
+  <script type="module">
+    import { ESPLoader, Transport } from 'https://unpkg.com/esptool-js@0.5.4/bundle.js';
+
+    const $ = id => document.getElementById(id);
+
+    const FLASH_OPTIONS = {
+      flashMode: 'dio',
+      flashFreq: '80m',
+      flashSize: '16MB'
+    };
+
+    let manifest = null;
+    let transport = null;
+    let esploader = null;
+    let serialPort = null;
+
+    // ── Terminal log ──
+
+    function log(msg, cls = 'info') {
+      const term = $('terminal');
+      term.classList.add('visible');
+      const line = document.createElement('div');
+      line.className = cls;
+      line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+      term.appendChild(line);
+      term.scrollTop = term.scrollHeight;
+    }
+
+    // ── Browser detection ──
+
+    const hasWebSerial = 'serial' in navigator;
+    if (!hasWebSerial) {
+      $('browserWarning').classList.add('visible');
+      $('btnConnect').disabled = true;
+    }
+
+    // ── OS detection for driver help ──
+
+    const platform = navigator.platform || '';
+    if (/Win/.test(platform)) $('driverWindows').style.display = 'block';
+    else if (/Mac/.test(platform)) $('driverMac').style.display = 'block';
+    else $('driverLinux').style.display = 'block';
+
+    $('driverToggle').addEventListener('click', () => {
+      const c = $('driverContent');
+      const open = c.classList.toggle('visible');
+      $('driverToggle').textContent = open ? '[ - ] DRIVER HELP' : '[ + ] DRIVER HELP';
+    });
+
+    // ── Load manifest ──
+
+    async function loadManifest() {
+      try {
+        const base = new URL('.', window.location.href).href;
+        const resp = await fetch(base + 'firmware/manifest.json');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        manifest = await resp.json();
+        $('fwVersion').textContent = 'v' + manifest.version;
+        $('fwDate').textContent = manifest.date;
+        $('fwBoard').textContent = manifest.board;
+        $('fwChangelog').textContent = manifest.changelog;
+        if (hasWebSerial) $('btnConnect').disabled = false;
+        log('Firmware manifest loaded: v' + manifest.version);
+      } catch (e) {
+        $('fwVersion').textContent = 'error';
+        log('Failed to load firmware manifest: ' + e.message, 'error');
+      }
+    }
+
+    loadManifest();
+
+    // ── Connect ──
+
+    $('btnConnect').addEventListener('click', async () => {
+      try {
+        $('btnConnect').disabled = true;
+        $('connectStatus').textContent = 'selecting port...';
+        $('connectStatus').style.color = '#ffaa00';
+        log('Requesting serial port...');
+
+        serialPort = await navigator.serial.requestPort({
+          filters: [
+            { usbVendorId: 0x1A86, usbProductId: 0x55D3 },
+            { usbVendorId: 0x1A86, usbProductId: 0x55D2 },
+            { usbVendorId: 0x1A86 },
+            { usbVendorId: 0x303A }
+          ]
+        });
+
+        log('Serial port selected');
+        $('connectStatus').textContent = 'connecting...';
+
+        transport = new Transport(serialPort, false);
+
+        const terminalOutput = {
+          clean() {},
+          writeLine(data) { log(data); },
+          write(data) { /* partial writes ignored */ }
+        };
+
+        esploader = new ESPLoader({
+          transport,
+          baudrate: 921600,
+          romBaudrate: 115200,
+          terminal: terminalOutput,
+          debugLogging: false
+        });
+
+        await esploader.main();
+        const chip = esploader.chipName;
+        log('Connected: ' + chip, 'success');
+
+        if (chip && !chip.toLowerCase().includes('esp32-s3')) {
+          log('WARNING: Expected ESP32-S3, detected ' + chip, 'warn');
+          $('connectStatus').textContent = 'wrong chip: ' + chip;
+          $('connectStatus').style.color = '#ff4444';
+          $('step1').classList.add('error');
+          $('btnConnect').disabled = false;
+          return;
+        }
+
+        $('connectStatus').textContent = chip;
+        $('connectStatus').style.color = '#44ff44';
+        $('step1').classList.add('done');
+        $('btnFlash').disabled = false;
+        $('step2').classList.add('active');
+      } catch (e) {
+        const msg = e.message || String(e);
+        if (msg.includes('No port selected') || msg.includes('cancelled')) {
+          log('No port selected', 'warn');
+          $('connectStatus').textContent = 'cancelled';
+          $('connectStatus').style.color = '#999';
+        } else {
+          log('Connection failed: ' + msg, 'error');
+          $('connectStatus').textContent = 'failed';
+          $('connectStatus').style.color = '#ff4444';
+          $('step1').classList.add('error');
+        }
+        $('btnConnect').disabled = false;
+      }
+    });
+
+    // ── Flash ──
+
+    async function fetchBinary(name) {
+      const base = new URL('.', window.location.href).href;
+      const resp = await fetch(base + 'firmware/' + name);
+      if (!resp.ok) throw new Error('Failed to fetch ' + name + ': HTTP ' + resp.status);
+      const blob = await resp.arrayBuffer();
+      return new Uint8Array(blob);
+    }
+
+    function uint8ToBinaryString(u8) {
+      const chunks = [];
+      const chunkSize = 8192;
+      for (let i = 0; i < u8.length; i += chunkSize) {
+        chunks.push(String.fromCharCode.apply(null, u8.subarray(i, i + chunkSize)));
+      }
+      return chunks.join('');
+    }
+
+    $('btnFlash').addEventListener('click', async () => {
+      if (!esploader || !manifest) return;
+
+      try {
+        $('btnFlash').disabled = true;
+        $('btnConnect').disabled = true;
+        $('step2').classList.remove('active');
+        $('progressWrap').classList.add('visible');
+
+        log('Downloading firmware files...');
+        const fileArray = [];
+        let totalSize = 0;
+
+        for (const f of manifest.files) {
+          log('Fetching ' + f.name + '...');
+          const data = await fetchBinary(f.name);
+          totalSize += data.length;
+          fileArray.push({
+            data: uint8ToBinaryString(data),
+            address: parseInt(f.offset, 16)
+          });
+          log(f.name + ' (' + (data.length / 1024).toFixed(1) + ' KB @ ' + f.offset + ')', 'success');
+        }
+
+        log('Total: ' + (totalSize / 1024).toFixed(1) + ' KB in ' + fileArray.length + ' files');
+        log('Erasing and writing flash... this takes about 30 seconds.');
+
+        let lastPercent = 0;
+        await esploader.writeFlash({
+          fileArray,
+          flashSize: FLASH_OPTIONS.flashSize,
+          flashMode: FLASH_OPTIONS.flashMode,
+          flashFreq: FLASH_OPTIONS.flashFreq,
+          eraseAll: false,
+          compress: true,
+          reportProgress(fileIndex, written, total) {
+            const fileProgress = total > 0 ? written / total : 0;
+            const baseProgress = fileIndex / fileArray.length;
+            const fileWeight = 1 / fileArray.length;
+            const overall = Math.round((baseProgress + fileProgress * fileWeight) * 100);
+            if (overall !== lastPercent) {
+              lastPercent = overall;
+              $('progressFill').style.width = overall + '%';
+              $('progressText').textContent = overall + '%';
+            }
+          }
+        });
+
+        $('progressFill').style.width = '100%';
+        $('progressText').textContent = '100%';
+        log('Flash write complete!', 'success');
+
+        log('Resetting device...');
+        await esploader.after('hard_reset');
+
+        $('step2').classList.add('done');
+        $('step3').classList.add('done');
+        $('doneBody').textContent = 'Flash complete! Device is rebooting.';
+        $('doneBody').style.color = '#44ff44';
+        log('Done! Your device will start up with the new firmware.', 'success');
+
+        try { await transport.disconnect(); } catch (_) {}
+
+      } catch (e) {
+        const msg = e.message || String(e);
+        log('Flash failed: ' + msg, 'error');
+        $('step2').classList.add('error');
+        $('progressText').textContent = 'FAILED';
+        $('progressText').style.color = '#ff4444';
+        $('btnFlash').disabled = false;
+        $('doneBody').textContent = 'Flash failed. Try unplugging and re-plugging the device, then reload this page.';
+      }
+    });
+  </script>
+</body>
+</html>

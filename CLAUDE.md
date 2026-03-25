@@ -26,6 +26,8 @@ Custom domain: https://overheadtracker.com
 index.html                  # Entire web app (single file, ~120 KB)
 build.sh                    # Echo build/upload/test/debug helper (not for Foxtrot)
 tft-preview.html            # TFT display simulator (preview firmware UI in browser)
+flash.html                  # Web Serial firmware flasher (Chrome/Edge, esptool.js)
+firmware/                   # Compiled Foxtrot binaries + manifest.json for flash.html
 server/                     # Railway-hosted proxy (server.js, package.json)
 pi-display/                 # Raspberry Pi TFT display (display.py, watchdog.sh)
 tracker_live_fnk0103s/      # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
@@ -87,6 +89,9 @@ Edit files in `tracker_foxtrot/`. Use `/flash-and-log foxtrot` to compile+flash.
 
 ### Foxtrot demo mode
 Set `#define DEMO_MODE 1` in `tracker_foxtrot/config.h` to boot with 3 fake Sydney flights, skipping all WiFi/network code.
+
+### Package firmware for web flasher
+Run `./tools/package-firmware.sh` to compile Foxtrot and copy binaries to `firmware/`. Push to `master` to deploy the update to `overheadtracker.com/flash`. Use `--skip-compile` to package the last build without recompiling.
 
 ### Testing with synthetic data
 Web app: `index.html?demo=true&scenario=emergency`. Mock proxy: `node tools/mock-proxy.js normal 3000 --scenario crowded`.

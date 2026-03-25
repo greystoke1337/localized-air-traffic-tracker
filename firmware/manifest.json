@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "date": "2026-03-25",
+  "board": "Waveshare ESP32-S3-Touch-LCD-4.3",
+  "changelog": "Firmware update v1.0.0",
+  "files": [
+    { "name": "bootloader.bin", "offset": "0x0" },
+    { "name": "partitions.bin", "offset": "0x8000" },
+    { "name": "boot_app0.bin",  "offset": "0xe000" },
+    { "name": "app.bin",        "offset": "0x10000" }
+  ]
+}

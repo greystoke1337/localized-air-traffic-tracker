@@ -588,11 +588,22 @@ void loop() {
     countdown--;
     wxCountdown--;
 
-    if (WiFi.status() != WL_CONNECTED) {
-      static unsigned long lastReconnect = 0;
-      if (now - lastReconnect > 10000) {
-        lastReconnect = now;
-        WiFi.reconnect();
+    {
+      static unsigned long lastReconnect  = 0;
+      static unsigned long wifiLostSince  = 0;
+      if (WiFi.status() != WL_CONNECTED) {
+        if (wifiLostSince == 0) wifiLostSince = now;
+        if (now - lastReconnect > 10000) {
+          lastReconnect = now;
+          WiFi.reconnect();
+        }
+        if (now - wifiLostSince > 1800000UL) {
+          Serial.println("WiFi disconnected >30 min — rebooting");
+          delay(100);
+          ESP.restart();
+        }
+      } else {
+        wifiLostSince = 0;
       }
     }
 

@@ -125,6 +125,23 @@ arduino-cli upload --fqbn "..." --port COM7 --input-dir /tmp/tracker-foxtrot-bui
 arduino-cli monitor --port COM7 --config "baudrate=115200"
 ```
 
+### Web firmware flasher
+
+`flash.html` is a browser-based firmware update tool. End users can flash new Foxtrot firmware with **zero development tools installed** — just Chrome/Edge and a USB cable.
+
+Open [overheadtracker.com/flash](https://overheadtracker.com/flash), plug in the device, click Connect, click Flash. Uses the Web Serial API and [esptool-js](https://github.com/nicknisi/esptool-js) to write firmware directly from the browser.
+
+**Developer workflow** (after making firmware changes):
+
+```bash
+./tools/package-firmware.sh    # compile + copy binaries to firmware/
+git push                       # auto-deploys to GitHub Pages
+```
+
+The packaging script compiles Foxtrot, copies the 4 binary files (bootloader, partitions, boot_app0, app) to `firmware/`, and updates `firmware/manifest.json` with the version from `config.h`.
+
+**Driver notes:** Windows 10/11 auto-installs the CH343 USB driver. macOS requires a one-time driver install from WCH (instructions on the flash page). Linux works out of the box.
+
 ### Resilience
 
 The firmware uses a 3-tier fallback cascade: Railway proxy → direct airplanes.live API (HTTPS) → SD card cache. Proxy calls use a 3-second TCP connect timeout so the device boots cleanly even when the proxy is unreachable — no watchdog crash loop. The 16 KB JSON document is allocated once at startup and reused every cycle to prevent heap fragmentation on long-running sessions.
