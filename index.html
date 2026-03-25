@@ -1782,6 +1782,7 @@
 
     // Route cache — keyed by callsign, avoids repeat lookups
     const routeCache = new Map();
+    const runwayCache = new Map(); // ICAO → runways array (session cache)
 
     function formatRoute(dep, arr) {
       if (!dep && !arr) return null;
@@ -1829,6 +1830,57 @@
         // Network / transient error — don't cache; allow retry on next render
         return null;
       }
+    }
+
+    // ── Runway prediction ──────────────────────────────────────────
+    function updateRunwayDisplay(rwyStr) {
+      const info = document.getElementById('info');
+      const existing = info.querySelector('.info-runway');
+      if (existing) existing.closest('.info-row').remove();
+      if (rwyStr) {
+        const row = document.createElement('div');
+        row.className = 'info-row';
+        const lbl = document.createElement('span');
+        lbl.className = 'info-label';
+        lbl.textContent = 'RUNWAY ';
+        const val = document.createElement('span');
+        val.className = 'info-value info-runway';
+        val.textContent = rwyStr;
+        row.appendChild(lbl);
+        row.appendChild(val);
+        const routeRow = info.querySelector('.info-route');
+        if (routeRow) routeRow.closest('.info-row').after(row);
+        else info.appendChild(row);
+      }
+    }
+
+    async function fetchRunways(icao) {
+      if (!icao || icao.length < 3) return null;
+      if (runwayCache.has(icao)) return runwayCache.get(icao);
+      try {
+        const res = await fetch('https://api.overheadtracker.com/airport/' + icao, { signal: timeoutSignal(5000) });
+        if (!res.ok) { runwayCache.set(icao, null); return null; }
+        const data = await res.json();
+        runwayCache.set(icao, data.runways || null);
+        return data.runways || null;
+      } catch { return null; }
+    }
+
+    function predictRunway(track, runways) {
+      if (!runways || !runways.length || track == null) return null;
+      let best = null, bestDiff = 999;
+      for (const rwy of runways) {
+        for (const end of [
+          { ident: rwy.le_ident, hdg: rwy.le_heading_degT },
+          { ident: rwy.he_ident, hdg: rwy.he_heading_degT }
+        ]) {
+          if (end.hdg == null) continue;
+          let diff = Math.abs(track - end.hdg);
+          if (diff > 180) diff = 360 - diff;
+          if (diff < bestDiff) { bestDiff = diff; best = end.ident; }
+        }
+      }
+      return bestDiff <= 30 ? 'RWY ' + best : null;
     }
 
     // ── Interesting flight detection ─────────────────────────────────
@@ -2030,6 +2082,19 @@
           // Only update if this flight is still the one being displayed
           if (flights[flightIndex] === f) updateRouteDisplay(route);
         });
+      }
+
+      // Runway prediction for LANDING / APPROACH flights
+      const isLanding = phase.cls === 'phase-landing' || phase.cls === 'phase-approach';
+      const arrIcao = f.arr || null;
+      if (isLanding && arrIcao && f.track != null) {
+        fetchRunways(arrIcao).then(runways => {
+          if (flights[flightIndex] !== f) return;
+          const rwy = predictRunway(f.track, runways);
+          updateRunwayDisplay(rwy);
+        });
+      } else {
+        updateRunwayDisplay(null);
       }
 
       document.getElementById('d-hdg').textContent  = hdg;

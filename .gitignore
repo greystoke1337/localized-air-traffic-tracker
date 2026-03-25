@@ -3,6 +3,7 @@ logs/
 __pycache__/
 tft-preview-*.png
 .claude/settings.local.json
+secrets.env
 tracker_live_fnk0103s/secrets.h
 tracker_foxtrot/secrets.h
 *.zip

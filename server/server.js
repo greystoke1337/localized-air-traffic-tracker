@@ -22,6 +22,9 @@ const ROUTE_CACHE_FILE = process.env.ROUTE_CACHE_FILE || __dirname + '/route-cac
 const KNOWN_ROUTES_FILE = process.env.KNOWN_ROUTES_FILE || __dirname + '/known-routes.json';
 const MAX_CACHE_ENTRIES    = 500;   // evict oldest when exceeded
 const MAX_ROUTE_ENTRIES    = 5000;  // cap route cache size
+const AIRPORT_CACHE_MS     = 30 * 24 * 60 * 60 * 1000; // 30 days (runways rarely change)
+const AIRPORT_CACHE_FILE   = process.env.AIRPORT_CACHE_FILE || __dirname + '/airport-cache.json';
+const MAX_AIRPORT_ENTRIES  = 500;
 const MAX_KNOWN_ROUTES     = 20000; // cap known routes file
 const MAX_UPSTREAM_CONCURRENT = 20; // max simultaneous upstream API calls
 const SEMAPHORE_TIMEOUT_MS    = 10000; // fail fast if queued too long
@@ -32,6 +35,8 @@ const inFlight     = new Map();  // key → Promise (dedup concurrent upstream f
 const routeCache   = new Map();  // callsign -> { dep, arr, timestamp }
 const apiCooldowns = new Map();  // apiName → cooldownExpiresAt (timestamp)
 const knownRoutes  = new Map();  // "DEP>ARR" → firstSeen date string
+const airportCache = new Map();  // ICAO → { runways, timestamp }
+const airportInFlight = new Map(); // ICAO → Promise (dedup concurrent fetches)
 let knownRoutesDirty = false;
 let todayNewRoutes = [];         // [{ route, callsign, time }] — new routes discovered today
 const COOLDOWN_MS  = 60000;
@@ -93,6 +98,17 @@ function routeCacheSet(key, entry) {
       if (v.timestamp < oldestTs) { oldestTs = v.timestamp; oldestKey = k; }
     }
     if (oldestKey) routeCache.delete(oldestKey);
+  }
+}
+
+function airportCacheSet(icao, entry) {
+  airportCache.set(icao, entry);
+  if (airportCache.size > MAX_AIRPORT_ENTRIES) {
+    let oldestKey = null, oldestTs = Infinity;
+    for (const [k, v] of airportCache) {
+      if (v.timestamp < oldestTs) { oldestTs = v.timestamp; oldestKey = k; }
+    }
+    if (oldestKey) airportCache.delete(oldestKey);
   }
 }
 
@@ -661,6 +677,12 @@ try {
   console.log(`Loaded ${routeCache.size} routes from disk cache`);
 } catch { /* file absent on first run */ }
 
+try {
+  const saved = JSON.parse(fs.readFileSync(AIRPORT_CACHE_FILE, 'utf8'));
+  for (const [icao, entry] of Object.entries(saved)) airportCache.set(icao, entry);
+  console.log(`Loaded ${airportCache.size} airports from disk cache`);
+} catch { /* file absent on first run */ }
+
 // ── Known routes (route discovery tracking) ──────────────────────────
 let knownRoutesBootstrapped = false;
 try {
@@ -745,6 +767,15 @@ function saveRouteCache() {
   const obj = {};
   for (const [cs, entry] of routeCache) obj[cs] = entry;
   fs.writeFile(ROUTE_CACHE_FILE, JSON.stringify(obj, null, 2), () => {});
+}
+
+let airportCacheDirty = false;
+function saveAirportCache() {
+  if (!airportCacheDirty) return;
+  airportCacheDirty = false;
+  const obj = {};
+  for (const [icao, entry] of airportCache) obj[icao] = entry;
+  fs.writeFile(AIRPORT_CACHE_FILE, JSON.stringify(obj, null, 2), () => {});
 }
 
 async function lookupRoute(callsign) {
@@ -1254,6 +1285,7 @@ app.get('/stats', (req, res) => {
     uniqueClients: stats.uniqueClients.size,
     cacheEntries:  cache.size,
     routeCacheEntries: routeCache.size,
+    airportCacheEntries: airportCache.size,
     knownRoutes:    knownRoutes.size,
     newRoutesToday: todayNewRoutes.length,
     activeUpstream: upstreamSem.active,
@@ -1424,6 +1456,52 @@ app.get('/weather', async (req, res) => {
       return res.json({ ...hit.data, stale: true });
     }
     res.status(502).json({ error: 'Weather data temporarily unavailable' });
+  }
+});
+
+// ── Airport runway data (airportdb.io) ──────────────────────────────
+app.get('/airport/:icao', async (req, res) => {
+  const icao = (req.params.icao || '').toUpperCase().trim();
+  if (!/^[A-Z0-9]{3,4}$/.test(icao)) return res.status(400).json({ error: 'Invalid ICAO code' });
+
+  const hit = airportCache.get(icao);
+  if (hit && (Date.now() - hit.timestamp) < AIRPORT_CACHE_MS) {
+    return res.json({ icao, runways: hit.runways, cached: true });
+  }
+
+  const token = process.env.AIRPORTDB_TOKEN;
+  if (!token) return res.status(503).json({ error: 'Airport lookup not configured' });
+
+  if (!airportInFlight.has(icao)) {
+    const promise = (async () => {
+      const url = `https://airportdb.io/api/v1/airport/${icao}?apiToken=${token}`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      const runways = (data.runways || []).map(rwy => ({
+        le_ident:       rwy.le_ident,
+        he_ident:       rwy.he_ident,
+        le_heading_degT: parseFloat(rwy.le_heading_degT) || null,
+        he_heading_degT: parseFloat(rwy.he_heading_degT) || null,
+        length_ft:      parseInt(rwy.length_ft, 10) || null,
+        width_ft:       parseInt(rwy.width_ft, 10) || null,
+      }));
+      const entry = { runways, timestamp: Date.now() };
+      airportCacheSet(icao, entry);
+      airportCacheDirty = true;
+      saveAirportCache();
+      return runways;
+    })();
+    airportInFlight.set(icao, promise);
+    promise.finally(() => airportInFlight.delete(icao)).catch(() => {});
+  }
+
+  try {
+    const runways = await airportInFlight.get(icao);
+    res.json({ icao, runways });
+  } catch (e) {
+    if (hit) return res.json({ icao, runways: hit.runways, stale: true });
+    res.status(502).json({ error: 'Airport data temporarily unavailable' });
   }
 });
 
@@ -2090,6 +2168,7 @@ const periodicTimer = setInterval(() => {
   // Periodic save (every 60s)
   saveTodayLog();
   saveKnownRoutes();
+  saveAirportCache();
 
   // Route backfill at 02:00 AEST for yesterday's log
   const backfillTarget = prevDateStr(ds, 1);
@@ -2122,6 +2201,7 @@ function gracefulShutdown(signal) {
   console.log(`${signal} received — shutting down gracefully`);
   saveRouteCache();
   saveKnownRoutes();
+  saveAirportCache();
   saveTodayLog();
   if (server) {
     server.close(() => {
