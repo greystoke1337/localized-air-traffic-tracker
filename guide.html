@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spotter — User Guide</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: #0C1117;
+      color: #c0c0c0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 15px;
+      margin: 0;
+      padding: 24px 16px;
+      min-height: 100dvh;
+    }
+
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px, transparent 3px,
+        rgba(0,0,0,0.02) 3px, rgba(0,0,0,0.02) 4px
+      );
+      pointer-events: none;
+      z-index: 99;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: #ffaa00;
+      font-size: 1.3rem;
+      letter-spacing: 0.12em;
+      margin: 0 0 6px 0;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      color: #999;
+      font-size: 0.92rem;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+
+    .intro {
+      color: #888;
+      font-size: 0.88rem;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #444;
+      margin: 24px 0;
+    }
+
+    h2 {
+      color: #ffaa00;
+      font-size: 0.9rem;
+      letter-spacing: 0.1em;
+      margin: 0 0 14px 0;
+      font-weight: 600;
+    }
+
+    /* ── Table of contents ── */
+
+    .toc {
+      background: #141B22;
+      border: 1px solid rgba(255, 170, 0, 0.25);
+      padding: 18px 20px;
+      margin-bottom: 28px;
+    }
+
+    .toc-title {
+      color: #ffaa00;
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+      margin: 0 0 12px 0;
+      font-weight: 600;
+    }
+
+    .toc ol {
+      margin: 0;
+      padding: 0 0 0 20px;
+    }
+
+    .toc li {
+      margin-bottom: 6px;
+      font-size: 0.88rem;
+    }
+
+    .toc a {
+      color: #c0c0c0;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255, 170, 0, 0.2);
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .toc a:hover {
+      color: #ffaa00;
+      border-color: #ffaa00;
+    }
+
+    /* ── Section ── */
+
+    .section {
+      margin-bottom: 32px;
+    }
+
+    .section p, .section li {
+      font-size: 0.92rem;
+      line-height: 1.65;
+    }
+
+    .section ul, .section ol {
+      padding-left: 20px;
+      margin: 10px 0;
+    }
+
+    .section li {
+      margin-bottom: 6px;
+    }
+
+    /* ── Quick Start steps ── */
+
+    .quick-start {
+      background: #141B22;
+      border: 1px solid rgba(255, 170, 0, 0.3);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .step {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 18px;
+      align-items: flex-start;
+    }
+
+    .step:last-child { margin-bottom: 0; }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: rgba(255, 170, 0, 0.15);
+      border: 1px solid #ffaa00;
+      color: #ffaa00;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .step-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .step-title {
+      color: #e0e0e0;
+      font-weight: 700;
+      font-size: 0.92rem;
+      margin-bottom: 4px;
+    }
+
+    .step-desc {
+      color: #999;
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+
+    .step-desc strong {
+      color: #ffaa00;
+    }
+
+    /* ── Tables ── */
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 0.85rem;
+    }
+
+    th {
+      text-align: left;
+      color: #ffaa00;
+      font-weight: 600;
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(255, 170, 0, 0.35);
+    }
+
+    td {
+      padding: 7px 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      vertical-align: top;
+    }
+
+    td:first-child {
+      color: #e0e0e0;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    /* ── Phase color dots ── */
+
+    .phase-color {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    /* ── Collapsible troubleshooting ── */
+
+    details {
+      background: #141B22;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      margin-bottom: 8px;
+      padding: 0;
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 12px 14px;
+      font-size: 0.9rem;
+      color: #e0e0e0;
+      font-weight: 600;
+      user-select: none;
+      list-style: none;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    summary::before {
+      content: '+';
+      color: #ffaa00;
+      font-weight: 700;
+      margin-right: 10px;
+      font-size: 0.95rem;
+    }
+
+    details[open] summary::before { content: '-'; }
+
+    details[open] summary {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .troubleshoot-body {
+      padding: 12px 14px 14px 30px;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: #999;
+    }
+
+    .troubleshoot-body ul {
+      padding-left: 16px;
+      margin: 6px 0 0 0;
+    }
+
+    .troubleshoot-body li {
+      margin-bottom: 4px;
+    }
+
+    /* ── Code / highlight ── */
+
+    code {
+      background: rgba(255, 170, 0, 0.1);
+      color: #ffaa00;
+      padding: 1px 5px;
+      font-size: 0.88em;
+    }
+
+    pre {
+      background: #141B22;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 14px;
+      overflow-x: auto;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #c0c0c0;
+    }
+
+    /* ── Links ── */
+
+    a {
+      color: #ffaa00;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255, 170, 0, 0.3);
+      transition: border-color 0.15s;
+    }
+
+    a:hover {
+      border-color: #ffaa00;
+    }
+
+    /* ── Back to top ── */
+
+    .back-top {
+      text-align: center;
+      margin: 32px 0 16px;
+      font-size: 0.82rem;
+    }
+
+    /* ── Note box ── */
+
+    .note {
+      background: rgba(255, 170, 0, 0.06);
+      border-left: 3px solid #ffaa00;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #999;
+      margin: 14px 0;
+    }
+
+    .note strong { color: #ffaa00; }
+
+    /* ── Responsive ── */
+
+    @media (max-width: 480px) {
+      body { padding: 16px 12px; }
+      .quick-start { padding: 14px; }
+      table { font-size: 0.8rem; }
+      th, td { padding: 6px 6px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container" id="top">
+
+  <h1>SPOTTER</h1>
+  <div class="subtitle">USER GUIDE</div>
+  <div class="intro">
+    Spotter is a real-time aircraft tracker. It shows you every plane flying
+    over your location right now &mdash; airline, route, altitude, speed, and
+    distance &mdash; all on a 4.3" touchscreen display.
+  </div>
+
+  <!-- ── Table of contents ── -->
+
+  <div class="toc">
+    <div class="toc-title">CONTENTS</div>
+    <ol>
+      <li><a href="#box">What's in the Box</a></li>
+      <li><a href="#quickstart">Quick Start</a></li>
+      <li><a href="#display">Understanding the Display</a></li>
+      <li><a href="#touch">Touch Controls</a></li>
+      <li><a href="#settings">Changing Your Settings</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#firmware">Updating Firmware</a></li>
+      <li><a href="#monitoring">Monitoring Your Device</a></li>
+      <li><a href="#specs">Specifications</a></li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <!-- ── 1. What's in the Box ── -->
+
+  <div class="section" id="box">
+    <h2>WHAT'S IN THE BOX</h2>
+    <ul>
+      <li><strong>Spotter device</strong> &mdash; 4.3" IPS touchscreen (800x480), ESP32-S3 microcontroller</li>
+      <li><strong>USB-C cable</strong> &mdash; for power (any USB adapter, 5V 1A minimum)</li>
+    </ul>
+    <p>That's it. No subscription, no app, no account needed.</p>
+  </div>
+
+  <hr>
+
+  <!-- ── 2. Quick Start ── -->
+
+  <div class="section" id="quickstart">
+    <h2>QUICK START</h2>
+    <p>Setup takes about 5 minutes. You'll need your phone or laptop and your home WiFi password.</p>
+
+    <div class="quick-start">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Plug in</div>
+          <div class="step-desc">Connect the USB-C cable to the device and to any USB power source (wall adapter, power bank, computer USB port). The screen will light up with a boot animation.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Connect to the setup WiFi</div>
+          <div class="step-desc">On your phone or laptop, open WiFi settings and look for a network called <strong>SPOTTER-SETUP</strong>. Connect to it (no password needed).</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Open the setup page</div>
+          <div class="step-desc">A setup page should open automatically in your browser. If it doesn't, open any browser and go to <strong>192.168.4.1</strong>.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Enter your WiFi details</div>
+          <div class="step-desc"><strong>WI-FI NETWORK</strong> &mdash; type your home WiFi network name exactly as it appears.<br><strong>WI-FI PASSWORD</strong> &mdash; enter your WiFi password.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Enter your location</div>
+          <div class="step-desc">Type your address, neighborhood, or city. Examples: <code>Wicker Park, Chicago</code> or <code>123 Main Street, Brooklyn</code>. The device will look up the exact coordinates automatically.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <div class="step-title">Save and go</div>
+          <div class="step-desc">Tap <strong>SAVE &amp; REBOOT</strong>. The device will restart, connect to your WiFi, and start tracking aircraft within a few seconds.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ── 3. Understanding the Display ── -->
+
+  <div class="section" id="display">
+    <h2>UNDERSTANDING THE DISPLAY</h2>
+
+    <p><strong>Header bar (top)</strong><br>
+    The amber bar at the top shows <strong>SPOTTER</strong> on the left and your <strong>location name</strong> on the right.</p>
+
+    <p><strong>Flight card (main area)</strong><br>
+    When aircraft are nearby, the display shows:</p>
+
+    <table>
+      <tr><th>Field</th><th>Description</th></tr>
+      <tr><td>Callsign</td><td>Large amber text, e.g. <code>UAL1218</code> (United flight 1218)</td></tr>
+      <tr><td>Airline</td><td>Full airline name with brand color, e.g. <code>UNITED AIRLINES</code></td></tr>
+      <tr><td>Aircraft type</td><td>What kind of plane, e.g. <code>BOEING 737-800</code></td></tr>
+      <tr><td>Registration</td><td>Tail number, e.g. <code>N37510</code></td></tr>
+      <tr><td>Route</td><td>Origin and destination, e.g. <code>CHICAGO O'HARE > LOS ANGELES</code></td></tr>
+    </table>
+
+    <p><strong>Dashboard (bottom of flight card)</strong><br>
+    Four columns of live data:</p>
+
+    <table>
+      <tr><th>Column</th><th>What it shows</th></tr>
+      <tr><td>PHASE</td><td>What the plane is doing &mdash; see phases below</td></tr>
+      <tr><td>ALT</td><td>Altitude in feet above sea level</td></tr>
+      <tr><td>SPD</td><td>Ground speed in knots</td></tr>
+      <tr><td>DIST</td><td>Distance from you in miles</td></tr>
+    </table>
+
+    <p><strong>Flight phases</strong></p>
+
+    <table>
+      <tr><th>Phase</th><th>Color</th><th>Meaning</th></tr>
+      <tr><td><span class="phase-color" style="background:#ff4444"></span>LANDING</td><td style="color:#ff4444">Red</td><td>Final approach, about to touch down</td></tr>
+      <tr><td><span class="phase-color" style="background:#ff8844"></span>TAKING OFF</td><td style="color:#ff8844">Orange</td><td>Just departed, climbing out</td></tr>
+      <tr><td><span class="phase-color" style="background:#ffaa00"></span>APPROACH</td><td style="color:#ffaa00">Orange</td><td>Heading toward a nearby airport</td></tr>
+      <tr><td><span class="phase-color" style="background:#ffcc00"></span>DESCENDING</td><td style="color:#ffcc00">Yellow</td><td>Losing altitude</td></tr>
+      <tr><td><span class="phase-color" style="background:#44ff44"></span>CLIMBING</td><td style="color:#44ff44">Green</td><td>Gaining altitude</td></tr>
+      <tr><td><span class="phase-color" style="background:#666"></span>CRUISING</td><td style="color:#666">Dim</td><td>Steady altitude, passing through</td></tr>
+      <tr><td><span class="phase-color" style="background:#ffcc00"></span>OVERHEAD</td><td style="color:#ffcc00">Yellow</td><td>Directly above your location</td></tr>
+    </table>
+
+    <p><strong>Status bar (bottom)</strong><br>
+    Shows: <code>AC 1/3</code> (viewing flight 1 of 3), <code>SRC:PROXY</code> (data source),
+    <code>NEXT:12s</code> (seconds until next refresh).</p>
+
+    <p><strong>CLEAR SKIES</strong> means no aircraft are currently in your tracking range &mdash;
+    totally normal during quiet periods.</p>
+
+    <p><strong>Emergency alerts</strong><br>
+    If a plane declares an emergency (squawk 7700, 7600, or 7500), a red banner appears
+    at the top of the flight card with the emergency type: MAYDAY, NORDO (no radio), or HIJACK. This is rare.</p>
+  </div>
+
+  <hr>
+
+  <!-- ── 4. Touch Controls ── -->
+
+  <div class="section" id="touch">
+    <h2>TOUCH CONTROLS</h2>
+
+    <p><strong>Browse flights</strong><br>
+    When multiple aircraft are in range, tap the <strong>left half</strong> of the screen to go to the
+    previous flight, or the <strong>right half</strong> to go to the next one. Flights also auto-cycle every 8 seconds.</p>
+
+    <p><strong>Navigation buttons (middle bar)</strong></p>
+
+    <table>
+      <tr><th>Button</th><th>What it does</th></tr>
+      <tr><td>WX</td><td>Toggle weather overlay &mdash; shows temperature, wind, visibility, pressure for your location</td></tr>
+      <tr><td>5mi / 10mi / 20mi</td><td>Tap to cycle tracking range. Larger range = more aircraft but farther away. Recommend <strong>10mi</strong> for most locations, <strong>20mi</strong> near major airports</td></tr>
+      <tr><td>CFG</td><td>Enter setup mode to change WiFi or location. <strong>Requires double-tap</strong> &mdash; first tap turns red with "TAP!", second tap within 3 seconds confirms</td></tr>
+    </table>
+  </div>
+
+  <hr>
+
+  <!-- ── 5. Changing Your Settings ── -->
+
+  <div class="section" id="settings">
+    <h2>CHANGING YOUR SETTINGS</h2>
+
+    <p><strong>Change WiFi or location</strong></p>
+    <ol>
+      <li>Double-tap the <strong>CFG</strong> button (tap once &mdash; it turns red &mdash; tap again within 3 seconds)</li>
+      <li>The device enters setup mode and creates the <strong>SPOTTER-SETUP</strong> WiFi network</li>
+      <li>Connect to it on your phone and follow the same steps as initial setup</li>
+      <li>Your new settings are saved permanently</li>
+    </ol>
+
+    <p><strong>Change tracking range</strong><br>
+    Tap the range button (shows <strong>5mi</strong>, <strong>10mi</strong>, or <strong>20mi</strong>)
+    to cycle through presets. Takes effect immediately &mdash; no restart needed. Your choice is remembered across power cycles.</p>
+
+    <p><strong>Advanced: SD card configuration</strong><br>
+    For advanced users, place a file called <code>config.txt</code> on a micro SD card:</p>
+
+    <pre>lat=41.9028
+lon=-87.6773
+geofence=20
+alt_floor=500
+name=CHICAGO</pre>
+
+    <p>Insert the SD card before powering on. SD card settings override WiFi setup values.</p>
+  </div>
+
+  <hr>
+
+  <!-- ── 6. Troubleshooting ── -->
+
+  <div class="section" id="troubleshooting">
+    <h2>TROUBLESHOOTING</h2>
+
+    <details>
+      <summary>No flights showing / "CLEAR SKIES"</summary>
+      <div class="troubleshoot-body">
+        This is normal! Not every moment has aircraft in range. Try:
+        <ul>
+          <li>Increasing range to <strong>20mi</strong> (tap the range button)</li>
+          <li>Waiting a few minutes &mdash; air traffic varies throughout the day</li>
+          <li>If you're far from airports or flight paths, 20mi range is recommended</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Screen is frozen or not updating</summary>
+      <div class="troubleshoot-body">
+        Unplug the USB-C cable, wait a few seconds, and plug it back in.
+        The device will reboot and resume tracking automatically.
+      </div>
+    </details>
+
+    <details>
+      <summary>WiFi won't connect</summary>
+      <div class="troubleshoot-body">
+        <ul>
+          <li>Make sure you entered the WiFi name and password correctly (case-sensitive)</li>
+          <li>Double-tap CFG to re-enter setup mode and try again</li>
+          <li>The device works on <strong>2.4 GHz WiFi only</strong> (not 5 GHz)</li>
+          <li>Move the device closer to your router if signal is weak</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Device restarts on its own</summary>
+      <div class="troubleshoot-body">
+        This is a built-in safety feature. If WiFi is lost for more than 30 minutes,
+        the device automatically reboots to try reconnecting. It's working as intended.
+      </div>
+    </details>
+
+    <details>
+      <summary>Data shows "CACHE" or "DIRECT"</summary>
+      <div class="troubleshoot-body">
+        <ul>
+          <li><strong>PROXY</strong> &mdash; Normal operation, getting data from the cloud server</li>
+          <li><strong>DIRECT</strong> &mdash; Cloud server temporarily unavailable, getting data directly from aviation APIs (still works fine)</li>
+          <li><strong>CACHE</strong> &mdash; Showing recently cached data while reconnecting. Data may be a few seconds old</li>
+        </ul>
+      </div>
+    </details>
+  </div>
+
+  <hr>
+
+  <!-- ── 7. Updating Firmware ── -->
+
+  <div class="section" id="firmware">
+    <h2>UPDATING FIRMWARE</h2>
+
+    <p>Your device can be updated with new features and improvements through your web browser &mdash;
+    no special software needed.</p>
+
+    <ol>
+      <li>Open <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on a computer</li>
+      <li>Go to <a href="/flash">overheadtracker.com/flash</a></li>
+      <li>Connect the device to your computer with a USB-C cable</li>
+      <li>Click <strong>CONNECT</strong> and select the device from the popup</li>
+      <li>Click <strong>FLASH</strong> and wait for the update to complete (about 30 seconds)</li>
+      <li>The device reboots with the new firmware &mdash; all your settings are preserved</li>
+    </ol>
+
+    <div class="note">
+      <strong>Note:</strong> Safari and Firefox don't support the Web Serial feature needed for updates. Use Chrome or Edge.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ── 8. Monitoring Your Device ── -->
+
+  <div class="section" id="monitoring">
+    <h2>MONITORING YOUR DEVICE</h2>
+
+    <p>You can check your device's status from anywhere at
+    <a href="/status">overheadtracker.com/status</a>.</p>
+
+    <p>The dashboard shows:</p>
+
+    <table>
+      <tr><th>Indicator</th><th>Meaning</th></tr>
+      <tr><td style="color:#44ff44">Green dot</td><td>Device is online and healthy</td></tr>
+      <tr><td style="color:#ff4444">Red dot</td><td>Device hasn't reported in recently (check power/WiFi)</td></tr>
+      <tr><td>WiFi signal</td><td>How strong the connection is</td></tr>
+      <tr><td>Memory health</td><td>Internal diagnostics</td></tr>
+      <tr><td>Firmware ver.</td><td>What version is installed</td></tr>
+      <tr><td>Last seen</td><td>When the device last checked in</td></tr>
+    </table>
+
+    <p>The device reports its status every 60 seconds.</p>
+  </div>
+
+  <hr>
+
+  <!-- ── 9. Specifications ── -->
+
+  <div class="section" id="specs">
+    <h2>SPECIFICATIONS</h2>
+
+    <table>
+      <tr><th>Detail</th><th>Value</th></tr>
+      <tr><td>Display</td><td>4.3" IPS, 800x480, capacitive touch</td></tr>
+      <tr><td>Processor</td><td>ESP32-S3 dual-core, 240 MHz</td></tr>
+      <tr><td>WiFi</td><td>802.11 b/g/n (2.4 GHz)</td></tr>
+      <tr><td>Power</td><td>USB-C, 5V, ~300mA typical</td></tr>
+      <tr><td>Data refresh</td><td>Every 15 seconds</td></tr>
+      <tr><td>Tracking range</td><td>5, 10, or 20 miles (configurable)</td></tr>
+      <tr><td>Data sources</td><td>ADS-B exchange APIs via cloud proxy, with direct fallback</td></tr>
+    </table>
+  </div>
+
+  <hr>
+
+  <p style="color:#666; font-size:0.85rem; text-align:center; margin-bottom:6px;">
+    Need help? Visit <a href="/status">overheadtracker.com/status</a> to check device health.
+  </p>
+
+  <div class="back-top">
+    <a href="#top">Back to top</a>
+  </div>
+
+</div>
+</body>
+</html>

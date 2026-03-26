@@ -65,7 +65,7 @@ bool geocodeLocation(const char* query) {
   client.setHandshakeTimeout(8);
   HTTPClient http;
   http.begin(client, url);
-  http.addHeader("User-Agent", "OverheadTracker/1.0");
+  http.addHeader("User-Agent", "Spotter/1.0");
   http.setTimeout(8000);
   int code = http.GET();
   if (code != 200) {
@@ -117,7 +117,7 @@ static void handleSetupRoot() {
   snprintf(page, sizeof(page),
     "<!DOCTYPE html><html><head>"
     "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-    "<title>OVERHEAD SETUP</title>"
+    "<title>SPOTTER SETUP</title>"
     "<style>"
     "*{box-sizing:border-box}"
     "body{background:#041010;color:#fd0;font-family:monospace;padding:16px;max-width:480px;margin:auto}"
@@ -128,7 +128,7 @@ static void handleSetupRoot() {
     "button{display:block;width:100%%;margin-top:20px;padding:14px;background:#fd0;"
     "color:#041010;border:none;font-family:monospace;font-size:1em;font-weight:bold;letter-spacing:2px}"
     "</style></head><body>"
-    "<h2>OVERHEAD TRACKER &mdash; SETUP</h2>"
+    "<h2>SPOTTER &mdash; SETUP</h2>"
     "<form method='POST' action='/save'>"
     "<b>WI-FI NETWORK</b>"
     "<input name='ssid' placeholder='Network name' value='%s' required>"
@@ -164,7 +164,7 @@ void startCaptivePortal() {
   tft.setTextSize(SZ_SM);
   tft.setTextColor(C_BG, C_AMBER);
   tft.setTextDatum(lgfx::middle_left);
-  tft.drawString("OVERHEAD TRACKER", 16, HDR_H / 2);
+  tft.drawString("SPOTTER", 16, HDR_H / 2);
   tft.setTextDatum(lgfx::top_left);
 
   tft.setTextSize(SZ_MD);
@@ -173,7 +173,7 @@ void startCaptivePortal() {
 
   const char* instrLines[] = {
     "ON YOUR PHONE:",
-    "1. CONNECT TO WI-FI:  OVERHEAD-SETUP",
+    "1. CONNECT TO WI-FI:  SPOTTER-SETUP",
     "2. OPEN ANY BROWSER",
     "   (PAGE OPENS AUTOMATICALLY)",
     "   OR: 192.168.4.1",
@@ -187,7 +187,7 @@ void startCaptivePortal() {
   }
 
   WiFi.mode(WIFI_AP);
-  WiFi.softAP("OVERHEAD-SETUP");
+  WiFi.softAP("SPOTTER-SETUP");
   delay(100);
 
   dnsServer.start(53, "*", WiFi.softAPIP());
@@ -199,11 +199,11 @@ void startCaptivePortal() {
     setupServer.send(302, "text/plain", "");
   });
   setupServer.begin();
-  Serial.println("Captive portal active — AP: OVERHEAD-SETUP");
+  Serial.println("Captive portal active — AP: SPOTTER-SETUP");
 
   while (true) {
     dnsServer.processNextRequest();
     setupServer.handleClient();
-    esp_task_wdt_reset();
+    delay(10);
   }
 }

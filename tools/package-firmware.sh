@@ -13,7 +13,7 @@ FW_DIR="$REPO_ROOT/firmware"
 CONFIG_H="$REPO_ROOT/tracker_foxtrot/config.h"
 BOOT_APP0="/c/Users/maxim/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.7/tools/partitions/boot_app0.bin"
 
-echo "=== OVERHEAD TRACKER — FIRMWARE PACKAGER ==="
+echo "=== SPOTTER — FIRMWARE PACKAGER ==="
 echo ""
 
 # ── Compile (unless --skip-compile) ──

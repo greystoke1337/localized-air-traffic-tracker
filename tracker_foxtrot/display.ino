@@ -77,8 +77,8 @@ void drawHeader() {
   tft.setClipRect(0, 0, W, HDR_H);
   tft.fillRect(0, 0, W, HDR_H, C_AMBER);
   // Title takes left half, location takes right half — clipped to prevent overlap
-  int titleW = 16 * (int)(6 * SZ_SM) + 10;  // "OVERHEAD TRACKER" width + margin
-  dlbl(10, 14, SZ_SM, C_BG, "OVERHEAD TRACKER");
+  int titleW = 7 * (int)(6 * SZ_SM) + 10;  // "SPOTTER" width + margin
+  dlbl(10, 14, SZ_SM, C_BG, "SPOTTER");
   dlbl_clip(titleW + 10, 14, W - titleW - 20, (int)(8 * SZ_SM), SZ_SM, C_BG, "");
   // Right-align location, clipped to remaining space
   tft.setClipRect(titleW, 0, W - titleW, HDR_H);
@@ -130,6 +130,15 @@ void drawStatusBar() {
              flightIndex + 1, flightCount, src, countdown);
   }
   dlbl(8, H - FOOT_H + 8, SZ_XS, C_DIM, buf);
+
+  // WiFi indicator (right side of status bar)
+  if (wifiOk()) {
+    char wifiBuf[16];
+    snprintf(wifiBuf, sizeof(wifiBuf), "WiFi %d", WiFi.RSSI());
+    dlbl_r(W - 10, H - FOOT_H + 8, SZ_XS, C_DIM, wifiBuf);
+  } else {
+    dlbl_r(W - 10, H - FOOT_H + 8, SZ_XS, C_RED, "NO WIFI");
+  }
   tft.clearClipRect();
 }
 
@@ -486,9 +495,7 @@ void bootSequence() {
 
   // Typewriter title
   tft.setFont(GLCD_FONT);
-  typewriter("OVERHEAD", W / 2, H / 2 - 66, SZ_XL, C_AMBER, 60);
-  delay(100);
-  typewriter("TRACKER", W / 2, H / 2 - 6, SZ_XL, C_AMBER, 60);
+  typewriter("SPOTTER", W / 2, H / 2 - 36, SZ_XL, C_AMBER, 60);
 
   // Glitch flash: briefly invert then restore
   delay(80);

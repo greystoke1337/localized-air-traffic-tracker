@@ -61,19 +61,24 @@ int parsePayload(String& payload) {
 String fetchFromProxy() {
   if (!wifiOk()) { wlog("[PROXY] WiFi not connected\n"); return ""; }
   unsigned long t0 = millis();
-  WiFiClientSecure tcp;
-  tcp.setInsecure();
-  tcp.setHandshakeTimeout(8);
-  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
-    wlog("[PROXY] Connect failed (%lu ms)\n", millis() - t0);
-    return "";
-  }
   char url[160];
   snprintf(url, sizeof(url),
-    "https://%s/flights?lat=%.4f&lon=%.4f&radius=%d",
-    PROXY_HOST, HOME_LAT, HOME_LON, apiRadiusNm());
+    "%s://%s:%d/flights?lat=%.4f&lon=%.4f&radius=%d",
+    PROXY_PORT == 443 ? "https" : "http", PROXY_HOST, PROXY_PORT,
+    HOME_LAT, HOME_LON, apiRadiusNm());
   HTTPClient http;
-  http.begin(tcp, url);
+  WiFiClientSecure tcpS;
+  WiFiClient       tcpP;
+  if (PROXY_PORT == 443) {
+    tcpS.setInsecure(); tcpS.setHandshakeTimeout(8);
+    if (!tcpS.connect(PROXY_HOST, PROXY_PORT, 5000)) {
+      wlog("[PROXY] Connect failed (%lu ms)\n", millis() - t0); return ""; }
+    http.begin(tcpS, url);
+  } else {
+    if (!tcpP.connect(PROXY_HOST, PROXY_PORT, 5000)) {
+      wlog("[PROXY] Connect failed (%lu ms)\n", millis() - t0); return ""; }
+    http.begin(tcpP, url);
+  }
   http.setTimeout(12000);
   int code = http.GET();
   if (code == 200) {
@@ -279,13 +284,6 @@ int fetchAndParseDirectAPI() {
 // ─── Send heartbeat to proxy ─────────────────────────
 void sendHeartbeat() {
   if (!wifiOk()) return;
-  WiFiClientSecure tcp;
-  tcp.setInsecure();
-  tcp.setHandshakeTimeout(5);
-  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 3000)) {
-    wlog("[HB] Connect failed\n");
-    return;
-  }
   char body[256];
   snprintf(body, sizeof(body),
     "{\"device\":\"foxtrot\",\"fw\":\"%s\",\"heap\":%d,\"uptime\":%lu,"
@@ -293,9 +291,19 @@ void sendHeartbeat() {
     FW_VERSION, ESP.getFreeHeap(), millis() / 1000,
     WiFi.RSSI(), flightCount, dataSource, LOCATION_NAME);
   char url[120];
-  snprintf(url, sizeof(url), "https://%s/device/heartbeat", PROXY_HOST);
+  snprintf(url, sizeof(url), "%s://%s:%d/device/heartbeat",
+    PROXY_PORT == 443 ? "https" : "http", PROXY_HOST, PROXY_PORT);
   HTTPClient http;
-  http.begin(tcp, url);
+  WiFiClientSecure tcpS;
+  WiFiClient       tcpP;
+  if (PROXY_PORT == 443) {
+    tcpS.setInsecure(); tcpS.setHandshakeTimeout(5);
+    if (!tcpS.connect(PROXY_HOST, PROXY_PORT, 3000)) { wlog("[HB] Connect failed\n"); return; }
+    http.begin(tcpS, url);
+  } else {
+    if (!tcpP.connect(PROXY_HOST, PROXY_PORT, 3000)) { wlog("[HB] Connect failed\n"); return; }
+    http.begin(tcpP, url);
+  }
   http.setTimeout(5000);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(body);

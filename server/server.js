@@ -789,7 +789,7 @@ async function lookupRoute(callsign) {
     const hit2 = routeCache.get(cs);
     if (hit2 && (Date.now() - hit2.timestamp) < ROUTE_CACHE_MS) return hit2;
 
-    // adsbdb.com route lookup
+    // adsbdb.com route lookup (preferred — has city names)
     try {
       const url = `https://api.adsbdb.com/v0/callsign/${encodeURIComponent(cs)}`;
       const r   = await fetch(url, { signal: AbortSignal.timeout(5000) });
@@ -799,6 +799,26 @@ async function lookupRoute(callsign) {
         if (fr) {
           const dep = fr.origin?.icao_code || fr.origin?.iata_code || null;
           const arr = fr.destination?.icao_code || fr.destination?.iata_code || null;
+          if (dep || arr) {
+            const entry = { dep, arr, timestamp: Date.now() };
+            routeCacheSet(cs, entry);
+            routeCacheDirty = true;
+            return entry;
+          }
+        }
+      }
+    } catch { /* timeout or network error */ }
+
+    // hexdb.io fallback (wider coverage, ICAO codes only)
+    try {
+      const url = `https://hexdb.io/api/v1/route/icao/${encodeURIComponent(cs)}`;
+      const r   = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.route) {
+          const parts = d.route.split('-');
+          const dep = parts[0] || null;
+          const arr = parts[parts.length - 1] || null;
           if (dep || arr) {
             const entry = { dep, arr, timestamp: Date.now() };
             routeCacheSet(cs, entry);

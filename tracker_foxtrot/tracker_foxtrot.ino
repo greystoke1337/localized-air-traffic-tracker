@@ -1,5 +1,5 @@
 /*
-  OVERHEAD TRACKER — FOXTROT
+  SPOTTER — FOXTROT
   Waveshare ESP32-S3-Touch-LCD-4.3: 800x480 IPS, GT911 capacitive touch
   Rendering: LovyanGFX (immediate-mode, no LVGL, no FreeRTOS render task)
 
@@ -121,7 +121,7 @@ static void drawTempHeader() {
   tft.setTextSize(SZ_SM);
   tft.setTextColor(C_BG, C_AMBER);
   tft.setTextDatum(lgfx::middle_left);
-  tft.drawString("OVERHEAD TRACKER", 16, HDR_H / 2);
+  tft.drawString("SPOTTER", 16, HDR_H / 2);
   tft.setTextDatum(lgfx::top_left);
 }
 
