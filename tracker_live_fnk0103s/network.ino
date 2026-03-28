@@ -64,6 +64,7 @@ String fetchFromProxy() {
   unsigned long t0 = millis();
   WiFiClientSecure tcp;
   tcp.setInsecure();
+  tcp.setTimeout(20000);
   if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
     Serial.printf("[PROXY] Connect failed (%lu ms)\n", millis() - t0);
     return "";

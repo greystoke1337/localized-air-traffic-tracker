@@ -139,6 +139,13 @@ bool showingWxBriefly = false;
 // ─── Setup ────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
+  {
+    const char* reasons[] = {
+      "UNKNOWN","POWERON","?","SW","PANIC","INT_WDT","TASK_WDT","WDT","DEEPSLEEP","BROWNOUT","SDIO"
+    };
+    esp_reset_reason_t r = esp_reset_reason();
+    Serial.printf("[BOOT] Reset reason: %s (%d)\n", r < 11 ? reasons[r] : "?", (int)r);
+  }
   tft.init();
   tft.setRotation(1);
   tft.fillScreen(C_BG);
