@@ -10,3 +10,14 @@ tracker_foxtrot/secrets.h
 *.jpg
 *.png
 !tracker_live_fnk0103s/enclosure/**
+
+# IDE
+.idea/
+
+# Capacitor / mobile app
+node_modules/
+www/
+android/.gradle/
+android/app/build/
+android/build/
+*.iml

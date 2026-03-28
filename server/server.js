@@ -21,7 +21,7 @@ const ROUTE_CACHE_MS   = 30 * 60 * 1000;
 const ROUTE_CACHE_FILE = process.env.ROUTE_CACHE_FILE || __dirname + '/route-cache.json';
 const KNOWN_ROUTES_FILE = process.env.KNOWN_ROUTES_FILE || __dirname + '/known-routes.json';
 const MAX_CACHE_ENTRIES    = 500;   // evict oldest when exceeded
-const MAX_ROUTE_ENTRIES    = 5000;  // cap route cache size
+const MAX_ROUTE_ENTRIES    = 15000; // cap route cache size
 const AIRPORT_CACHE_MS     = 30 * 24 * 60 * 60 * 1000; // 30 days (runways rarely change)
 const AIRPORT_CACHE_FILE   = process.env.AIRPORT_CACHE_FILE || __dirname + '/airport-cache.json';
 const MAX_AIRPORT_ENTRIES  = 500;
@@ -656,8 +656,11 @@ function enrichRoutes(data) {
       if (hit) {
         if (hit.dep) ac.dep = hit.dep;
         if (hit.arr) ac.arr = hit.arr;
-        if ((Date.now() - hit.timestamp) >= ROUTE_CACHE_MS && !unrouted.includes(cs)) {
+        const now = Date.now();
+        if ((now - hit.timestamp) >= ROUTE_CACHE_MS && !unrouted.includes(cs)) {
           unrouted.push(cs);  // refresh stale entry in background
+        } else {
+          hit.timestamp = now; // LRU: keep active callsigns from being evicted
         }
       } else if (!unrouted.includes(cs)) {
         unrouted.push(cs);
@@ -781,7 +784,10 @@ function saveAirportCache() {
 async function lookupRoute(callsign) {
   const cs  = callsign.trim();
   const hit = routeCache.get(cs);
-  if (hit && (Date.now() - hit.timestamp) < ROUTE_CACHE_MS) return hit;
+  if (hit && (Date.now() - hit.timestamp) < ROUTE_CACHE_MS) {
+    hit.timestamp = Date.now();
+    return hit;
+  }
 
   try { await routeSem.acquire(10000); } catch { return hit || null; }
   try {

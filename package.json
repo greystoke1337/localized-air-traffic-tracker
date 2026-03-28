@@ -1,0 +1,23 @@
+{
+  "name": "overhead-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time overhead aircraft tracker",
+  "scripts": {
+    "sync-web": "node scripts/sync-web.js",
+    "cap:sync": "npm run sync-web && npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios",
+    "cap:run:android": "npx cap run android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/app": "^8.0.1",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/status-bar": "^8.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}
