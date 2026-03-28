@@ -403,6 +403,15 @@
           <span class="tl-tag validated">VALIDATED</span>
         </div>
       </div>
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Chaos stress testing</div>
+        <div class="tl-detail">10-min chaos stress test (mock proxy: 40% empty, 30% slow, 15% errors, 5% corrupt). WDT crash in sendHeartbeat() fixed — now properly removes task from WDT supervision during HTTP calls. Heap stable, 0 reboots under chaos.</div>
+        <div class="tl-tags">
+          <span class="tl-tag implemented">IMPLEMENTED</span>
+          <span class="tl-tag tested">TESTED</span>
+        </div>
+      </div>
       <div class="tl-item pending">
         <div class="tl-dot"></div>
         <div class="tl-label">Shipping</div>

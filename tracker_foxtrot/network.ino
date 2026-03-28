@@ -283,7 +283,8 @@ int fetchAndParseDirectAPI() {
 
 // ─── Send heartbeat to proxy ─────────────────────────
 void sendHeartbeat() {
-  if (!wifiOk()) return;
+  esp_task_wdt_delete(NULL);
+  if (!wifiOk()) { esp_task_wdt_add(NULL); esp_task_wdt_reset(); return; }
   char body[256];
   snprintf(body, sizeof(body),
     "{\"device\":\"foxtrot\",\"fw\":\"%s\",\"heap\":%d,\"uptime\":%lu,"
@@ -298,10 +299,10 @@ void sendHeartbeat() {
   WiFiClient       tcpP;
   if (PROXY_PORT == 443) {
     tcpS.setInsecure(); tcpS.setHandshakeTimeout(5);
-    if (!tcpS.connect(PROXY_HOST, PROXY_PORT, 3000)) { wlog("[HB] Connect failed\n"); return; }
+    if (!tcpS.connect(PROXY_HOST, PROXY_PORT, 3000)) { wlog("[HB] Connect failed\n"); esp_task_wdt_add(NULL); esp_task_wdt_reset(); return; }
     http.begin(tcpS, url);
   } else {
-    if (!tcpP.connect(PROXY_HOST, PROXY_PORT, 3000)) { wlog("[HB] Connect failed\n"); return; }
+    if (!tcpP.connect(PROXY_HOST, PROXY_PORT, 3000)) { wlog("[HB] Connect failed\n"); esp_task_wdt_add(NULL); esp_task_wdt_reset(); return; }
     http.begin(tcpP, url);
   }
   http.setTimeout(5000);
@@ -309,6 +310,8 @@ void sendHeartbeat() {
   int code = http.POST(body);
   http.end();
   wlog("[HB] Heartbeat sent (%d)\n", code);
+  esp_task_wdt_add(NULL);
+  esp_task_wdt_reset();
 }
 
 // ─── Extract flights from a parsed JSON doc ────────────

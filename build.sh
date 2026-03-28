@@ -17,11 +17,16 @@
 #   ./build.sh log 5         → capture for 5 minutes
 #   ./build.sh log 20 COM5   → capture on specific port
 #   ./build.sh safe          → test + validate (full pre-push check)
-#   ./build.sh stress        → 10-min chaos stress test (mock proxy + serial)
+#   ./build.sh stress        → 10-min chaos stress test (auto-patches HOST+PORT, flashes, restores)
 #   ./build.sh stress 20     → 20-min stress test
 #   ./build.sh stress 10 COM5 → stress test on specific port
 #   ./build.sh stress 10 COM4 transition → stress with transition mode
-#   ./build.sh proxy-host 192.168.86.30  → change PROXY_HOST + compile + flash
+#   ./build.sh proxy-host 192.168.86.30 3001 COM4 → patch HOST+PORT + compile + flash
+#   ./build.sh foxtrot-stress        → 10-min chaos stress test for Foxtrot (auto-patches, flashes, restores)
+#   ./build.sh foxtrot-stress 20     → 20-min Foxtrot stress test
+#   ./build.sh foxtrot-stress 10 COM8 → Foxtrot stress test on specific port
+#   ./build.sh foxtrot-stress 10 COM7 transition → Foxtrot stress with transition mode
+#   ./build.sh foxtrot-proxy-host 192.168.86.30 3001 COM7 → patch Foxtrot HOST+PORT + compile + flash
 #   OVERHEAD_TRACKER_IP=x.x.x.x ./build.sh ota  → OTA to specific IP
 #
 # ──────────────────────────────────────────────────────────────────────────────
@@ -30,6 +35,9 @@ set -e
 
 SKETCH="tracker_live_fnk0103s/tracker_live_fnk0103s.ino"
 FQBN="esp32:esp32:esp32:PartitionScheme=min_spiffs"
+FOXTROT_SKETCH="tracker_foxtrot/tracker_foxtrot.ino"
+FOXTROT_FQBN="esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB"
+FOXTROT_BUILD_DIR="/tmp/overhead-tracker-foxtrot-build"
 BUILD_DIR="/tmp/overhead-tracker-build"
 BAUD=115200
 OTA_HOST="${OVERHEAD_TRACKER_IP:-overhead-tracker.local}"
@@ -382,24 +390,36 @@ print(f'File: {logfile}')
 " "$port" "$BAUD" "$minutes" "$logfile"
 }
 
+# ── Free port / local IP helpers ─────────────────────────────────────────────
+find_free_port() {
+  node -e "const net=require('net');const s=net.createServer();s.listen(0,()=>{process.stdout.write(String(s.address().port));s.close()})"
+}
+
+detect_local_ip() {
+  node -e "const os=require('os');const a=Object.values(os.networkInterfaces()).flat().find(i=>i.family==='IPv4'&&!i.internal);process.stdout.write(a?a.address:'')"
+}
+
 # ── Stress test ──────────────────────────────────────────────────────────────
 run_stress() {
   local minutes="${2:-10}"
-  local port
-  port=$(resolve_port "${3:-}")
+  local com_port
+  com_port=$(resolve_port "${3:-}")
   local proxy_mode="${4:-chaos}"
   mkdir -p logs
   local logfile="logs/stress-$(date +%Y-%m-%d-%H%M%S).log"
+  local proxy_port my_ip
+  proxy_port=$(find_free_port)
+  my_ip=$(detect_local_ip)
+  [ -n "$my_ip" ] || die "Could not detect local IP"
 
-  info "STRESS TEST — ${minutes}m, ${proxy_mode} mode, serial on ${port}"
-  echo ""
-  echo "  NOTE: ESP32 PROXY_HOST must point to this machine's IP."
-  echo "  Use: ./build.sh proxy-host <your-ip> to set it."
-  echo ""
+  info "STRESS TEST — ${minutes}m, ${proxy_mode} mode, serial on ${com_port}"
+
+  info "Patching Echo → ${my_ip}:${proxy_port}, compiling, flashing..."
+  _echo_patch_flash "$my_ip" "$proxy_port" "$com_port"
 
   # Start mock proxy in background
-  info "Starting mock proxy (${proxy_mode} mode, port 3000)..."
-  node tools/mock-proxy.js "$proxy_mode" 3000 &
+  info "Starting mock proxy (${proxy_mode} mode, port ${proxy_port})..."
+  node tools/mock-proxy.js "$proxy_mode" "$proxy_port" &
   local proxy_pid=$!
   sleep 1
 
@@ -438,11 +458,14 @@ with open(logfile, 'w', encoding='utf-8') as f:
 
 ser.close()
 print(f'\nCapture complete: {line_count} lines, {(time.time()-start)/60:.1f} min')
-" "$port" "$BAUD" "$minutes" "$logfile" || true
+" "$com_port" "$BAUD" "$minutes" "$logfile" || true
 
   # Kill mock proxy
   kill $proxy_pid 2>/dev/null || true
   wait $proxy_pid 2>/dev/null || true
+
+  info "Restoring Echo → api.overheadtracker.com:443, compiling, flashing..."
+  _echo_patch_flash "api.overheadtracker.com" 443 "$com_port"
 
   # Analyze
   echo ""
@@ -450,23 +473,141 @@ print(f'\nCapture complete: {line_count} lines, {(time.time()-start)/60:.1f} min
   node tools/serial-stress.js "$logfile"
 }
 
+# ── Echo patch+flash (internal) ───────────────────────────────────────────────
+_echo_patch_flash() {
+  local new_ip="$1" new_proxy_port="$2" com_port="$3"
+  local ino_file="tracker_live_fnk0103s/tracker_live_fnk0103s.ino"
+  local old_ip old_port
+  old_ip=$(sed -n 's/.*PROXY_HOST *= *"\([^"]*\)".*/\1/p' "$ino_file")
+  old_port=$(sed -n 's/.*PROXY_PORT *= *\([0-9]*\).*/\1/p' "$ino_file")
+  sed -i "s|PROXY_HOST = \"${old_ip}\"|PROXY_HOST = \"${new_ip}\"|" "$ino_file"
+  sed -i "s|PROXY_PORT = ${old_port}|PROXY_PORT = ${new_proxy_port}|" "$ino_file"
+  grep -E "PROXY_HOST|PROXY_PORT" "$ino_file"
+  run_compile
+  run_upload _ "$com_port"
+}
+
 # ── Proxy host ────────────────────────────────────────────────────────────────
 run_proxy_host() {
   local new_ip="${2:-}"
-  local port="${3:-COM4}"
+  local new_proxy_port="${3:-443}"
+  local com_port="${4:-COM4}"
   if [ -z "$new_ip" ]; then
-    echo "Usage: ./build.sh proxy-host <ip> [port]"
-    echo "  Example: ./build.sh proxy-host 192.168.86.30 COM4"
+    echo "Usage: ./build.sh proxy-host <ip> [proxy_port] [com_port]"
+    echo "  Example: ./build.sh proxy-host 192.168.86.30 3001 COM4"
     exit 1
   fi
-  local ino_file="tracker_live_fnk0103s/tracker_live_fnk0103s.ino"
-  local old_ip
+  info "Patching Echo PROXY_HOST → ${new_ip}:${new_proxy_port}"
+  _echo_patch_flash "$new_ip" "$new_proxy_port" "$com_port"
+}
+
+# ── Foxtrot stress test ───────────────────────────────────────────────────────
+run_foxtrot_stress() {
+  local minutes="${2:-10}"
+  local com_port="${3:-COM7}"
+  local proxy_mode="${4:-chaos}"
+  mkdir -p logs
+  local logfile="logs/foxtrot-stress-$(date +%Y-%m-%d-%H%M%S).log"
+  local proxy_port my_ip
+  proxy_port=$(find_free_port)
+  my_ip=$(detect_local_ip)
+  [ -n "$my_ip" ] || die "Could not detect local IP"
+
+  info "FOXTROT STRESS TEST — ${minutes}m, ${proxy_mode} mode, serial on ${com_port}"
+
+  info "Patching Foxtrot → ${my_ip}:${proxy_port}, compiling, flashing..."
+  _foxtrot_patch_flash "$my_ip" "$proxy_port" "$com_port"
+
+  info "Starting mock proxy (${proxy_mode} mode, port ${proxy_port})..."
+  node tools/mock-proxy.js "$proxy_mode" "$proxy_port" &
+  local proxy_pid=$!
+  sleep 1
+
+  info "Capturing serial → $logfile (${minutes}m)..."
+  /c/python314/python.exe -u -c "
+import serial, sys, time
+
+port, baud, minutes = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+logfile = sys.argv[4]
+duration = minutes * 60
+
+ser = serial.Serial(port, baud, timeout=1)
+time.sleep(0.1)
+ser.reset_input_buffer()
+
+start = time.time()
+deadline = start + duration
+line_count = 0
+
+with open(logfile, 'w', encoding='utf-8') as f:
+    try:
+        while time.time() < deadline:
+            raw = ser.readline()
+            if not raw:
+                continue
+            line = raw.decode('utf-8', errors='replace').rstrip()
+            elapsed = time.time() - start
+            stamped = f'[{elapsed:8.3f}] {line}'
+            f.write(stamped + '\n')
+            f.flush()
+            print(stamped)
+            line_count += 1
+    except KeyboardInterrupt:
+        pass
+
+ser.close()
+print(f'\nCapture complete: {line_count} lines, {(time.time()-start)/60:.1f} min')
+" "$com_port" "$BAUD" "$minutes" "$logfile" || true
+
+  kill $proxy_pid 2>/dev/null || true
+  wait $proxy_pid 2>/dev/null || true
+
+  info "Restoring Foxtrot → api.overheadtracker.com:443, compiling, flashing..."
+  _foxtrot_patch_flash "api.overheadtracker.com" 443 "$com_port"
+
+  echo ""
+  info "Analyzing log..."
+  node tools/serial-stress.js "$logfile"
+}
+
+# ── Foxtrot patch+flash (internal) ───────────────────────────────────────────
+_foxtrot_patch_flash() {
+  local new_ip="$1" new_proxy_port="$2" com_port="$3"
+  local ino_file="tracker_foxtrot/tracker_foxtrot.ino"
+  local old_ip old_port
   old_ip=$(sed -n 's/.*PROXY_HOST *= *"\([^"]*\)".*/\1/p' "$ino_file")
-  info "Changing PROXY_HOST: ${old_ip} → ${new_ip}"
+  old_port=$(sed -n 's/.*PROXY_PORT *= *\([0-9]*\).*/\1/p' "$ino_file")
   sed -i "s|PROXY_HOST = \"${old_ip}\"|PROXY_HOST = \"${new_ip}\"|" "$ino_file"
-  grep "PROXY_HOST" "$ino_file"
-  run_compile
-  run_upload _ "$port"
+  sed -i "s|PROXY_PORT = ${old_port}|PROXY_PORT = ${new_proxy_port}|" "$ino_file"
+  grep -E "PROXY_HOST|PROXY_PORT" "$ino_file"
+  info "COMPILE Foxtrot ($FOXTROT_FQBN)"
+  "$ARDUINO_CLI" compile \
+    $(config_flag) \
+    --fqbn        "$FOXTROT_FQBN" \
+    --build-path  "$FOXTROT_BUILD_DIR" \
+    "$FOXTROT_SKETCH"
+  info "UPLOAD Foxtrot → $com_port"
+  "$ARDUINO_CLI" upload \
+    $(config_flag) \
+    --fqbn        "$FOXTROT_FQBN" \
+    --port        "$com_port" \
+    --input-dir   "$FOXTROT_BUILD_DIR" \
+    "$FOXTROT_SKETCH"
+  info "Foxtrot upload complete."
+}
+
+# ── Foxtrot proxy-host ────────────────────────────────────────────────────────
+run_foxtrot_proxy_host() {
+  local new_ip="${2:-}"
+  local new_proxy_port="${3:-443}"
+  local com_port="${4:-COM7}"
+  if [ -z "$new_ip" ]; then
+    echo "Usage: ./build.sh foxtrot-proxy-host <ip> [proxy_port] [com_port]"
+    echo "  Example: ./build.sh foxtrot-proxy-host 192.168.86.30 3001 COM7"
+    exit 1
+  fi
+  info "Patching Foxtrot PROXY_HOST → ${new_ip}:${new_proxy_port}"
+  _foxtrot_patch_flash "$new_ip" "$new_proxy_port" "$com_port"
 }
 
 # ── Safe (test + validate — full pre-push check) ─────────────────────────────
@@ -493,5 +634,7 @@ case "$CMD" in
   safe)             run_safe ;;
   stress)           run_stress  "$@" ;;
   proxy-host)       run_proxy_host "$@" ;;
+  foxtrot-stress)   run_foxtrot_stress "$@" ;;
+  foxtrot-proxy-host) run_foxtrot_proxy_host "$@" ;;
   all|*)            run_compile && run_upload "$@" ;;
 esac
