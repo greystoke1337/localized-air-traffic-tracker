@@ -80,7 +80,20 @@ String fetchFromProxy() {
   int code = http.GET();
   esp_task_wdt_reset();
   if (code == 200) {
-    String p = http.getString();
+    int len = http.getSize();
+    WiFiClient* stream = http.getStreamPtr();
+    String p;
+    if (len > 0) p.reserve(len);
+    uint8_t buf[512];
+    unsigned long deadline = millis() + 20000;
+    while (millis() < deadline && (http.connected() || stream->available())) {
+      int avail = stream->available();
+      if (avail > 0) {
+        int n = stream->readBytes(buf, min(avail, (int)sizeof(buf)));
+        if (n > 0) { p += String((const char*)buf, n); deadline = millis() + 20000; }
+      } else { delay(5); }
+      esp_task_wdt_reset();
+    }
     http.end();
     esp_task_wdt_reset();
     Serial.printf("[PROXY] OK %d bytes (%lu ms)\n", p.length(), millis() - t0);
@@ -286,6 +299,7 @@ void sendHeartbeat() {
   if (!wifiOk()) return;
   WiFiClientSecure tcp;
   tcp.setInsecure();
+  tcp.setTimeout(20000);
   if (!tcp.connect(PROXY_HOST, PROXY_PORT, 3000)) {
     Serial.println("[HB] Connect failed");
     return;
@@ -442,6 +456,7 @@ bool fetchWeather() {
     }
     WiFiClientSecure tcp;
     tcp.setInsecure();
+    tcp.setTimeout(20000);
     if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
       Serial.printf("[WX] Connect failed (attempt %d/2)\n", attempt);
       continue;
