@@ -38,6 +38,10 @@ FQBN="esp32:esp32:esp32:PartitionScheme=min_spiffs"
 FOXTROT_SKETCH="tracker_foxtrot/tracker_foxtrot.ino"
 FOXTROT_FQBN="esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB"
 FOXTROT_BUILD_DIR="/tmp/overhead-tracker-foxtrot-build"
+DELTA_SKETCH="tracker_delta/tracker_delta.ino"
+DELTA_FQBN="esp32:esp32:esp32s3:PSRAM=opi,USBMode=default,PartitionScheme=app3M_fat9M_16MB,FlashSize=16M"
+DELTA_BUILD_DIR="/tmp/overhead-tracker-delta-build"
+DELTA_PORT="${DELTA_PORT:-COM8}"
 BUILD_DIR="/tmp/overhead-tracker-build"
 BAUD=115200
 OTA_HOST="${OVERHEAD_TRACKER_IP:-overhead-tracker.local}"
@@ -610,6 +614,37 @@ run_foxtrot_proxy_host() {
   _foxtrot_patch_flash "$new_ip" "$new_proxy_port" "$com_port"
 }
 
+# ── Delta compile + upload ────────────────────────────────────────────────────
+run_delta() {
+  local com_port="${2:-$DELTA_PORT}"
+  info "COMPILE Delta ($DELTA_FQBN)"
+  mkdir -p "$DELTA_BUILD_DIR"
+  "$ARDUINO_CLI" compile \
+    $(config_flag) \
+    --fqbn        "$DELTA_FQBN" \
+    --build-path  "$DELTA_BUILD_DIR" \
+    "$DELTA_SKETCH"
+  info "UPLOAD Delta → $com_port"
+  "$ARDUINO_CLI" upload \
+    $(config_flag) \
+    --fqbn        "$DELTA_FQBN" \
+    --port        "$com_port" \
+    --input-dir   "$DELTA_BUILD_DIR" \
+    "$DELTA_SKETCH"
+  info "Delta upload complete."
+}
+
+run_delta_compile() {
+  info "COMPILE Delta ($DELTA_FQBN)"
+  mkdir -p "$DELTA_BUILD_DIR"
+  "$ARDUINO_CLI" compile \
+    $(config_flag) \
+    --fqbn        "$DELTA_FQBN" \
+    --build-path  "$DELTA_BUILD_DIR" \
+    "$DELTA_SKETCH"
+  info "Delta compile complete."
+}
+
 # ── Safe (test + validate — full pre-push check) ─────────────────────────────
 run_safe() {
   info "SAFE — full pre-push validation"
@@ -636,5 +671,7 @@ case "$CMD" in
   proxy-host)       run_proxy_host "$@" ;;
   foxtrot-stress)   run_foxtrot_stress "$@" ;;
   foxtrot-proxy-host) run_foxtrot_proxy_host "$@" ;;
+  delta)            run_delta "$@" ;;
+  delta-compile)    run_delta_compile ;;
   all|*)            run_compile && run_upload "$@" ;;
 esac

@@ -6,6 +6,7 @@ tft-preview-*.png
 secrets.env
 tracker_live_fnk0103s/secrets.h
 tracker_foxtrot/secrets.h
+tracker_delta/secrets.h
 *.zip
 *.jpg
 *.png
