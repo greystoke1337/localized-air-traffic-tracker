@@ -64,7 +64,8 @@ String fetchFromProxy() {
   unsigned long t0 = millis();
   WiFiClientSecure tcp;
   tcp.setInsecure();
-  tcp.setTimeout(20000);
+  tcp.setTimeout(8000);
+  esp_task_wdt_reset();
   if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
     Serial.printf("[PROXY] Connect failed (%lu ms)\n", millis() - t0);
     return "";
@@ -299,8 +300,9 @@ void sendHeartbeat() {
   if (!wifiOk()) return;
   WiFiClientSecure tcp;
   tcp.setInsecure();
-  tcp.setTimeout(20000);
-  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 3000)) {
+  tcp.setTimeout(8000);
+  esp_task_wdt_reset();
+  if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
     Serial.println("[HB] Connect failed");
     return;
   }
@@ -456,7 +458,8 @@ bool fetchWeather() {
     }
     WiFiClientSecure tcp;
     tcp.setInsecure();
-    tcp.setTimeout(20000);
+    tcp.setTimeout(8000);
+    esp_task_wdt_reset();
     if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
       Serial.printf("[WX] Connect failed (attempt %d/2)\n", attempt);
       continue;
@@ -472,7 +475,19 @@ bool fetchWeather() {
       http.end();
       continue;
     }
-    String body = http.getString();
+    int wlen = http.getSize();
+    WiFiClient* wstream = http.getStreamPtr();
+    String body;
+    if (wlen > 0) body.reserve(wlen);
+    { uint8_t wbuf[256]; unsigned long wdl = millis() + 10000;
+      while (millis() < wdl && (http.connected() || wstream->available())) {
+        int wa = wstream->available();
+        if (wa > 0) { int wn = wstream->readBytes(wbuf, min(wa, (int)sizeof(wbuf)));
+          if (wn > 0) { body += String((const char*)wbuf, wn); wdl = millis() + 10000; }
+        } else { delay(5); }
+        esp_task_wdt_reset();
+      }
+    }
     http.end();
     esp_task_wdt_reset();
     StaticJsonDocument<640> doc;

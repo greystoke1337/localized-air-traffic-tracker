@@ -103,6 +103,23 @@ void drawStatusBar() {
   tft.setCursor(6, y + 6);
 #endif
   tft.print(buf);
+
+  // WiFi indicator (right side of status bar)
+  char wifiBuf[16];
+  if (wifiOk()) {
+    snprintf(wifiBuf, sizeof(wifiBuf), "WiFi %d", WiFi.RSSI());
+    tft.setTextColor(C_DIM, C_BG);
+  } else {
+    snprintf(wifiBuf, sizeof(wifiBuf), "NO WIFI");
+    tft.setTextColor(C_RED, C_BG);
+  }
+  int wifiW = strlen(wifiBuf) * 6;
+#ifdef BOARD_2P8
+  tft.setCursor(W - wifiW - 4, y + 4);
+#else
+  tft.setCursor(W - wifiW - 6, y + 6);
+#endif
+  tft.print(wifiBuf);
 }
 
 void renderMessage(const char* line1, const char* line2) {

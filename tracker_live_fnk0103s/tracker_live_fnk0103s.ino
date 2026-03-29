@@ -481,8 +481,8 @@ void setup() {
   fetchFlights();
   esp_task_wdt_reset();
   countdown = REFRESH_SECS;
-  fetchWeather();
-  wxCountdown = WX_REFRESH_SECS;
+  bool wxOk = fetchWeather();
+  wxCountdown = wxOk ? WX_REFRESH_SECS : 60;
 }
 
 // ─── Loop ─────────────────────────────────────────────

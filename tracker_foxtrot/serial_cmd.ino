@@ -7,7 +7,7 @@ void checkSerialCmd() {
   Serial.println(">>>CMD_START<<<");
 
   if (input == "help") {
-    Serial.println("{\"cmd\":\"help\",\"commands\":[\"help\",\"heap\",\"state\",\"wifi\",\"config\",\"diag\",\"fetch\",\"weather\",\"unknowns\",\"restart\"]}");
+    Serial.println("{\"cmd\":\"help\",\"commands\":[\"help\",\"heap\",\"state\",\"wifi\",\"config\",\"diag\",\"fetch\",\"weather\",\"unknowns\",\"restart\",\"resetconfig\"]}");
 
   } else if (input == "heap") {
     uint32_t free = ESP.getFreeHeap();
@@ -99,6 +99,17 @@ void checkSerialCmd() {
 #else
     Serial.println("{\"cmd\":\"unknowns\",\"ok\":false,\"error\":\"no SD\"}");
 #endif
+
+  } else if (input == "resetconfig") {
+    Preferences p;
+    p.begin("tracker", false);
+    p.clear();
+    p.end();
+    Serial.println("{\"cmd\":\"resetconfig\",\"ok\":true,\"msg\":\"NVS cleared — rebooting to setup\"}");
+    Serial.println(">>>CMD_END<<<");
+    Serial.flush();
+    delay(100);
+    ESP.restart();
 
   } else if (input == "restart") {
     Serial.println("{\"cmd\":\"restart\",\"ok\":true}");

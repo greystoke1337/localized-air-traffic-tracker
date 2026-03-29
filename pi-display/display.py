@@ -217,7 +217,7 @@ def draw_title_bar(healthy, current_page):
     pygame.draw.circle(screen, GREEN if healthy else RED, (14, 12), 5)
     draw_text('OVERHEAD TRACKER', font_md, ACCENT, 26, 3)
     for i in range(PAGE_COUNT):
-        x = W - 30 + i * 16
+        x = W - 30 + i * 12
         if i == current_page:
             pygame.draw.circle(screen, ACCENT, (x, 12), 4)
         else:
@@ -316,7 +316,7 @@ def render_page_flights(flights, weather, peak, page, flights_ok=True):
                 # Route + altitude sub-line
                 route = f.get('route', '')
                 if route:
-                    draw_text(route, font_sm, DIM, 10, y + 22)
+                    draw_text(route[:30], font_sm, DIM, 10, y + 22)
                 draw_text(format_alt(f['alt']), font_sm, DIM, W - 10, y + 22, 'right')
         else:
             clear_y = (content_y + 18 + weather_y) // 2 - 9
@@ -344,7 +344,7 @@ def render_page_flights(flights, weather, peak, page, flights_ok=True):
         draw_text('LOADING...', font_sm, DIM, W // 2, weather_y + 28, 'center')
 
     draw_histogram(peak, 228)
-    draw_data_age(last_fetch, 306)
+    draw_data_age(last_fetch, 302)
     flush_to_fb()
 
 
@@ -369,8 +369,8 @@ def render_page_dashboard(stats, peak, page):
             ('ERRORS',    str(stats.get('errors', 0))),
             ('CLIENTS',   str(stats.get('uniqueClients', 0))),
             ('CACHED',    str(stats.get('cacheEntries', 0)) + ' entries'),
-            ('ROUTES',    str(stats.get('routeCacheEntries', 0))),
-            ('UPSTREAM',  str(stats.get('activeUpstream', 0)) + ' active'),
+            ('ROUTES',    str(stats.get('knownRoutes', 0))),
+            ('NEW RTS',   str(stats.get('newRoutesToday', 0)) + ' today'),
         ]
         col_w = W // 4
         for i, (label, value) in enumerate(items):
@@ -386,18 +386,21 @@ def render_page_dashboard(stats, peak, page):
     draw_text('API STATUS', font_sm, DIM, 10, cooldown_y)
     if stats:
         cooldowns = stats.get('apiCooldowns', {})
-        apis = ['adsb.lol', 'adsb.fi', 'airplanes.live']
+        apis = ['adsb.lol', 'adsb.fi', 'airplanes.live', 'adsb-one']
         for i, api in enumerate(apis):
-            cx = 10 + i * 160
+            col = i % 2
+            row = i // 2
+            cx = 10 + col * (W // 2)
+            row_offset = row * 30
             cd = cooldowns.get(api, 0)
             is_ok = cd <= 0
-            pygame.draw.circle(screen, GREEN if is_ok else AMBER, (cx + 4, cooldown_y + 24), 4)
-            draw_text(api, font_sm, WHITE if is_ok else DIM, cx + 14, cooldown_y + 18)
+            pygame.draw.circle(screen, GREEN if is_ok else AMBER, (cx + 4, cooldown_y + 24 + row_offset), 4)
+            draw_text(api, font_sm, WHITE if is_ok else DIM, cx + 14, cooldown_y + 18 + row_offset)
             if not is_ok:
-                draw_text(f'{cd}s', font_sm, AMBER, cx + 14, cooldown_y + 34)
+                draw_text(f'{cd}s', font_sm, AMBER, cx + 14, cooldown_y + 34 + row_offset)
 
     draw_histogram(peak, 228)
-    draw_data_age(last_fetch, 306)
+    draw_data_age(last_fetch, 302)
     flush_to_fb()
 
 
@@ -511,7 +514,7 @@ def render_page_server(server_status, echo_hb, foxtrot_hb, peak, page):
             draw_text('OFFLINE', font_sm, RED, bx + 10, by + 30)
 
     draw_histogram(peak, 228)
-    draw_data_age(last_fetch, 306)
+    draw_data_age(last_fetch, 302)
     flush_to_fb()
 
 
