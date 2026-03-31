@@ -13,7 +13,9 @@ Five components:
 | Proxy server | — | Node.js / Express | Railway (`api.overheadtracker.com`) |
 | ESP32 firmware (4.0") | **Echo** | Arduino C++ on Freenove FNK0103S | Physical device (USB via `build.sh`, COM4) |
 | ESP32-S3 firmware (4.3") | **Foxtrot** | Arduino C++ on Waveshare ESP32-S3-Touch-LCD-4.3 | Physical device (USB via `arduino-cli`, COM7) |
+| ESP32-S3 firmware (3.49") | **Delta** | Arduino C++ on Waveshare ESP32-S3-Touch-LCD-3.49 | Physical device (USB via `build.sh delta`, COM8) |
 | Pi display | — | Python / Pygame on Raspberry Pi 3B+ | Physical device (3.5" TFT on `/dev/fb1`) |
+| 64×32 LED matrix | **Golf** | CircuitPython on Adafruit Matrix Portal M4 | Physical device (CIRCUITPY drive, COM11) |
 
 Live URL: https://greystoke1337.github.io/localized-air-traffic-tracker/
 Custom domain: https://overheadtracker.com
@@ -32,11 +34,13 @@ server/                     # Railway-hosted proxy (server.js, package.json)
 pi-display/                 # Raspberry Pi TFT display (display.py, watchdog.sh)
 tracker_live_fnk0103s/      # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
 tracker_foxtrot/            # Foxtrot — Waveshare 4.3 (ESP32-S3, RGB, 800×480, LovyanGFX immediate-mode)
+tracker_delta/              # Delta — Waveshare 3.49 (ESP32-S3, QSPI, 640×172, Arduino_GFX immediate-mode)
+tracker_golf/               # Golf — Adafruit Matrix Portal M4 (128×64 HUB75 LED matrix, CircuitPython)
 tools/                      # synthetic-data.js, mock-proxy.js, serial_monitor.ps1
 tests/                      # Desktop logic tests (test_flight_logic.c, test_parsing.cpp)
 ```
 
-Both firmware dirs share the same file split: `.ino` (setup/loop), `config.h`, `types.h`, `globals.h`, `lookup_tables.h`, `helpers.ino`, `display.ino`, `network.ino`, `touch.ino`, `wifi_setup.ino`, `sd_config.ino`, `serial_cmd.ino`, `secrets.h` (gitignored). Foxtrot adds `lgfx_config.h` and `esp_panel_board_supported_conf.h`. `lvgl_v8_port.h/.cpp` are present but stubbed out — do not restore them.
+Both firmware dirs share the same file split: `.ino` (setup/loop), `config.h`, `types.h`, `globals.h`, `lookup_tables.h`, `helpers.ino`, `display.ino`, `network.ino`, `touch.ino`, `wifi_setup.ino`, `sd_config.ino`, `serial_cmd.ino`, `secrets.h` (gitignored). Foxtrot adds `lgfx_config.h` and `esp_panel_board_supported_conf.h`.
 
 ---
 
@@ -78,23 +82,10 @@ The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B
 ### Web app change
 Edit `index.html`, test via `file://`, push to `master` (auto-deploys to GitHub Pages in ~60 s).
 
-### Proxy server change
-Edit `server/`, deploy via `/railway` skill or `cd server && railway up`. Verify at `https://api.overheadtracker.com/status`.
-
-### Echo firmware change (Freenove 4.0", COM4)
-Edit files in `tracker_live_fnk0103s/`. Use `./build.sh` to compile+flash, or `/flash-and-log echo`. Preview layout with `tft-preview.html`. Pre-push: `./build.sh safe`.
-
-### Foxtrot firmware change (Waveshare 4.3 non-B, COM7)
-Edit files in `tracker_foxtrot/`. Use `/flash-and-log foxtrot` to compile+flash. **Do not use `build.sh`** for Foxtrot. Rendering is LovyanGFX immediate-mode (`tft.fillRect`, `tft.drawString`) — no LVGL, no lock/unlock needed. **Do not restore `lvgl_v8_port.cpp`** — it must stay stubbed or it re-introduces an I2C driver conflict that crashes on boot.
-
-### Foxtrot demo mode
-Set `#define DEMO_MODE 1` in `tracker_foxtrot/config.h` to boot with 3 fake Sydney flights, skipping all WiFi/network code.
-
-### Package firmware for web flasher
-Run `./tools/package-firmware.sh` to compile Foxtrot and copy binaries to `firmware/`. Push to `master` to deploy the update to `overheadtracker.com/flash`. Use `--skip-compile` to package the last build without recompiling.
-
 ### Testing with synthetic data
 Web app: `index.html?demo=true&scenario=emergency`. Mock proxy: `node tools/mock-proxy.js normal 3000 --scenario crowded`.
+
+For Echo, Foxtrot, Delta, Golf, server, and Pi — see the `CLAUDE.md` in each subdirectory (`tracker_live_fnk0103s/`, `tracker_foxtrot/`, `tracker_delta/`, `tracker_golf/`, `server/`, `pi-display/`).
 
 ---
 

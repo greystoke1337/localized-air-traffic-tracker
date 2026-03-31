@@ -1,0 +1,4 @@
+settings.toml
+__pycache__/
+*.pyc
+adafruit-circuitpython-bundle-*/
