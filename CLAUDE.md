@@ -35,7 +35,7 @@ pi-display/                 # Raspberry Pi TFT display (display.py, watchdog.sh)
 tracker_live_fnk0103s/      # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
 tracker_foxtrot/            # Foxtrot — Waveshare 4.3 (ESP32-S3, RGB, 800×480, LovyanGFX immediate-mode)
 tracker_delta/              # Delta — Waveshare 3.49 (ESP32-S3, QSPI, 640×172, Arduino_GFX immediate-mode)
-tracker_golf/               # Golf — Adafruit Matrix Portal M4 (128×64 HUB75 LED matrix, CircuitPython)
+tracker_golf/               # Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix, CircuitPython)
 tools/                      # synthetic-data.js, mock-proxy.js, serial_monitor.ps1
 tests/                      # Desktop logic tests (test_flight_logic.c, test_parsing.cpp)
 ```

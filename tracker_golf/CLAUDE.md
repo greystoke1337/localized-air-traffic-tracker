@@ -22,6 +22,18 @@ Scrolling ticker or stacked layout: callsign + route + altitude/phase + speed.
 - G and B color channels are **swapped** on this panel: use `0x0000FF` for green, `0x00FF00` for blue
 - `terminalio.FONT` characters are 6px wide × 8px tall
 
+## Rotary encoder
+
+- **Hardware**: Adafruit I2C QT Rotary Encoder with NeoPixel (seesaw, default address `0x36`)
+- **Connection**: STEMMA QT port — no soldering, plug-and-play
+- **Purpose**: adjusts matrix brightness at runtime (0.05–1.0 in 0.05 steps per detent)
+- **Init**: `board.STEMMA_I2C()` then `Seesaw(i2c, addr=0x36)` — do NOT use `busio.I2C(board.SCL, board.SDA)`
+- **Read position**: `seesaw.encoder_position(0)` — `IncrementalEncoder` from `adafruit_seesaw.rotaryio` does not work on this board; use the raw seesaw method
+- **Brightness target**: `display.framebuffer.brightness` — `display.brightness` (FramebufferDisplay attribute) has no visual effect
+- **Encoder LED**: seesaw pin 6, controlled via `adafruit_seesaw.neopixel.NeoPixel`; set to off (`fill(0)`) on boot
+- **Encoder button**: seesaw pin 24 — `ss.pin_mode(24, ss.INPUT_PULLUP)` + `ss.digital_read(24)` (not currently used in production code)
+- **Library**: `adafruit_seesaw` is NOT in the default CircuitPython bundle that ships with the device — install manually to `CIRCUITPY:/lib/`
+
 ## Libraries Required
 
 Install from the [Adafruit CircuitPython Bundle](https://circuitpython.org/libraries) into `/lib` on the CIRCUITPY drive:
@@ -33,6 +45,7 @@ Install from the [Adafruit CircuitPython Bundle](https://circuitpython.org/libra
 - `adafruit_requests.mpy`
 - `adafruit_connection_manager.mpy`
 - `neopixel.mpy`
+- `adafruit_seesaw/` — **not in the default bundle**; download separately from the bundle and copy to `CIRCUITPY:/lib/adafruit_seesaw/`
 
 Built into CircuitPython firmware (no install needed):
 - `rgbmatrix`, `framebufferio`, `displayio`, `terminalio`, `board`
@@ -66,23 +79,27 @@ s.close()
 
 ## Config (settings.toml — gitignored)
 
-Copy `settings.toml.template` to `settings.toml` on the CIRCUITPY drive:
+Copy `settings.toml.template` to `settings.toml` on the CIRCUITPY drive and fill in real values:
 
 ```toml
 CIRCUITPY_WIFI_SSID = "your_ssid"
 CIRCUITPY_WIFI_PASSWORD = "your_password"
 HOME_LAT = -33.8688
 HOME_LON = 151.2093
-GEOFENCE_KM = 10
+GEOFENCE_KM = 20
 ALT_FLOOR_FT = 1000
 LOCATION_NAME = "Home"
 ```
+
+`GEOFENCE_KM` defaults to `10` in code but `20` is recommended for the LED matrix — the wider radius ensures enough flights appear on the small display.
 
 ## File Layout
 
 ```
 tracker_golf/
   code.py                  # Main CircuitPython entry point (copy to CIRCUITPY root)
+  test_brightness.py       # Dev-only: radar sweep + Sydney time via worldtimeapi.org
+                           # Verifies WiFi, internet, and display; not deployed in production
   settings.toml.template   # Safe to commit — fill in and copy as settings.toml
   .gitignore               # Ignores settings.toml
   CLAUDE.md                # This file
