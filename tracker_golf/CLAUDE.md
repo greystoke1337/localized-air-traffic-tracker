@@ -15,7 +15,8 @@ Scrolling ticker or stacked layout: callsign + route + altitude/phase + speed.
 
 ## Key Hardware Facts
 
-- Panel is **64×32**, not 128×64 — initialize as `Matrix(width=64, height=32, bit_depth=2)`
+- Panel is **64×32**, not 128×64 — initialize as `Matrix(width=64, height=32, bit_depth=4)`
+- `bit_depth=4` gives 16 PWM levels for smooth fade gradients; `bit_depth=2` (4 levels) is too coarse for animations
 - Panel is mounted **upside down** — always set `display.rotation = 180`
 - `Matrix` sets `auto_refresh=False` internally — must call `display.refresh()` to push to hardware
 - G and B color channels are **swapped** on this panel: use `0x0000FF` for green, `0x00FF00` for blue
