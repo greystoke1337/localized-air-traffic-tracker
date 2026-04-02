@@ -1,6 +1,6 @@
 ---
 name: deploy-display
-description: Deploy display.py to the Pi TFT display. Use when the user says "deploy display", "push display", "update display", or after making changes to pi-display/display.py.
+description: Deploy display.py to the Pi TFT display. Use when the user says "deploy display", "deploy pi display", "push display", "update display", or after making changes to pi-display/display.py. Do NOT use for Golf/CircuitPython/CIRCUITPY deployments.
 ---
 
 # Deploy Pi TFT Display

@@ -20,7 +20,12 @@ Scrolling ticker or stacked layout: callsign + route + altitude/phase + speed.
 - Panel is mounted **upside down** — always set `display.rotation = 180`
 - `Matrix` sets `auto_refresh=False` internally — must call `display.refresh()` to push to hardware
 - G and B color channels are **swapped** on this panel: use `0x0000FF` for green, `0x00FF00` for blue
+- Color derivation with G/B swap — `0xRRGGBB`: R stays R; G hex → B on display; B hex → G on display
+  - Amber/orange on display: `0xFF00A0` (full red + ~63% green, no blue)
+  - To tune amber: raise `0xA0` toward `0xFF` for more yellow, lower toward `0x60` for deeper orange
 - `terminalio.FONT` characters are 6px wide × 8px tall
+- **Pseudo-bold / thick text**: render the same label 4 times offset by `(dx, dy)` in `((0,0),(1,0),(0,1),(1,1))` — each font pixel becomes a 2×2 block. No custom font needed.
+- **Letter spacing**: `bitmap_label` has no letter-spacing option. Render each character as a separate label, stepping `CHAR_W + GAP` px between centers.
 
 ## Rotary encoder
 
@@ -54,11 +59,13 @@ Built into CircuitPython firmware (no install needed):
 
 No compilation — edit and copy files directly to the CIRCUITPY drive:
 
-1. Connect Matrix Portal M4 via USB — CIRCUITPY drive appears
+1. Connect Matrix Portal M4 via USB — CIRCUITPY drive appears (drive letter varies; find via `wmic logicaldisk get DeviceID,VolumeName`)
 2. **Always use Python's `shutil.copy2` to copy files** — `cp` corrupts files on FAT32
 3. Copy `tracker_golf/code.py` → `CIRCUITPY:/code.py`
 4. Copy `tracker_golf/settings.toml` → `CIRCUITPY:/settings.toml` (WiFi + location, gitignored)
 5. Device auto-reloads on file save
+
+Use the `deploy-golf` skill in Claude Code to automate steps 1–3 with syntax checking.
 
 ## Serial Monitor
 
