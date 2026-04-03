@@ -16,7 +16,7 @@ const rateLimit  = require('express-rate-limit');
 
 const app      = express();
 const PORT     = parseInt(process.env.PORT, 10) || 3000;
-const CACHE_MS         = 15000;
+const CACHE_MS         = 5000;
 const ROUTE_CACHE_MS   = 30 * 60 * 1000;
 const ROUTE_CACHE_FILE = process.env.ROUTE_CACHE_FILE || __dirname + '/route-cache.json';
 const KNOWN_ROUTES_FILE = process.env.KNOWN_ROUTES_FILE || __dirname + '/known-routes.json';
@@ -1185,6 +1185,10 @@ app.get('/flights', async (req, res) => {
     return res.status(503).json({ error: 'Proxy is disabled' });
   }
 
+  if (req.query.demo === 'true') {
+    return res.json({ ac: [{ flight: 'QFA421', alt_baro: 35000, gs: 480, r: 'VH-OQA' }] });
+  }
+
   const { lat, lon, radius } = req.query;
   if (!lat || !lon || !radius) {
     addLog({ type: 'ERR', client, error: 'missing params' });
@@ -1283,14 +1287,23 @@ app.get('/flights', async (req, res) => {
     promise.finally(() => inFlight.delete(key)).catch(() => {});
   }
 
+  const limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
+
   try {
     const data = await inFlight.get(key);
+    if (limit && Array.isArray(data.ac)) {
+      return res.json({ ...data, ac: data.ac.slice(0, limit) });
+    }
     return res.json(data);
   } catch (e) {
     stats.errors++;
     if (hit) {
       addLog({ type: 'HIT', client, key: key + ' (stale fallback)' });
-      return res.json(hit.data);
+      const data = hit.data;
+      if (limit && Array.isArray(data.ac)) {
+        return res.json({ ...data, ac: data.ac.slice(0, limit) });
+      }
+      return res.json(data);
     }
     res.status(502).json({ error: 'Flight data temporarily unavailable' });
   }

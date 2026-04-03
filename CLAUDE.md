@@ -61,7 +61,7 @@ Use feature branches and pull requests for non-trivial changes.
 | Planespotters.net | Aircraft photos by registration | None |
 | CartoDB | Dark map tiles (Leaflet) | None |
 
-The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B APIs in parallel and uses the fastest response. Results are cached for 10 s. Route lookups are non-blocking (fire-and-forget, cached for next request). New routes are tracked in `known-routes.json` (persistent) and surfaced via `/routes/new`, daily reports, and a nightly discovery email at 21:00 AEST.
+The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B APIs in parallel and uses the fastest response. Results are cached for 5 s. Route lookups are non-blocking (fire-and-forget, cached for next request). New routes are tracked in `known-routes.json` (persistent) and surfaced via `/routes/new`, daily reports, and a nightly discovery email at 21:00 AEST.
 
 ---
 

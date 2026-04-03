@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golf LED Color Picker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d0d;
+    color: #ccc;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 32px;
+  }
+
+  .layout {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* ── Left: picker ── */
+  .picker-col {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .swatch-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .swatch-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .swatch-label {
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #555;
+  }
+
+  .swatch {
+    width: 100px;
+    height: 100px;
+    border-radius: 4px;
+    border: 1px solid #333;
+  }
+
+  .arrow {
+    font-size: 20px;
+    color: #444;
+    margin-top: 20px;
+  }
+
+  /* Native color picker, styled */
+  input[type=color] {
+    -webkit-appearance: none;
+    width: 100px;
+    height: 100px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 0;
+    background: none;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+  /* ── Sliders ── */
+  .sliders {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 220px;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .slider-row label {
+    font-size: 11px;
+    width: 12px;
+    text-align: center;
+    font-weight: bold;
+  }
+
+  .slider-row label.r { color: #ff4444; }
+  .slider-row label.g { color: #44ff44; }
+  .slider-row label.b { color: #4488ff; }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+  }
+  #slider-r { background: linear-gradient(to right, #000, #ff0000); }
+  #slider-g { background: linear-gradient(to right, #000, #00ff00); }
+  #slider-b { background: linear-gradient(to right, #000, #0000ff); }
+
+  .slider-val {
+    font-size: 11px;
+    width: 28px;
+    text-align: right;
+    color: #888;
+  }
+
+  /* ── Hex output ── */
+  .hex-output {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 220px;
+  }
+
+  .hex-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .hex-row-label {
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #555;
+    white-space: nowrap;
+  }
+
+  .hex-value {
+    font-size: 15px;
+    font-weight: bold;
+    color: #eee;
+    letter-spacing: 1px;
+  }
+
+  .copy-btn {
+    background: none;
+    border: 1px solid #333;
+    border-radius: 3px;
+    color: #666;
+    font-family: inherit;
+    font-size: 10px;
+    padding: 3px 7px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .copy-btn:hover { border-color: #666; color: #ccc; }
+  .copy-btn.copied { border-color: #4a4; color: #4a4; }
+
+  /* ── Matrix preview ── */
+  .preview-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .preview-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #555;
+  }
+
+  canvas {
+    border: 1px solid #222;
+    border-radius: 2px;
+    image-rendering: pixelated;
+  }
+
+  /* ── Presets ── */
+  .presets {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 220px;
+  }
+
+  .presets-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #555;
+  }
+
+  .preset-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .preset-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 3px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color 0.1s, transform 0.1s;
+    position: relative;
+  }
+  .preset-dot:hover { transform: scale(1.1); border-color: #555; }
+  .preset-dot.active { border-color: #fff; }
+  .preset-dot title { display: none; }
+
+  .note {
+    font-size: 10px;
+    color: #444;
+    text-align: center;
+    line-height: 1.6;
+    max-width: 280px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Golf LED Matrix · Color Picker</h1>
+
+<div class="layout">
+
+  <!-- Left column -->
+  <div class="picker-col">
+
+    <div class="swatch-row">
+      <div class="swatch-box">
+        <div class="swatch-label">Pick target color</div>
+        <input type="color" id="color-input" value="#ff9a00">
+      </div>
+      <div class="arrow">→</div>
+      <div class="swatch-box">
+        <div class="swatch-label">Looks like on panel</div>
+        <div class="swatch" id="display-swatch"></div>
+      </div>
+    </div>
+
+    <div class="sliders">
+      <div class="slider-row">
+        <label class="r">R</label>
+        <input type="range" id="slider-r" min="0" max="255" value="255">
+        <span class="slider-val" id="val-r">255</span>
+      </div>
+      <div class="slider-row">
+        <label class="g">G</label>
+        <input type="range" id="slider-g" min="0" max="255" value="154">
+        <span class="slider-val" id="val-g">154</span>
+      </div>
+      <div class="slider-row">
+        <label class="b">B</label>
+        <input type="range" id="slider-b" min="0" max="255" value="0">
+        <span class="slider-val" id="val-b">0</span>
+      </div>
+    </div>
+
+    <div class="hex-output">
+      <div class="hex-row">
+        <span class="hex-row-label">Code value</span>
+        <span class="hex-value" id="code-hex">0xFF009A</span>
+        <button class="copy-btn" id="copy-code">COPY</button>
+      </div>
+      <div class="hex-row">
+        <span class="hex-row-label">Target color</span>
+        <span class="hex-value" id="target-hex">0xFF9A00</span>
+        <button class="copy-btn" id="copy-target">COPY</button>
+      </div>
+    </div>
+
+    <div class="presets">
+      <div class="presets-label">Presets</div>
+      <div class="preset-grid" id="preset-grid"></div>
+    </div>
+
+  </div>
+
+  <!-- Right column: matrix preview -->
+  <div class="preview-col">
+    <div class="preview-label">64 × 32 panel preview</div>
+    <canvas id="matrix-canvas" width="640" height="320"></canvas>
+    <div class="note">
+      G and B channels are swapped on this panel.<br>
+      "Code value" is what you put in <code>code.py</code>.<br>
+      "Target color" is what you'll see on the display.
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Presets: [name, target display color as 0xRRGGBB]
+const PRESETS = [
+  { name: "Amber",      target: 0xFF9A00 },
+  { name: "Warm white", target: 0xFFEECC },
+  { name: "Red",        target: 0xFF0000 },
+  { name: "Green",      target: 0x00FF00 },
+  { name: "Blue",       target: 0x0000FF },
+  { name: "Cyan",       target: 0x00FFFF },
+  { name: "Magenta",    target: 0xFF00FF },
+  { name: "Yellow",     target: 0xFFFF00 },
+  { name: "Orange",     target: 0xFF6000 },
+  { name: "Teal",       target: 0x00CC88 },
+  { name: "Purple",     target: 0x8800FF },
+  { name: "White",      target: 0xFFFFFF },
+];
+
+// G and B channels are swapped:
+//   code 0xRRGGBB → display shows 0xRR BB GG
+//   so to get display color 0xRRGGBB, you write code 0xRR BB GG
+function displayToCode(r, g, b) { return (r << 16) | (b << 8) | g; }
+function codeToDisplay(r, g, b) { return (r << 16) | (b << 8) | g; } // same swap
+
+function toHex(n) {
+  return '0x' + n.toString(16).toUpperCase().padStart(6, '0');
+}
+function hexColor(n) {
+  return '#' + n.toString(16).padStart(6, '0');
+}
+
+// ── Canvas matrix preview ──────────────────────────────────────────────────
+const canvas = document.getElementById('matrix-canvas');
+const ctx = canvas.getContext('2d');
+const COLS = 64, ROWS = 32, SCALE = 10, GAP = 0;
+
+function drawMatrix(displayR, displayG, displayB) {
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const pixW = SCALE - GAP;
+  const pixH = SCALE - GAP;
+
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const x = col * SCALE;
+      const y = row * SCALE;
+
+      // Outer LED housing
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(x, y, SCALE, SCALE);
+
+      // Inner lit pixel
+      const alpha = 0.85;
+      ctx.fillStyle = `rgba(${displayR},${displayG},${displayB},${alpha})`;
+      ctx.beginPath();
+      ctx.arc(x + SCALE/2, y + SCALE/2, pixW/2 - 0.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Subtle glow
+      const grd = ctx.createRadialGradient(
+        x + SCALE/2, y + SCALE/2, 0,
+        x + SCALE/2, y + SCALE/2, SCALE * 0.9
+      );
+      grd.addColorStop(0, `rgba(${displayR},${displayG},${displayB},0.25)`);
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(x, y, SCALE, SCALE);
+    }
+  }
+}
+
+// ── Sync state ─────────────────────────────────────────────────────────────
+let rTarget = 255, gTarget = 154, bTarget = 0;
+
+function update() {
+  const codeVal  = displayToCode(rTarget, gTarget, bTarget);
+  const targetVal = (rTarget << 16) | (gTarget << 8) | bTarget;
+
+  // Code hex has G/B swapped
+  const codeR = (codeVal >> 16) & 0xFF;
+  const codeG = (codeVal >> 8)  & 0xFF;
+  const codeB =  codeVal        & 0xFF;
+
+  // Swatch shows what user will see on display
+  document.getElementById('display-swatch').style.background =
+    `rgb(${rTarget},${gTarget},${bTarget})`;
+
+  document.getElementById('code-hex').textContent   = toHex(codeVal);
+  document.getElementById('target-hex').textContent = toHex(targetVal);
+
+  // Sync color picker
+  document.getElementById('color-input').value = hexColor(targetVal);
+
+  // Sync sliders
+  document.getElementById('slider-r').value = rTarget;
+  document.getElementById('slider-g').value = gTarget;
+  document.getElementById('slider-b').value = bTarget;
+  document.getElementById('val-r').textContent = rTarget;
+  document.getElementById('val-g').textContent = gTarget;
+  document.getElementById('val-b').textContent = bTarget;
+
+  drawMatrix(rTarget, gTarget, bTarget);
+}
+
+// ── Color picker ───────────────────────────────────────────────────────────
+document.getElementById('color-input').addEventListener('input', e => {
+  const hex = e.target.value;
+  rTarget = parseInt(hex.slice(1,3), 16);
+  gTarget = parseInt(hex.slice(3,5), 16);
+  bTarget = parseInt(hex.slice(5,7), 16);
+  update();
+});
+
+// ── Sliders ────────────────────────────────────────────────────────────────
+['r','g','b'].forEach(ch => {
+  document.getElementById(`slider-${ch}`).addEventListener('input', e => {
+    const v = parseInt(e.target.value);
+    if (ch === 'r') rTarget = v;
+    if (ch === 'g') gTarget = v;
+    if (ch === 'b') bTarget = v;
+    update();
+  });
+});
+
+// ── Copy buttons ───────────────────────────────────────────────────────────
+function copyText(id, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById(id);
+    btn.textContent = 'COPIED';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'COPY'; btn.classList.remove('copied'); }, 1200);
+  });
+}
+
+document.getElementById('copy-code').addEventListener('click', () => {
+  copyText('copy-code', document.getElementById('code-hex').textContent);
+});
+document.getElementById('copy-target').addEventListener('click', () => {
+  copyText('copy-target', document.getElementById('target-hex').textContent);
+});
+
+// ── Presets ────────────────────────────────────────────────────────────────
+const grid = document.getElementById('preset-grid');
+PRESETS.forEach(p => {
+  const btn = document.createElement('div');
+  btn.className = 'preset-dot';
+  btn.style.background = hexColor(p.target);
+  btn.title = p.name;
+  btn.setAttribute('data-name', p.name);
+  btn.addEventListener('click', () => {
+    rTarget = (p.target >> 16) & 0xFF;
+    gTarget = (p.target >>  8) & 0xFF;
+    bTarget =  p.target        & 0xFF;
+    document.querySelectorAll('.preset-dot').forEach(d => d.classList.remove('active'));
+    btn.classList.add('active');
+    update();
+  });
+  grid.appendChild(btn);
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+update();
+</script>
+</body>
+</html>

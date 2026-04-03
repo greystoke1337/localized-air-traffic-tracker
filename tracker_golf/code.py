@@ -1,139 +1,179 @@
-import board
-import displayio
+import os
 import time
-import math
+import board
+import busio
+import displayio
 import terminalio
+from digitalio import DigitalInOut
 from adafruit_matrixportal.matrix import Matrix
 from adafruit_display_text import bitmap_label
-from adafruit_seesaw.seesaw import Seesaw
-from adafruit_seesaw.neopixel import NeoPixel as SeesawNeoPixel
+from adafruit_bitmap_font import bitmap_font
+import adafruit_esp32spi.adafruit_esp32spi as esp32spi
+import adafruit_requests
+from adafruit_connection_manager import get_radio_socketpool, get_radio_ssl_context
 
 # ── Hardware ───────────────────────────────────────────────────
 matrix = Matrix(width=64, height=32, bit_depth=4)
 display = matrix.display
 display.rotation = 180
 
-i2c = board.STEMMA_I2C()
-seesaw = Seesaw(i2c, addr=0x36)
-enc_pixel = SeesawNeoPixel(seesaw, 6, 1)
-enc_pixel.fill(0)
-brightness = 0.5
-display.framebuffer.brightness = brightness
-last_enc_pos = seesaw.encoder_position(0)
 
 # G/B channels swapped on this panel:
 #   0x0000FF → green,  0x00FF00 → blue,  0xFF0000 → red
-# Yellow on display = R + G = R_hex + B_hex = 0xFF00xx
-# G/B swap: amber on display = R_hex + B_hex (B_hex drives the G channel)
-AMBER = 0xFF00A0
+AMBER      = 0xFF00A0
+YELLOW     = 0x700070
+CYAN       = 0x005050
+GREEN      = 0x000050
+WHITE      = 0xFFFFFF
+DEEP_BLUE  = 0x004000
+LIGHT_BLUE = 0x008060
 
-# ── Boot: radar sweep ──────────────────────────────────────────
-W, H = 64, 32
-CX, CY, R = 31, 15, 13
+# ── Location ───────────────────────────────────────────────────
+HOME_LAT    = -33.8559
+HOME_LON    = 151.1440
+GEOFENCE_KM = 20
 
-radar_pal = displayio.Palette(7)
-for i, c in enumerate([0x000000, 0x000018, 0x000040, 0x000070, 0x0000A0, 0x0000D0, 0x0000FF]):
-    radar_pal[i] = c
+# ── WiFi ───────────────────────────────────────────────────────
+SSID     = os.getenv("CIRCUITPY_WIFI_SSID")
+PASSWORD = os.getenv("CIRCUITPY_WIFI_PASSWORD")
 
-bmp = displayio.Bitmap(W, H, 7)
-g = displayio.Group()
-g.append(displayio.TileGrid(bmp, pixel_shader=radar_pal))
-display.root_group = g
+esp32_cs    = DigitalInOut(board.ESP_CS)
+esp32_ready = DigitalInOut(board.ESP_BUSY)
+esp32_reset = DigitalInOut(board.ESP_RESET)
+spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
+esp = esp32spi.ESP_SPIcontrol(spi, esp32_cs, esp32_ready, esp32_reset)
 
-circle = set()
-for deg in range(360):
-    a = math.radians(deg)
-    x, y = int(CX + R * math.cos(a)), int(CY + R * math.sin(a))
-    if 0 <= x < W and 0 <= y < H:
-        circle.add((x, y))
-for x, y in circle:
-    bmp[x, y] = 2
-bmp[CX, CY] = 3
+while not esp.is_connected:
+    try:
+        esp.connect_AP(SSID, PASSWORD)
+    except RuntimeError:
+        time.sleep(1)
 
-def sweep(angle_deg):
-    a = math.radians(angle_deg)
-    pts = []
-    for r in range(1, R + 1):
-        x, y = int(CX + r * math.cos(a)), int(CY + r * math.sin(a))
-        if 0 <= x < W and 0 <= y < H:
-            pts.append((x, y))
-    return pts
+pool        = get_radio_socketpool(esp)
+ssl_context = get_radio_ssl_context(esp)
+requests    = adafruit_requests.Session(pool, ssl_context)
 
-active = {}
-for frame in range(int(360 / 4 * 2)):
-    if frame % 2 == 0:
-        for key in list(active):
-            x, y = key
-            v = active[key] - 1
-            if v <= 0:
-                del active[key]
-                bmp[x, y] = 2 if key in circle else 0
-            else:
-                active[key] = v
-                bmp[x, y] = v
-    pts = sweep(frame * 4)
-    n = len(pts)
-    for i, (x, y) in enumerate(pts):
-        v = 6 if i >= n - 4 else 5
-        active[(x, y)] = v
-        bmp[x, y] = v
-    bmp[CX, CY] = 3
-    display.refresh()
+# ── Static flight data ─────────────────────────────────────────
+CHAR_W    = 6
+GAP       = 1
+STEP      = CHAR_W + GAP
+ALT_BAR_H = 27
+SPD_BAR_H = 24
 
-for _ in range(4):
-    for x, y in circle:
-        bmp[x, y] = 6
-    display.refresh()
-    time.sleep(0.05)
-    for x, y in circle:
-        bmp[x, y] = 0
-    display.refresh()
-    time.sleep(0.05)
+tiny_font = bitmap_font.load_font("fonts/tom-thumb.bdf")
 
-# Title
-title = displayio.Group()
-title.append(bitmap_label.Label(terminalio.FONT, text="OVERHEAD",
-    color=AMBER, anchor_point=(0.5, 0.5), anchored_position=(32, 10)))
-title.append(bitmap_label.Label(terminalio.FONT, text="TRACKER",
-    color=0x000040, anchor_point=(0.5, 0.5), anchored_position=(32, 22)))
-display.root_group = title
-display.refresh()
-time.sleep(2)
+def make_bar(x, height, color):
+    palette = displayio.Palette(1)
+    palette[0] = color
+    bitmap = displayio.Bitmap(1, height, 1)
+    return displayio.TileGrid(bitmap, pixel_shader=palette, x=x, y=32 - height)
 
-# ── Fake flight ────────────────────────────────────────────────
-CALLSIGN = "QFA421"
+def fetch_flight():
+    try:
+        url = f"https://api.overheadtracker.com/flights?lat={HOME_LAT}&lon={HOME_LON}&radius={GEOFENCE_KM}&limit=1"
+        r = requests.get(url)
+        data = r.json()
+        r.close()
+        ac = data.get("ac", [])
+        if ac:
+            callsign = (ac[0].get("flight") or "------").strip()
+            route    = ac[0].get("route") or ""
+            return callsign, route
+    except Exception as e:
+        print("Fetch error:", e)
+        try:
+            esp.reset()
+            while not esp.is_connected:
+                try:
+                    esp.connect_AP(SSID, PASSWORD)
+                except RuntimeError:
+                    time.sleep(1)
+        except Exception as e2:
+            print("Reset error:", e2)
+    return "------", ""
 
-# ── Flight display — thick callsign with 1px letter gap ────────
-# Each character is rendered as 4 overlapping labels (+1px x/y) for
-# pseudo-bold. Characters are placed individually so we can add a
-# 1px gap between them (bitmap_label has no letter-spacing option).
-CHAR_W = 6   # terminalio.FONT character width in px
-GAP    = 1   # gap between characters in px
-STEP   = CHAR_W + GAP
-
-n       = len(CALLSIGN)
-total_w = n * CHAR_W + (n - 1) * GAP
-start_x = (64 - total_w) // 2   # left edge of first character
+# ── Build UI once ─────────────────────────────────────────────
+MAX_CHARS = 8  # pre-allocate for longest expected callsign
 
 ui = displayio.Group()
-for i, ch in enumerate(CALLSIGN):
-    cx = start_x + i * STEP + CHAR_W // 2   # center x of this char
+ui.append(make_bar(0,  ALT_BAR_H, DEEP_BLUE))
+ui.append(make_bar(63, SPD_BAR_H, LIGHT_BLUE))
+
+# Pre-allocate callsign character labels (4 layers each for thick text)
+char_labels = []
+for i in range(MAX_CHARS):
+    row = []
     for dx, dy in ((0, 0), (1, 0), (0, 1), (1, 1)):
-        ui.append(bitmap_label.Label(
-            terminalio.FONT, text=ch, color=AMBER,
+        lbl = bitmap_label.Label(
+            terminalio.FONT, text=" ", color=AMBER,
             anchor_point=(0.5, 0.5),
-            anchored_position=(cx + dx, 16 + dy),
-        ))
+            anchored_position=(0, 6 + dy),
+        )
+        ui.append(lbl)
+        row.append(lbl)
+    char_labels.append(row)
+
+route_label_top = bitmap_label.Label(
+    tiny_font, text="", color=WHITE,
+    anchor_point=(0.5, 0.5), anchored_position=(32, 19),
+)
+route_label_bot = bitmap_label.Label(
+    tiny_font, text="", color=WHITE,
+    anchor_point=(0.5, 0.5), anchored_position=(32, 27),
+)
+ui.append(route_label_top)
+ui.append(route_label_bot)
+
+# Progress bar: 64×1 bitmap at bottom row, fills left→right over REFRESH_S
+prog_palette = displayio.Palette(2)
+prog_palette[0] = 0x000000
+prog_palette[1] = AMBER
+prog_bitmap = displayio.Bitmap(64, 1, 2)
+ui.append(displayio.TileGrid(prog_bitmap, pixel_shader=prog_palette, x=0, y=31))
+
 display.root_group = ui
-display.refresh()
 
-print("Showing:", CALLSIGN)
+def update_callsign(callsign):
+    n       = len(callsign)
+    total_w = n * CHAR_W + (n - 1) * GAP
+    start_x = (64 - total_w) // 2
+    for i in range(MAX_CHARS):
+        ch = callsign[i] if i < n else " "
+        cx = start_x + i * STEP + CHAR_W // 2 if i < n else 0
+        for j, (dx, _) in enumerate(((0, 0), (1, 0), (0, 1), (1, 1))):
+            char_labels[i][j].text = ch
+            char_labels[i][j].anchored_position = (cx + dx, char_labels[i][j].anchored_position[1])
 
-# ── Encoder brightness ─────────────────────────────────────────
+def update_progress(pixel):
+    for x in range(64):
+        prog_bitmap[x, 0] = 1 if x < pixel else 0
+
+# ── Main loop ──────────────────────────────────────────────────
+REFRESH_S      = 5
+PIXEL_INTERVAL = REFRESH_S / 64
+last_fetch     = 0
+current_pixel  = 0
+last_pixel_t   = 0
+
 while True:
-    pos = seesaw.encoder_position(0)
-    if pos != last_enc_pos:
-        brightness = max(0.05, min(1.0, brightness + (pos - last_enc_pos) * 0.05))
-        display.framebuffer.brightness = brightness
-        last_enc_pos = pos
+    now = time.monotonic()
+
+    if now - last_fetch >= REFRESH_S:
+        last_fetch    = time.monotonic()
+        current_pixel = 0
+        last_pixel_t  = last_fetch
+        callsign, route = fetch_flight()
+        update_callsign(callsign)
+        parts = route.split(" > ", 1) if route else []
+        route_label_top.text = parts[0] if len(parts) > 0 else ""
+        route_label_bot.text = parts[1] if len(parts) > 1 else ""
+        update_progress(0)
+        print("Showing:", callsign, route)
+
+    if current_pixel < 64 and now - last_pixel_t >= PIXEL_INTERVAL:
+        current_pixel += 1
+        last_pixel_t  += PIXEL_INTERVAL
+        update_progress(current_pixel)
+
+    display.refresh()
     time.sleep(0.05)

@@ -29,6 +29,8 @@ Scrolling ticker or stacked layout: callsign + route + altitude/phase + speed.
 
 ## Rotary encoder
 
+> **Not currently wired up in `code.py`** — the import, hardware init, and brightness logic were removed temporarily. The hardware notes below are preserved for when it's re-added.
+
 - **Hardware**: Adafruit I2C QT Rotary Encoder with NeoPixel (seesaw, default address `0x36`)
 - **Connection**: STEMMA QT port — no soldering, plug-and-play
 - **Purpose**: adjusts matrix brightness at runtime (0.05–1.0 in 0.05 steps per detent)
