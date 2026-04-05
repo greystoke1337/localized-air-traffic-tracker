@@ -28,6 +28,8 @@
 #   ./build.sh foxtrot-stress 10 COM7 transition → Foxtrot stress with transition mode
 #   ./build.sh foxtrot-proxy-host 192.168.86.30 3001 COM7 → patch Foxtrot HOST+PORT + compile + flash
 #   OVERHEAD_TRACKER_IP=x.x.x.x ./build.sh ota  → OTA to specific IP
+#   ./build.sh golf              → compile + upload Golf (Matrix Portal M4) to COM9 (auto-touches bootloader)
+#   ./build.sh golf-compile      → compile Golf only
 #
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -38,10 +40,14 @@ FQBN="esp32:esp32:esp32:PartitionScheme=min_spiffs"
 FOXTROT_SKETCH="tracker_foxtrot/tracker_foxtrot.ino"
 FOXTROT_FQBN="esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB"
 FOXTROT_BUILD_DIR="/tmp/overhead-tracker-foxtrot-build"
-DELTA_SKETCH="tracker_delta/tracker_delta.ino"
-DELTA_FQBN="esp32:esp32:esp32s3:PSRAM=opi,USBMode=default,PartitionScheme=app3M_fat9M_16MB,FlashSize=16M"
+DELTA_SKETCH="delta_display/delta_display.ino"
+DELTA_FQBN="esp32:esp32:esp32s3:PSRAM=opi,USBMode=hwcdc,PartitionScheme=app3M_fat9M_16MB,FlashSize=16M"
 DELTA_BUILD_DIR="/tmp/overhead-tracker-delta-build"
 DELTA_PORT="${DELTA_PORT:-COM8}"
+GOLF_SKETCH="tracker_golf_m4/tracker_golf_m4.ino"
+GOLF_FQBN="adafruit:samd:adafruit_matrixportal_m4"
+GOLF_BUILD_DIR="/tmp/overhead-tracker-golf-build"
+GOLF_PORT="${GOLF_PORT:-COM9}"
 BUILD_DIR="/tmp/overhead-tracker-build"
 BAUD=115200
 OTA_HOST="${OVERHEAD_TRACKER_IP:-overhead-tracker.local}"
@@ -645,6 +651,70 @@ run_delta_compile() {
   info "Delta compile complete."
 }
 
+# ── Golf compile + upload ─────────────────────────────────────────────────────
+run_golf() {
+  local run_port="${2:-$GOLF_PORT}"
+  info "COMPILE Golf ($GOLF_FQBN)"
+  mkdir -p "$GOLF_BUILD_DIR"
+  "$ARDUINO_CLI" compile \
+    $(config_flag) \
+    --fqbn        "$GOLF_FQBN" \
+    --build-path  "$GOLF_BUILD_DIR" \
+    "$GOLF_SKETCH"
+
+  # Touch the running port at 1200 baud — triggers SAMD bootloader reset
+  info "1200-baud touch on $run_port → waiting for bootloader port..."
+  python -c "
+import serial, time, sys
+try:
+    s = serial.Serial('$run_port', 1200, timeout=1)
+    s.close()
+except Exception as e:
+    print('Touch failed:', e, file=sys.stderr)
+"
+
+  # Poll for the bootloader port (COM10) to enumerate — up to 5 seconds
+  local boot_port
+  boot_port=$(python -c "
+import serial.tools.list_ports, time, sys
+deadline = time.time() + 5
+seen = {'$run_port', 'COM1'}
+while time.time() < deadline:
+    ports = {p.device for p in serial.tools.list_ports.comports()}
+    new = ports - seen
+    if new:
+        print(sorted(new)[-1])
+        sys.exit(0)
+    time.sleep(0.2)
+print('', end='')
+")
+
+  if [ -z "$boot_port" ]; then
+    echo "ERROR: bootloader port not found after 1200-baud touch. Is the board connected?" >&2
+    exit 1
+  fi
+
+  info "UPLOAD Golf → $boot_port (bootloader)"
+  "$ARDUINO_CLI" upload \
+    $(config_flag) \
+    --fqbn        "$GOLF_FQBN" \
+    --port        "$boot_port" \
+    --input-dir   "$GOLF_BUILD_DIR" \
+    "$GOLF_SKETCH"
+  info "Golf upload complete."
+}
+
+run_golf_compile() {
+  info "COMPILE Golf ($GOLF_FQBN)"
+  mkdir -p "$GOLF_BUILD_DIR"
+  "$ARDUINO_CLI" compile \
+    $(config_flag) \
+    --fqbn        "$GOLF_FQBN" \
+    --build-path  "$GOLF_BUILD_DIR" \
+    "$GOLF_SKETCH"
+  info "Golf compile complete."
+}
+
 # ── Safe (test + validate — full pre-push check) ─────────────────────────────
 run_safe() {
   info "SAFE — full pre-push validation"
@@ -673,5 +743,7 @@ case "$CMD" in
   foxtrot-proxy-host) run_foxtrot_proxy_host "$@" ;;
   delta)            run_delta "$@" ;;
   delta-compile)    run_delta_compile ;;
+  golf)             run_golf "$@" ;;
+  golf-compile)     run_golf_compile ;;
   all|*)            run_compile && run_upload "$@" ;;
 esac

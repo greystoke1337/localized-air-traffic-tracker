@@ -15,7 +15,7 @@ Five components:
 | ESP32-S3 firmware (4.3") | **Foxtrot** | Arduino C++ on Waveshare ESP32-S3-Touch-LCD-4.3 | Physical device (USB via `arduino-cli`, COM7) |
 | ESP32-S3 firmware (3.49") | **Delta** | Arduino C++ on Waveshare ESP32-S3-Touch-LCD-3.49 | Physical device (USB via `build.sh delta`, COM8) |
 | Pi display | — | Python / Pygame on Raspberry Pi 3B+ | Physical device (3.5" TFT on `/dev/fb1`) |
-| 64×32 LED matrix | **Golf** | CircuitPython on Adafruit Matrix Portal M4 | Physical device (CIRCUITPY drive, COM11) |
+| 64×32 LED matrix | **Golf** | Arduino C++ on Adafruit Matrix Portal M4 | Physical device (USB via `build.sh golf`, COM9) |
 
 Live URL: https://greystoke1337.github.io/localized-air-traffic-tracker/
 Custom domain: https://overheadtracker.com
@@ -27,15 +27,15 @@ Custom domain: https://overheadtracker.com
 ```
 index.html                  # Entire web app (single file, ~120 KB)
 build.sh                    # Echo build/upload/test/debug helper (not for Foxtrot)
-tft-preview.html            # TFT display simulator (preview firmware UI in browser)
+tft-preview.html            # TFT display simulator (preview Echo/Foxtrot/Delta firmware UI in browser)
+golf-preview.html           # LED matrix simulator (preview Golf M4 display in browser)
 flash.html                  # Web Serial firmware flasher (Chrome/Edge, esptool.js)
 firmware/                   # Compiled Foxtrot binaries + manifest.json for flash.html
 server/                     # Railway-hosted proxy (server.js, package.json)
 pi-display/                 # Raspberry Pi TFT display (display.py, watchdog.sh)
 tracker_live_fnk0103s/      # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
 tracker_foxtrot/            # Foxtrot — Waveshare 4.3 (ESP32-S3, RGB, 800×480, LovyanGFX immediate-mode)
-tracker_delta/              # Delta — Waveshare 3.49 (ESP32-S3, QSPI, 640×172, Arduino_GFX immediate-mode)
-tracker_golf/               # Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix, CircuitPython)
+tracker_golf_m4/            # Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix, Arduino)
 tools/                      # synthetic-data.js, mock-proxy.js, serial_monitor.ps1
 tests/                      # Desktop logic tests (test_flight_logic.c, test_parsing.cpp)
 ```
@@ -85,7 +85,7 @@ Edit `index.html`, test via `file://`, push to `master` (auto-deploys to GitHub 
 ### Testing with synthetic data
 Web app: `index.html?demo=true&scenario=emergency`. Mock proxy: `node tools/mock-proxy.js normal 3000 --scenario crowded`.
 
-For Echo, Foxtrot, Delta, Golf, server, and Pi — see the `CLAUDE.md` in each subdirectory (`tracker_live_fnk0103s/`, `tracker_foxtrot/`, `tracker_delta/`, `tracker_golf/`, `server/`, `pi-display/`).
+For Echo, Foxtrot, Golf, server, and Pi — see the `CLAUDE.md` in each subdirectory (`tracker_live_fnk0103s/`, `tracker_foxtrot/`, `tracker_golf_m4/`, `server/`, `pi-display/`).
 
 ---
 

@@ -24,6 +24,10 @@ Adafruit_Protomatter matrix(
   true  // double-buffer
 );
 
+Adafruit_seesaw encoder;
+uint8_t         brightness     = BRIGHTNESS_DEFAULT;
+int32_t         lastEncoderPos = 0;
+
 Flight        currentFlight;
 int           failCount    = 0;
 unsigned long lastFetchMs  = 0;
@@ -43,10 +47,19 @@ void setup() {
   // 180° rotation — panel is mounted upside-down
   matrix.setRotation(2);
 
-  drawBootStatus("Connecting...");
+  if (encoder.begin(0x36)) {
+    matrix.setDuty(brightness);
+    lastEncoderPos = encoder.getEncoderPosition();
+    encoder.enableEncoderInterrupt();
+    Serial.println("[ENC] Seesaw encoder ready");
+  } else {
+    Serial.println("[ENC] Seesaw not found — brightness fixed");
+  }
+
+  playBootAnimFor(8000);   // animate while WiFi connects (~3-8 s)
   connectWiFi();
 
-  drawBootStatus("Fetching...");
+  playBootAnimFor(4000);   // animate while first fetch runs (~2-3 s)
   currentFlight.valid = false;
   fetchFlight(currentFlight);
   failCount = 0;
@@ -61,6 +74,16 @@ void setup() {
 
 void loop() {
   unsigned long now = millis();
+
+  // Rotary encoder brightness (setDuty range 0-2 on 120 MHz SAMD51)
+  int32_t pos = encoder.getEncoderPosition();
+  if (pos != lastEncoderPos) {
+    int delta = pos - lastEncoderPos;
+    lastEncoderPos = pos;
+    brightness = (uint8_t)constrain((int)brightness + delta, BRIGHTNESS_MIN, BRIGHTNESS_MAX);
+    matrix.setDuty(brightness);
+  }
+
   reconnectIfNeeded();
 
   // Advance progress bar one pixel at a time

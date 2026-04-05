@@ -1,10 +1,14 @@
 #pragma once
 #include <Adafruit_Protomatter.h>
+#include <Adafruit_seesaw.h>
 #include <WiFiNINA.h>
 #include "config.h"
 #include "types.h"
 
 extern Adafruit_Protomatter matrix;
+extern Adafruit_seesaw      encoder;
+extern uint8_t              brightness;
+extern int32_t              lastEncoderPos;
 
 extern Flight        currentFlight;
 extern int           failCount;

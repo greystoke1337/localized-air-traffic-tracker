@@ -1,5 +1,9 @@
 # Golf — Adafruit Matrix Portal M4
 
+> **Status**: CircuitPython implementation is superseded. The active firmware is the Arduino C++ port at `tracker_golf_m4/`. The CircuitPython files here are retained for reference only.
+> Deploy with `./build.sh golf` (compiles + flashes via arduino-cli to COM11).
+> See `tracker_golf_m4/` for source, and `tracker_golf_m4/secrets.h` for WiFi/location config (gitignored — copy from template below).
+
 ## Hardware
 
 - **Board**: Adafruit Matrix Portal M4 (SAMD51 + ESP32 WiFi co-processor)

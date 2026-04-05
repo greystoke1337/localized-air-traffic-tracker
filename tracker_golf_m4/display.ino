@@ -1,6 +1,7 @@
 // display.ino — all rendering for the 64×32 HUB75 matrix
 
 #include <Fonts/TomThumb.h>
+#include "anim_boot.h"
 
 // Draw the callsign pseudo-bold (4 overlapping copies at +1 offsets, matching CircuitPython technique)
 static void drawCallsign(const char *cs, int scrollOffset = 0, uint16_t color = C_AMBER) {
@@ -74,11 +75,13 @@ static void drawBars(int alt, int speed) {
   if (sh > 0) matrix.drawFastVLine(MATRIX_W - 1, MATRIX_H - sh - 1, sh, C_LIGHT_BLUE);
 }
 
-// Amber progress bar crawling across the bottom row
-static void drawProgressBar(int px) {
-  if (px > 0) {
-    matrix.fillRect(0, MATRIX_H - 1, px, 1, C_AMBER);
-  }
+// Centred distance bar: 64px wide when overhead, 3px at geofence edge.
+static void drawDistanceBar(float dist, bool valid) {
+  if (!valid) return;
+  float clamped = dist < 0 ? 0 : (dist > (float)GEOFENCE_KM ? (float)GEOFENCE_KM : dist);
+  int barW = (int)(3.0f + (1.0f - clamped / (float)GEOFENCE_KM) * (MATRIX_W - 3));
+  int startX = (MATRIX_W - barW) / 2;
+  matrix.fillRect(startX, MATRIX_H - 1, barW, 1, C_AMBER);
 }
 
 // Full frame: clear → bars → callsign → route → progress → show
@@ -91,15 +94,34 @@ void drawAll(const Flight &f, int progressPx, bool showType) {
     int totalW = strlen(f.type) * (CHAR_W + CHAR_GAP) - CHAR_GAP;
     if (totalW > MATRIX_W) {
       int maxScroll = totalW - MATRIX_W + 2;
-      scrollOffset = progressPx - TYPE_FLIP_PX;  // 1px per tick (~13px/s)
-      if (scrollOffset > maxScroll) scrollOffset = maxScroll;
+      int t      = progressPx - TYPE_FLIP_PX;
+      int period = 2 * maxScroll;
+      int mod    = t % period;
+      scrollOffset = (mod <= maxScroll) ? mod : (period - mod);
     }
   }
   uint16_t csColor = showType && f.type[0] ? f.typeColor : f.callsignColor;
   drawCallsign(showType && f.type[0] ? f.type : f.callsign, scrollOffset, csColor);
   drawRoute(f.origin, f.dest, f.type, f.typeColor);
-  drawProgressBar(progressPx);
+  drawDistanceBar(f.dist, f.valid);
   matrix.show();
+}
+
+// Play boot animation from PROGMEM for a given duration, looping frames.
+// Does nothing if anim_boot.h has ANIM_FRAMES == 0 (placeholder).
+void playBootAnimFor(uint32_t durationMs) {
+  if (ANIM_FRAMES == 0) return;
+  uint32_t end = millis() + durationMs;
+  int f = 0;
+  while (millis() < end) {
+    for (int i = 0; i < MATRIX_W * MATRIX_H; i++) {
+      uint16_t c = pgm_read_word(&bootAnim[f][i]);
+      matrix.drawPixel(i % MATRIX_W, i / MATRIX_W, c);
+    }
+    matrix.show();
+    delay(ANIM_DELAY_MS);
+    f = (f + 1) % ANIM_FRAMES;
+  }
 }
 
 // Boot status: clear screen and print a single centred status line in TomThumb

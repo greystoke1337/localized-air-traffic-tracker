@@ -70,7 +70,7 @@ bool fetchFlight(Flight &out) {
     out.origin[0] = '\0';
     out.dest[0]   = '\0';
     out.type[0]   = '\0';
-    out.alt = 0; out.speed = 0;
+    out.alt = 0; out.speed = 0; out.dist = (float)GEOFENCE_KM;
     out.callsignColor = C_AMBER;
     out.typeColor     = C_AMBER;
     return true;
@@ -122,6 +122,7 @@ bool fetchFlight(Flight &out) {
     best.typeColor     = getTypeColor(type);
     best.alt   = alt;
     best.speed = speed;
+    best.dist  = d;
     best.valid = true;
     bestDist   = d;
   }
@@ -139,7 +140,7 @@ bool fetchFlight(Flight &out) {
   out.origin[0] = '\0';
   out.dest[0]   = '\0';
   out.type[0]   = '\0';
-  out.alt = 0; out.speed = 0;
+  out.alt = 0; out.speed = 0; out.dist = (float)GEOFENCE_KM;
   out.callsignColor = C_AMBER;
   out.typeColor     = C_AMBER;
   Serial.println("[NET] No aircraft above floor");

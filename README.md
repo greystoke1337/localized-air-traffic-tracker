@@ -125,6 +125,32 @@ arduino-cli upload --fqbn "..." --port COM7 --input-dir /tmp/tracker-foxtrot-bui
 arduino-cli monitor --port COM7 --config "baudrate=115200"
 ```
 
+### Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix)
+
+**Hardware:** Adafruit Matrix Portal M4 (SAMD51 + ESP32 WiFi co-processor) driving a 64×32 HUB75 RGB LED matrix panel
+
+**What it shows:** Public-facing flight display designed for a wider audience. Top row shows the callsign in pseudo-bold (colour-coded by airline) for the first 15 seconds of each cycle, then switches to the aircraft type name (colour-coded by category). Route area shows origin and destination city in the TomThumb font. Side bars show relative altitude (left, deep blue) and speed (right, light blue). A distance bar on the bottom row indicates how far the aircraft is from the geofence centre.
+
+**30-second refresh cycle:** Progress advances pixel-by-pixel across the top row — callsign phase (pixels 0–31) then type phase (pixels 32–63). Long type names scroll with a bounce animation. At pixel 64 the display fetches new data and resets.
+
+**Libraries** (Arduino Library Manager): `Adafruit Protomatter`, `Adafruit GFX Library`, `ArduinoJson`
+
+**Configuration:** Create `tracker_golf_m4/secrets.h` (gitignored) with your WiFi credentials and home location:
+
+```cpp
+#define WIFI_SSID     "your_ssid"
+#define WIFI_PASSWORD "your_password"
+#define HOME_LAT      -33.8688
+#define HOME_LON      151.2093
+#define GEOFENCE_KM   20
+#define ALT_FLOOR_FT  1000
+```
+
+```bash
+./build.sh golf           # compile + upload to COM9
+./build.sh golf-compile   # compile only
+```
+
 ### Web firmware flasher
 
 `flash.html` is a browser-based firmware update tool. End users can flash new Foxtrot firmware with **zero development tools installed** — just Chrome/Edge and a USB cable.
@@ -172,6 +198,16 @@ It mirrors the firmware's rendering logic: same pixel coordinates, same RGB565 c
 
 ```bash
 open tft-preview.html   # or just double-click
+```
+
+### LED matrix preview tool
+
+`golf-preview.html` is the equivalent simulator for the Golf M4 64×32 LED matrix. Renders every visual element — pseudo-bold callsign with airline colour, TomThumb route text, altitude/speed side bars, distance bar, and the showType flip — using an embedded canvas at 10× scale with LED glow effects.
+
+Controls match the firmware's live behaviour: callsign/type/route/alt/speed/distance inputs, a progress pixel slider to step through the 30-second cycle, and an auto-animate toggle that advances at the same 468 ms/pixel rate as the hardware.
+
+```bash
+open golf-preview.html   # or just double-click
 ```
 
 ---

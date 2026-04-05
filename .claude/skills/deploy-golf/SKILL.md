@@ -1,45 +1,39 @@
 ---
 name: deploy-golf
-description: Deploy Golf CircuitPython code to the Adafruit Matrix Portal M4. Use when the user says "deploy golf", "deploy it" after editing Golf code, "push to Golf", "copy to CIRCUITPY", or after making changes to tracker_golf/code.py.
+description: Deploy Golf Arduino firmware to the Adafruit Matrix Portal M4. Use when the user says "deploy golf", "flash golf", "deploy it" after editing Golf code, or after making changes to tracker_golf_m4/.
 ---
 
-# Deploy Golf (Adafruit Matrix Portal M4)
+# Deploy Golf (Adafruit Matrix Portal M4 — Arduino)
 
-Copy code.py to the CIRCUITPY drive. The device auto-reloads on file save — no compilation or restart needed.
+Compile and upload `tracker_golf_m4/tracker_golf_m4.ino` via arduino-cli to COM9 (running) / COM10 (bootloader).
 
 ## Steps
 
-### 1. Find the CIRCUITPY drive
+### 1. Compile + upload
 
-```python
-import subprocess
-result = subprocess.run(['wmic', 'logicaldisk', 'get', 'DeviceID,VolumeName'], capture_output=True, text=True)
-print(result.stdout)
-```
-
-Look for the drive with `VolumeName = CIRCUITPY`. If not found, tell the user to connect the device and try again.
-
-### 2. Syntax check
+Run from `c:/Users/maxim/localized-air-traffic-tracker`:
 
 ```bash
-python -c "import py_compile; py_compile.compile('tracker_golf/code.py', doraise=True)"
+./build.sh golf
 ```
 
-Run from `c:/Users/maxim/localized-air-traffic-tracker`. If this fails, stop and report the error. Do NOT deploy broken code.
+This compiles for `adafruit:samd:adafruit_matrixportal_m4`, sends a 1200-baud touch to COM9 to trigger the bootloader automatically, then uploads. No button press needed.
 
-### 3. Copy using shutil.copy2 (NEVER use cp — corrupts FAT32)
+If you only want to check for compile errors without flashing:
 
-```python
-import shutil
-shutil.copy2('c:/Users/maxim/localized-air-traffic-tracker/tracker_golf/code.py', 'X:/code.py')
+```bash
+./build.sh golf-compile
 ```
 
-Replace `X:` with the CIRCUITPY drive letter found in step 1.
+### 2. Verify
 
-### 4. Report summary
+After upload, open the serial monitor at 115200 baud to confirm:
+- `[WIFI] Connected` — WiFi connected successfully
+- `[NET] <callsign> ...` — first flight fetch succeeded
+
+### 3. Report summary
 
 Tell the user:
-- The CIRCUITPY drive letter found
-- Whether the syntax check passed
-- Whether the copy succeeded
-- That the device auto-reloads — no further action needed
+- Whether compile succeeded (or show any errors)
+- Whether upload succeeded
+- The COM port used (default COM11)

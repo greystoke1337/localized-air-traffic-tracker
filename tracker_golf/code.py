@@ -29,9 +29,10 @@ DEEP_BLUE  = 0x004000
 LIGHT_BLUE = 0x008060
 
 # ── Location ───────────────────────────────────────────────────
-HOME_LAT    = -33.8559
-HOME_LON    = 151.1440
-GEOFENCE_KM = 20
+HOME_LAT     = float(os.getenv("HOME_LAT",     "-33.8688"))
+HOME_LON     = float(os.getenv("HOME_LON",     "151.2093"))
+GEOFENCE_KM  = int(os.getenv("GEOFENCE_KM",   "20"))
+ALT_FLOOR_FT = int(os.getenv("ALT_FLOOR_FT",  "200"))
 
 # ── WiFi ───────────────────────────────────────────────────────
 SSID     = os.getenv("CIRCUITPY_WIFI_SSID")
@@ -68,29 +69,47 @@ def make_bar(x, height, color):
     bitmap = displayio.Bitmap(1, height, 1)
     return displayio.TileGrid(bitmap, pixel_shader=palette, x=x, y=32 - height)
 
+_fail_count = 0
+
 def fetch_flight():
+    global _fail_count
+    r = None
     try:
-        url = f"https://api.overheadtracker.com/flights?lat={HOME_LAT}&lon={HOME_LON}&radius={GEOFENCE_KM}&limit=1"
-        r = requests.get(url)
+        url = f"https://api.overheadtracker.com/flights?lat={HOME_LAT}&lon={HOME_LON}&radius={GEOFENCE_KM}&limit=50"
+        r = requests.get(url, timeout=10)
         data = r.json()
-        r.close()
         ac = data.get("ac", [])
-        if ac:
-            callsign = (ac[0].get("flight") or "------").strip()
-            route    = ac[0].get("route") or ""
-            return callsign, route
+        _fail_count = 0
+        for aircraft in ac:
+            alt_raw = aircraft.get("alt_baro") or 0
+            alt = int(alt_raw) if isinstance(alt_raw, (int, float)) else 0
+            if alt >= ALT_FLOOR_FT:
+                callsign = (aircraft.get("flight") or "------").strip()
+                route    = aircraft.get("route") or ""
+                return callsign, route
+        return "------", ""
     except Exception as e:
         print("Fetch error:", e)
-        try:
-            esp.reset()
-            while not esp.is_connected:
-                try:
-                    esp.connect_AP(SSID, PASSWORD)
-                except RuntimeError:
-                    time.sleep(1)
-        except Exception as e2:
-            print("Reset error:", e2)
-    return "------", ""
+        _fail_count += 1
+        if _fail_count >= 3:
+            print("Resetting ESP32 after", _fail_count, "failures...")
+            _fail_count = 0
+            try:
+                esp.reset()
+                while not esp.is_connected:
+                    try:
+                        esp.connect_AP(SSID, PASSWORD)
+                    except RuntimeError:
+                        time.sleep(1)
+            except Exception as e2:
+                print("Reset error:", e2)
+        return "------", ""
+    finally:
+        if r is not None:
+            try:
+                r.close()
+            except Exception:
+                pass
 
 # ── Build UI once ─────────────────────────────────────────────
 MAX_CHARS = 8  # pre-allocate for longest expected callsign

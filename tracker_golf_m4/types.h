@@ -7,6 +7,7 @@ struct Flight {
   char type[16];      // aircraft type display name, e.g. "737-800" — shown when no route
   int      alt;              // feet
   int      speed;            // knots
+  float    dist;             // km from home
   bool     valid;
   uint16_t callsignColor;    // airline-derived
   uint16_t typeColor;        // aircraft-category-derived

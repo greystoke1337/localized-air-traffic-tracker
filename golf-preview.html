@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Golf Preview — 64×32 LED Matrix</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a08;
+    color: #ffa200;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    gap: 32px;
+    padding: 24px;
+    min-height: 100vh;
+    align-items: flex-start;
+  }
+  #matrix-wrap {
+    flex-shrink: 0;
+    border: 2px solid #3a2000;
+    box-shadow: 0 0 40px rgba(255,162,0,0.08);
+    border-radius: 6px;
+    background: #050505;
+    padding: 12px;
+  }
+  canvas {
+    display: block;
+    width: 640px;
+    height: 320px;
+    image-rendering: pixelated;
+    border-radius: 2px;
+  }
+  #matrix-label {
+    margin-top: 8px;
+    font-size: 10px;
+    color: #3a2000;
+    text-align: center;
+    letter-spacing: 2px;
+  }
+  #controls {
+    flex: 1;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  #controls h2 {
+    font-size: 14px;
+    color: #ffa200;
+    border-bottom: 1px solid #3a2000;
+    padding-bottom: 5px;
+    margin-bottom: 2px;
+  }
+  .ctl-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+  .ctl-row label {
+    width: 90px;
+    font-size: 11px;
+    color: #7b2800;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .ctl-row select, .ctl-row input[type=text] {
+    flex: 1;
+    background: #181008;
+    color: #ffa200;
+    border: 1px solid #3a2000;
+    padding: 4px 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+  }
+  .ctl-row input[type=range] {
+    flex: 1;
+    accent-color: #ffa200;
+  }
+  .ctl-row .val {
+    width: 72px;
+    text-align: right;
+    font-size: 11px;
+    color: #ffa200;
+  }
+  .ctl-row .resolved {
+    font-size: 10px;
+    color: #3a2000;
+    margin-left: 4px;
+  }
+  .ctl-row input[type=checkbox] {
+    accent-color: #ffa200;
+  }
+  #info {
+    margin-top: 8px;
+    font-size: 10px;
+    color: #3a2000;
+    line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+
+<div id="matrix-wrap">
+  <canvas id="matrix" width="640" height="320"></canvas>
+  <div id="matrix-label">64 × 32 HUB75 — GOLF M4</div>
+</div>
+
+<div id="controls">
+  <h2>SCENARIOS</h2>
+  <div class="ctl-row">
+    <select id="ctl-scenario" style="flex:1;background:#181008;color:#ffa200;border:1px solid #3a2000;padding:4px 6px;font-family:'Courier New',monospace;font-size:12px;">
+      <option value="custom">Custom</option>
+      <option value="narrow-route" selected>Narrow-body + route (QFA11 B738)</option>
+      <option value="wide-no-route">Wide-body no route (ETH716 B77W)</option>
+      <option value="type-flip">Type phase (progress 40+)</option>
+      <option value="no-aircraft">No aircraft (------)</option>
+      <option value="turboprop">Turboprop (REX101 AT76)</option>
+    </select>
+  </div>
+
+  <h2>FLIGHT DATA</h2>
+  <div class="ctl-row">
+    <label>Callsign</label>
+    <input type="text" id="ctl-callsign" value="QFA11" maxlength="11">
+  </div>
+  <div class="ctl-row">
+    <label>Airline pfx</label>
+    <input type="text" id="ctl-airline" value="QFA" maxlength="3" style="width:50px;flex:none;">
+    <span class="resolved" id="airline-color-swatch">●</span>
+  </div>
+  <div class="ctl-row">
+    <label>Type (ICAO)</label>
+    <input type="text" id="ctl-type" value="B738" maxlength="8" style="width:60px;flex:none;">
+    <span class="resolved" id="type-resolved">B737-800</span>
+  </div>
+  <div class="ctl-row">
+    <label>Origin</label>
+    <input type="text" id="ctl-origin" value="Sydney" maxlength="20">
+  </div>
+  <div class="ctl-row">
+    <label>Dest</label>
+    <input type="text" id="ctl-dest" value="Melbourne" maxlength="20">
+  </div>
+
+  <h2>TELEMETRY</h2>
+  <div class="ctl-row">
+    <label>Altitude</label>
+    <input type="range" id="ctl-alt" min="0" max="40000" step="500" value="28000">
+    <span class="val" id="val-alt">28000 ft</span>
+  </div>
+  <div class="ctl-row">
+    <label>Speed</label>
+    <input type="range" id="ctl-speed" min="0" max="500" step="5" value="440">
+    <span class="val" id="val-speed">440 kt</span>
+  </div>
+  <div class="ctl-row">
+    <label>Distance</label>
+    <input type="range" id="ctl-dist" min="0" max="10" step="0.1" value="4.5">
+    <span class="val" id="val-dist">4.5 km</span>
+  </div>
+
+  <h2>CYCLE</h2>
+  <div class="ctl-row">
+    <label>Progress px</label>
+    <input type="range" id="ctl-progress" min="0" max="63" step="1" value="10">
+    <span class="val" id="val-progress">10</span>
+  </div>
+  <div class="ctl-row">
+    <label>Auto-animate</label>
+    <input type="checkbox" id="ctl-animate">
+    <span style="font-size:10px;color:#3a2000;margin-left:4px;">30s cycle (468ms/px)</span>
+  </div>
+
+  <div id="info">
+    px 0–31: callsign in airline color<br>
+    px 32–63: type name in category color<br>
+    row 31: distance bar (wide = overhead)
+  </div>
+</div>
+
+<script>
+// ─── Constants ──────────────────────────────────────────────────────────────
+const W = 64, H = 32, SCALE = 10;
+const CALLSIGN_Y = 2;
+const CHAR_W = 6, CHAR_GAP = 1;   // stride = 7px
+const ROUTE_TOP_Y = 18;
+const ROUTE_BOT_Y = 25;
+const TYPE_FLIP_PX = 32;
+const BAR_MAX_H = 30;
+const ALT_MIN = 500, ALT_MAX = 30000;
+const SPD_MIN = 100, SPD_MAX = 450;
+const GEOFENCE_KM = 10;
+
+// ─── Color palette ───────────────────────────────────────────────────────────
+const C_OFF       = '#141414';
+const C_AMBER     = '#F8A000';
+const C_WHITE     = '#F8F8FC';
+const C_DEEP_BLUE = '#0050B4';
+const C_LIGHT_BLU = '#00B4E6';
+const C_NARROW    = '#00F8FC';
+const C_WIDE      = '#F8F800';
+const C_JUMBO     = '#F800FC';
+const C_REGIONAL  = '#00F800';
+const C_TURBOPROP = '#F80000';
+const C_GA        = '#F8F8FC';
+
+// ─── Airline prefix → callsign color ────────────────────────────────────────
+const AIRLINE_COLORS = {
+  QFA:'#F80000',VOZ:'#F80000',JAL:'#F80000',MAS:'#F80000',DAL:'#F80000',VIR:'#F80000',
+  JST:'#F8F800',SIA:'#F8F800',DLH:'#F8F800',SWA:'#F8F800',DHL:'#F8F800',
+  REX:'#00F800',CPA:'#00F800',
+  ANZ:'#F8F8FC',
+  FJI:'#00F8FC',ANA:'#00F8FC',KAL:'#00F8FC',BAW:'#00F8FC',RYR:'#00F8FC',
+  AFR:'#00F8FC',KLM:'#00F8FC',AAL:'#00F8FC',UAL:'#00F8FC',
+  UAE:'#F8A000',EZY:'#F8A000',UPS:'#F8A000',
+  QTR:'#F800FC',THA:'#F800FC',IBE:'#F800FC',FDX:'#F800FC',
+};
+
+// ─── Aircraft type → display name + category ────────────────────────────────
+const AIRCRAFT_TYPES = [
+  {i:'B737',n:'B737-700',c:C_NARROW},{i:'B738',n:'B737-800',c:C_NARROW},
+  {i:'B739',n:'B737-900',c:C_NARROW},{i:'B73X',n:'B737-900ER',c:C_NARROW},
+  {i:'B37M',n:'B737 MAX 7',c:C_NARROW},{i:'B38M',n:'B737 MAX 8',c:C_NARROW},
+  {i:'B39M',n:'B737 MAX 9',c:C_NARROW},{i:'B3XM',n:'B737 MAX 10',c:C_NARROW},
+  {i:'B752',n:'B757-200',c:C_NARROW},{i:'B753',n:'B757-300',c:C_NARROW},
+  {i:'B712',n:'B717-200',c:C_NARROW},
+  {i:'B762',n:'B767-200',c:C_WIDE},{i:'B763',n:'B767-300',c:C_WIDE},
+  {i:'B764',n:'B767-400',c:C_WIDE},
+  {i:'B772',n:'B777-200',c:C_WIDE},{i:'B77L',n:'B777-200LR',c:C_WIDE},
+  {i:'B773',n:'B777-300',c:C_WIDE},{i:'B77W',n:'B777-300ER',c:C_WIDE},
+  {i:'B788',n:'B787-8',c:C_WIDE},{i:'B789',n:'B787-9',c:C_WIDE},
+  {i:'B78X',n:'B787-10',c:C_WIDE},
+  {i:'B741',n:'B747-100',c:C_JUMBO},{i:'B742',n:'B747-200',c:C_JUMBO},
+  {i:'B743',n:'B747-300',c:C_JUMBO},{i:'B744',n:'B747-400',c:C_JUMBO},
+  {i:'B748',n:'B747-8',c:C_JUMBO},
+  {i:'A318',n:'A318',c:C_NARROW},{i:'A319',n:'A319',c:C_NARROW},
+  {i:'A320',n:'A320',c:C_NARROW},{i:'A321',n:'A321',c:C_NARROW},
+  {i:'A19N',n:'A319neo',c:C_NARROW},{i:'A20N',n:'A320neo',c:C_NARROW},
+  {i:'A21N',n:'A321neo',c:C_NARROW},{i:'A21X',n:'A321XLR',c:C_NARROW},
+  {i:'A332',n:'A330-200',c:C_WIDE},{i:'A333',n:'A330-300',c:C_WIDE},
+  {i:'A338',n:'A330-800neo',c:C_WIDE},{i:'A339',n:'A330-900neo',c:C_WIDE},
+  {i:'A342',n:'A340-200',c:C_WIDE},{i:'A343',n:'A340-300',c:C_WIDE},
+  {i:'A345',n:'A340-500',c:C_WIDE},{i:'A346',n:'A340-600',c:C_WIDE},
+  {i:'A359',n:'A350-900',c:C_WIDE},{i:'A35K',n:'A350-1000',c:C_WIDE},
+  {i:'A380',n:'A380',c:C_JUMBO},{i:'A388',n:'A380-800',c:C_JUMBO},
+  {i:'E170',n:'E170',c:C_REGIONAL},{i:'E175',n:'E175',c:C_REGIONAL},
+  {i:'E190',n:'E190',c:C_REGIONAL},{i:'E195',n:'E195',c:C_REGIONAL},
+  {i:'E75L',n:'E175-E2',c:C_REGIONAL},{i:'E290',n:'E190-E2',c:C_REGIONAL},
+  {i:'E295',n:'E195-E2',c:C_REGIONAL},
+  {i:'CRJ2',n:'CRJ-200',c:C_REGIONAL},{i:'CRJ7',n:'CRJ-700',c:C_REGIONAL},
+  {i:'CRJ9',n:'CRJ-900',c:C_REGIONAL},{i:'CRJX',n:'CRJ-1000',c:C_REGIONAL},
+  {i:'BCS1',n:'A220-100',c:C_REGIONAL},{i:'BCS3',n:'A220-300',c:C_REGIONAL},
+  {i:'AT43',n:'ATR 42-300',c:C_TURBOPROP},{i:'AT45',n:'ATR 42-500',c:C_TURBOPROP},
+  {i:'AT72',n:'ATR 72-200',c:C_TURBOPROP},{i:'AT75',n:'ATR 72-500',c:C_TURBOPROP},
+  {i:'AT76',n:'ATR 72-600',c:C_TURBOPROP},
+  {i:'DH8A',n:'DASH 8-100',c:C_TURBOPROP},{i:'DH8B',n:'DASH 8-200',c:C_TURBOPROP},
+  {i:'DH8C',n:'DASH 8-300',c:C_TURBOPROP},{i:'DH8D',n:'DASH 8-400',c:C_TURBOPROP},
+  {i:'SF34',n:'SAAB 340',c:C_TURBOPROP},{i:'SB20',n:'SAAB 2000',c:C_TURBOPROP},
+  {i:'PC12',n:'PILATUS PC-12',c:C_GA},{i:'C208',n:'CESSNA CARAVAN',c:C_GA},
+];
+
+function resolveType(icao) {
+  const u = (icao || '').toUpperCase();
+  const e = AIRCRAFT_TYPES.find(a => a.i === u);
+  return e ? {name: e.n, color: e.c} : {name: icao || '', color: C_AMBER};
+}
+
+function getAirlineColor(pfx) {
+  return AIRLINE_COLORS[(pfx || '').toUpperCase().slice(0,3)] || C_AMBER;
+}
+
+// ─── Adafruit GFX glcdfont.c — ASCII 32-126, 5 column bytes, bit0=top ───────
+const GLCD = [
+  [0x00,0x00,0x00,0x00,0x00],[0x00,0x00,0x5F,0x00,0x00],[0x00,0x07,0x00,0x07,0x00],
+  [0x14,0x7F,0x14,0x7F,0x14],[0x24,0x2A,0x7F,0x2A,0x12],[0x23,0x13,0x08,0x64,0x62],
+  [0x36,0x49,0x56,0x20,0x50],[0x00,0x08,0x07,0x03,0x00],[0x00,0x1C,0x22,0x41,0x00],
+  [0x00,0x41,0x22,0x1C,0x00],[0x2A,0x1C,0x7F,0x1C,0x2A],[0x08,0x08,0x3E,0x08,0x08],
+  [0x00,0x80,0x70,0x30,0x00],[0x08,0x08,0x08,0x08,0x08],[0x00,0x00,0x60,0x60,0x00],
+  [0x20,0x10,0x08,0x04,0x02],[0x3E,0x51,0x49,0x45,0x3E],[0x00,0x42,0x7F,0x40,0x00],
+  [0x72,0x49,0x49,0x49,0x46],[0x21,0x41,0x49,0x4D,0x33],[0x18,0x14,0x12,0x7F,0x10],
+  [0x27,0x45,0x45,0x45,0x39],[0x3C,0x4A,0x49,0x49,0x31],[0x41,0x21,0x11,0x09,0x07],
+  [0x36,0x49,0x49,0x49,0x36],[0x46,0x49,0x49,0x29,0x1E],[0x00,0x00,0x14,0x00,0x00],
+  [0x00,0x40,0x34,0x00,0x00],[0x00,0x08,0x14,0x22,0x41],[0x14,0x14,0x14,0x14,0x14],
+  [0x00,0x41,0x22,0x14,0x08],[0x02,0x01,0x59,0x09,0x06],[0x3E,0x41,0x5D,0x59,0x4E],
+  [0x7C,0x12,0x11,0x12,0x7C],[0x7F,0x49,0x49,0x49,0x36],[0x3E,0x41,0x41,0x41,0x22],
+  [0x7F,0x41,0x41,0x41,0x3E],[0x7F,0x49,0x49,0x49,0x41],[0x7F,0x09,0x09,0x09,0x01],
+  [0x3E,0x41,0x41,0x51,0x73],[0x7F,0x08,0x08,0x08,0x7F],[0x00,0x41,0x7F,0x41,0x00],
+  [0x20,0x40,0x41,0x3F,0x01],[0x7F,0x08,0x14,0x22,0x41],[0x7F,0x40,0x40,0x40,0x40],
+  [0x7F,0x02,0x1C,0x02,0x7F],[0x7F,0x04,0x08,0x10,0x7F],[0x3E,0x41,0x41,0x41,0x3E],
+  [0x7F,0x09,0x09,0x09,0x06],[0x3E,0x41,0x51,0x21,0x5E],[0x7F,0x09,0x19,0x29,0x46],
+  [0x26,0x49,0x49,0x49,0x32],[0x03,0x01,0x7F,0x01,0x03],[0x3F,0x40,0x40,0x40,0x3F],
+  [0x1F,0x20,0x40,0x20,0x1F],[0x3F,0x40,0x38,0x40,0x3F],[0x63,0x14,0x08,0x14,0x63],
+  [0x03,0x04,0x78,0x04,0x03],[0x61,0x59,0x49,0x4D,0x43],[0x00,0x7F,0x41,0x41,0x41],
+  [0x02,0x04,0x08,0x10,0x20],[0x00,0x41,0x41,0x41,0x7F],[0x04,0x02,0x01,0x02,0x04],
+  [0x40,0x40,0x40,0x40,0x40],[0x00,0x03,0x07,0x08,0x00],[0x20,0x54,0x54,0x78,0x40],
+  [0x7F,0x28,0x44,0x44,0x38],[0x38,0x44,0x44,0x44,0x28],[0x38,0x44,0x44,0x28,0x7F],
+  [0x38,0x54,0x54,0x54,0x18],[0x00,0x08,0x7E,0x09,0x02],[0x18,0xA4,0xA4,0x9C,0x78],
+  [0x7F,0x08,0x04,0x04,0x78],[0x00,0x44,0x7D,0x40,0x00],[0x20,0x40,0x40,0x3D,0x00],
+  [0x7F,0x10,0x28,0x44,0x00],[0x00,0x41,0x7F,0x40,0x00],[0x7C,0x04,0x78,0x04,0x78],
+  [0x7C,0x08,0x04,0x04,0x78],[0x38,0x44,0x44,0x44,0x38],[0xFC,0x18,0x24,0x24,0x18],
+  [0x18,0x24,0x24,0x18,0xFC],[0x7C,0x08,0x04,0x04,0x08],[0x48,0x54,0x54,0x54,0x24],
+  [0x04,0x04,0x3F,0x44,0x24],[0x3C,0x40,0x40,0x20,0x7C],[0x1C,0x20,0x40,0x20,0x1C],
+  [0x3C,0x40,0x30,0x40,0x3C],[0x44,0x28,0x10,0x28,0x44],[0x4C,0x90,0x90,0x90,0x7C],
+  [0x44,0x64,0x54,0x4C,0x44],[0x00,0x08,0x36,0x41,0x00],[0x00,0x00,0x77,0x00,0x00],
+  [0x00,0x41,0x36,0x08,0x00],[0x02,0x01,0x02,0x04,0x02],
+]; // indices 0-94 → ASCII 32-126
+
+// ─── TomThumb font — ASCII 32-126 ────────────────────────────────────────────
+// 5 row values per char; bit2=left col, bit1=mid col, bit0=right col
+// Row 0 = ascender top, Row 4 = baseline
+// Derived from tracker_golf/fonts/tom-thumb.bdf
+const TT = [
+  [0,0,0,0,0],[2,2,2,0,2],[5,5,0,0,0],[5,7,5,7,5],[3,6,3,6,2],[4,1,2,4,1],
+  [6,6,7,5,3],[2,2,0,0,0],[1,2,2,2,1],[4,2,2,2,4],[5,2,5,0,0],[0,2,7,2,0],
+  [0,0,0,2,4],[0,0,7,0,0],[0,0,0,0,2],[1,1,2,4,4],[3,5,5,5,6],[2,6,2,2,2],
+  [6,1,2,4,7],[6,1,2,1,6],[5,5,7,1,1],[7,4,6,1,6],[3,4,7,5,7],[7,1,2,4,4],
+  [7,5,7,5,7],[7,5,7,1,6],[0,2,0,2,0],[0,2,0,2,4],[1,2,4,2,1],[0,7,0,7,0],
+  [4,2,1,2,4],[7,1,2,0,2],[2,5,7,4,3],[2,5,7,5,5],[6,5,6,5,6],[3,4,4,4,3],
+  [6,5,5,5,6],[7,4,7,4,7],[7,4,7,4,4],[3,4,7,5,3],[5,5,7,5,5],[7,2,2,2,7],
+  [1,1,1,5,2],[5,5,6,5,5],[4,4,4,4,7],[5,7,7,5,5],[5,7,7,7,5],[2,5,5,5,2],
+  [6,5,6,4,4],[2,5,5,7,3],[6,5,7,6,5],[3,4,2,1,6],[7,2,2,2,2],[5,5,5,5,3],
+  [5,5,5,2,2],[5,5,7,7,5],[5,5,2,5,5],[5,5,2,2,2],[7,1,2,4,7],[7,4,4,4,7],
+  [0,4,2,1,0],[7,1,1,1,7],[2,5,0,0,0],[0,0,0,0,7],[4,2,0,0,0],[0,6,3,5,7],
+  [4,6,5,5,6],[0,3,4,4,3],[1,3,5,5,3],[0,3,5,6,3],[1,2,7,2,2],[0,3,5,7,1],
+  [4,6,5,5,5],[2,0,2,2,2],[1,0,1,1,5],[4,5,6,6,5],[6,2,2,2,7],[0,7,7,7,5],
+  [0,6,5,5,5],[0,2,5,5,2],[0,6,5,5,6],[0,3,5,5,3],[0,3,4,4,4],[0,3,6,3,6],
+  [2,7,2,2,3],[0,5,5,5,3],[0,5,5,7,2],[0,5,7,7,7],[0,5,2,2,5],[0,5,5,3,1],
+  [0,7,3,6,7],[3,2,4,2,3],[2,2,0,2,2],[6,2,1,2,6],[3,6,0,0,0],
+]; // indices 0-94 → ASCII 32-126
+
+// ─── Framebuffer ─────────────────────────────────────────────────────────────
+const fb = Array.from({length: H}, () => new Array(W).fill(C_OFF));
+
+function setPixel(x, y, col) {
+  if (x >= 0 && x < W && y >= 0 && y < H) fb[y][x] = col;
+}
+
+// ─── Rendering helpers ───────────────────────────────────────────────────────
+function mapBarH(val, lo, hi) {
+  if (val <= 0) return 0;
+  if (val <= lo) return 2;
+  if (val >= hi) return BAR_MAX_H;
+  return Math.round(2 + (val - lo) * (BAR_MAX_H - 2) / (hi - lo));
+}
+
+function drawBars(alt, speed) {
+  const ah = mapBarH(alt, ALT_MIN, ALT_MAX);
+  const sh = mapBarH(speed, SPD_MIN, SPD_MAX);
+  // bottom-up from row 30 (row 31 = distance bar)
+  for (let y = H - ah - 1; y < H - 1; y++) setPixel(0, y, C_DEEP_BLUE);
+  for (let y = H - sh - 1; y < H - 1; y++) setPixel(W - 1, y, C_LIGHT_BLU);
+}
+
+// Draw text using Adafruit GFX 6×8 font with 4-offset pseudo-bold
+// stride = CHAR_W + CHAR_GAP = 7px, glyph = 5 cols × 8 rows, bit0=top
+function drawCallsign(text, scrollOffset, color) {
+  if (!text) return;
+  const stride = CHAR_W + CHAR_GAP; // 7
+  const totalW = text.length * stride - CHAR_GAP; // n*7-1
+  const startX = totalW > W ? -scrollOffset : Math.floor((W - totalW) / 2);
+
+  for (let dy = 0; dy <= 1; dy++) {
+    for (let dx = 0; dx <= 1; dx++) {
+      for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i);
+        const glyph = (code >= 32 && code <= 126) ? GLCD[code - 32] : GLCD[0];
+        const cx = startX + i * stride + dx;
+        const cy = CALLSIGN_Y + dy;
+        for (let col = 0; col < 5; col++) {
+          const colByte = glyph[col];
+          for (let row = 0; row < 8; row++) {
+            if ((colByte >> row) & 1) {
+              setPixel(cx + col, cy + row, color);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Draw text using TomThumb font; cursorY = baseline (char renders rows cursorY-4..cursorY)
+function drawTextTomThumb(text, cursorY, color) {
+  if (!text) return;
+  const stride = 4; // 3px glyph + 1px gap
+  const totalW = text.length * stride - 1;
+  const startX = Math.floor((W - totalW) / 2);
+
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    const glyph = (code >= 32 && code <= 126) ? TT[code - 32] : TT[0];
+    const cx = startX + i * stride;
+    for (let row = 0; row < 5; row++) {
+      const rv = glyph[row];
+      if (!rv) continue;
+      const py = cursorY - 4 + row;
+      if (py < 0 || py >= H) continue;
+      for (let bit = 0; bit < 3; bit++) {
+        if ((rv >> (2 - bit)) & 1) setPixel(cx + bit, py, color);
+      }
+    }
+  }
+}
+
+// Centered amber distance bar on row 31
+function drawDistanceBar(dist, valid) {
+  if (!valid) return;
+  const clamped = Math.max(0, Math.min(dist, GEOFENCE_KM));
+  const barW = Math.round(3 + (1 - clamped / GEOFENCE_KM) * (W - 3));
+  const startX = Math.floor((W - barW) / 2);
+  for (let x = startX; x < startX + barW; x++) setPixel(x, H - 1, C_AMBER);
+}
+
+// Scroll offset for bouncing type name when it overflows
+function scrollOffset(text, progressPx) {
+  const totalW = text.length * (CHAR_W + CHAR_GAP) - CHAR_GAP;
+  if (totalW <= W) return 0;
+  const maxScroll = totalW - W + 2;
+  const t = progressPx - TYPE_FLIP_PX;
+  if (t <= 0) return 0;
+  const period = 2 * maxScroll;
+  const mod = ((t % period) + period) % period;
+  return mod <= maxScroll ? mod : period - mod;
+}
+
+// ─── Main draw ───────────────────────────────────────────────────────────────
+function draw() {
+  const s = readControls();
+
+  // Clear framebuffer
+  for (let y = 0; y < H; y++) fb[y].fill(C_OFF);
+
+  drawBars(s.alt, s.speed);
+
+  const showType = s.progressPx >= TYPE_FLIP_PX && !!s.typeName;
+
+  if (!s.valid) {
+    drawCallsign('------', 0, C_AMBER);
+  } else if (showType) {
+    const off = scrollOffset(s.typeName, s.progressPx);
+    drawCallsign(s.typeName, off, s.typeColor);
+  } else {
+    drawCallsign(s.callsign, 0, s.callsignColor);
+  }
+
+  if (s.origin) {
+    drawTextTomThumb(s.origin, ROUTE_TOP_Y, C_WHITE);
+    if (s.dest) drawTextTomThumb(s.dest, ROUTE_BOT_Y, C_WHITE);
+  } else if (s.typeName) {
+    const midY = Math.floor((ROUTE_TOP_Y + ROUTE_BOT_Y) / 2);
+    drawTextTomThumb(s.typeName, midY, s.typeColor);
+  }
+
+  drawDistanceBar(s.dist, s.valid);
+  flush();
+}
+
+// ─── Canvas flush ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('matrix');
+const ctx = canvas.getContext('2d');
+
+function flush() {
+  ctx.fillStyle = '#050505';
+  ctx.fillRect(0, 0, W * SCALE, H * SCALE);
+
+  // Collect pixels by color
+  const byColor = {};
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const col = fb[y][x];
+      if (!byColor[col]) byColor[col] = [];
+      byColor[col].push(x * SCALE + 1, y * SCALE + 1);
+    }
+  }
+
+  // Off LEDs first (no glow)
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = C_OFF;
+  const offPixels = byColor[C_OFF] || [];
+  for (let i = 0; i < offPixels.length; i += 2) {
+    ctx.beginPath();
+    ctx.roundRect(offPixels[i], offPixels[i+1], SCALE-2, SCALE-2, 2);
+    ctx.fill();
+  }
+
+  // On LEDs (with glow, grouped by color)
+  for (const [col, coords] of Object.entries(byColor)) {
+    if (col === C_OFF) continue;
+    ctx.shadowBlur = 7;
+    ctx.shadowColor = col;
+    ctx.fillStyle = col;
+    for (let i = 0; i < coords.length; i += 2) {
+      ctx.beginPath();
+      ctx.roundRect(coords[i], coords[i+1], SCALE-2, SCALE-2, 2);
+      ctx.fill();
+    }
+  }
+  ctx.shadowBlur = 0;
+}
+
+// ─── Controls ────────────────────────────────────────────────────────────────
+function readControls() {
+  const callsign = document.getElementById('ctl-callsign').value.toUpperCase().trim();
+  const airlinePfx = document.getElementById('ctl-airline').value.toUpperCase().trim();
+  const typeIcao = document.getElementById('ctl-type').value.toUpperCase().trim();
+  const typeInfo = resolveType(typeIcao);
+  const alt   = parseInt(document.getElementById('ctl-alt').value);
+  const speed = parseInt(document.getElementById('ctl-speed').value);
+  const dist  = parseFloat(document.getElementById('ctl-dist').value);
+  const progressPx = parseInt(document.getElementById('ctl-progress').value);
+
+  // Update derived display elements
+  document.getElementById('type-resolved').textContent = typeInfo.name || typeIcao;
+  document.getElementById('type-resolved').style.color = typeInfo.color;
+  document.getElementById('airline-color-swatch').style.color = getAirlineColor(airlinePfx || callsign.slice(0,3));
+
+  document.getElementById('val-alt').textContent =
+    alt === 0 ? '---' : alt >= 10000 ? 'FL' + String(Math.floor(alt/100)).padStart(3,'0') : alt + ' ft';
+  document.getElementById('val-speed').textContent = speed === 0 ? '---' : speed + ' kt';
+  document.getElementById('val-dist').textContent = dist.toFixed(1) + ' km';
+  document.getElementById('val-progress').textContent = progressPx + (progressPx >= TYPE_FLIP_PX ? ' (type)' : ' (cs)');
+
+  return {
+    callsign,
+    callsignColor: getAirlineColor(airlinePfx || callsign.slice(0,3)),
+    typeName: typeInfo.name,
+    typeColor: typeInfo.color,
+    origin: document.getElementById('ctl-origin').value.trim(),
+    dest:   document.getElementById('ctl-dest').value.trim(),
+    alt, speed, dist, progressPx,
+    valid: callsign.length > 0 && callsign !== '------',
+  };
+}
+
+// ─── Scenario presets ────────────────────────────────────────────────────────
+const SCENARIOS = {
+  'narrow-route': {cs:'QFA11',al:'QFA',ty:'B738',or:'Sydney',de:'Melbourne',alt:28000,spd:440,dis:4.5,px:10},
+  'wide-no-route':{cs:'ETH716',al:'ETH',ty:'B77W',or:'',de:'',alt:35000,spd:490,dis:8.0,px:5},
+  'type-flip':    {cs:'QFA11',al:'QFA',ty:'B738',or:'Sydney',de:'Melbourne',alt:28000,spd:440,dis:4.5,px:40},
+  'no-aircraft':  {cs:'------',al:'',ty:'',or:'',de:'',alt:0,spd:0,dis:10.0,px:0},
+  'turboprop':    {cs:'REX101',al:'REX',ty:'AT76',or:'Albury',de:'Sydney',alt:12000,spd:280,dis:6.1,px:40},
+};
+
+function applyScenario(name) {
+  const s = SCENARIOS[name];
+  if (!s) return;
+  document.getElementById('ctl-callsign').value = s.cs;
+  document.getElementById('ctl-airline').value  = s.al;
+  document.getElementById('ctl-type').value     = s.ty;
+  document.getElementById('ctl-origin').value   = s.or;
+  document.getElementById('ctl-dest').value     = s.de;
+  document.getElementById('ctl-alt').value      = s.alt;
+  document.getElementById('ctl-speed').value    = s.spd;
+  document.getElementById('ctl-dist').value     = s.dis;
+  document.getElementById('ctl-progress').value = s.px;
+  draw();
+}
+
+document.getElementById('ctl-scenario').addEventListener('change', function() {
+  if (this.value !== 'custom') applyScenario(this.value);
+});
+
+// ─── Animation loop ──────────────────────────────────────────────────────────
+let animHandle = null;
+let lastPixelTime = 0;
+const PIXEL_INTERVAL_MS = 468; // 30000 / 64
+
+function animTick(ts) {
+  if (!document.getElementById('ctl-animate').checked) { animHandle = null; return; }
+  if (ts - lastPixelTime >= PIXEL_INTERVAL_MS) {
+    lastPixelTime = ts;
+    const el = document.getElementById('ctl-progress');
+    el.value = (parseInt(el.value) + 1) % 64;
+  }
+  draw();
+  animHandle = requestAnimationFrame(animTick);
+}
+
+document.getElementById('ctl-animate').addEventListener('change', function() {
+  if (this.checked) {
+    lastPixelTime = performance.now();
+    animHandle = requestAnimationFrame(animTick);
+  } else {
+    if (animHandle) { cancelAnimationFrame(animHandle); animHandle = null; }
+    draw();
+  }
+});
+
+// ─── Live update on control changes ─────────────────────────────────────────
+document.querySelectorAll('#controls input:not(#ctl-animate), #controls select').forEach(el => {
+  ['input','change'].forEach(evt => el.addEventListener(evt, () => {
+    if (el.id !== 'ctl-scenario') document.getElementById('ctl-scenario').value = 'custom';
+    if (!document.getElementById('ctl-animate').checked) draw();
+  }));
+});
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+applyScenario('narrow-route');
+</script>
+</body>
+</html>

@@ -43,7 +43,7 @@
 #define ALT_MAX_FT    30000   // → BAR_MAX_H (high cruise)
 
 // Speed bar thresholds (right column)
-#define SPD_MIN_KT    100    // → 2px (slow approach / GA)
+#define SPD_MIN_KT     50    // → 2px (slow approach / GA)
 #define SPD_MAX_KT    450    // → BAR_MAX_H (jet cruise)
 
 // Route layout (TomThumb font, 5px tall)
@@ -52,3 +52,8 @@
 
 // Progress pixel at which the route area flips to show aircraft type
 #define TYPE_FLIP_PX  (MATRIX_W / 2)
+
+// Rotary encoder brightness control (Protomatter setDuty: 0=dim, 2=bright on 120 MHz SAMD51)
+#define BRIGHTNESS_DEFAULT  1
+#define BRIGHTNESS_MIN      0
+#define BRIGHTNESS_MAX      2
