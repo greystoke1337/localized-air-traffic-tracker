@@ -2598,9 +2598,6 @@
         : '---';
 
       const phase     = flightPhase(f, distLoc);
-      const phaseHtml = phase.cls
-        ? '<span class="' + phase.cls + '-text">' + phase.label + '</span>'
-        : phase.label;
 
       document.getElementById('info-wrap').className = phase.cls || '';
 
@@ -2890,9 +2887,8 @@
     // Refresh weather every 15 minutes
     setInterval(() => { if (locationLat || locationLon) fetchWeather(); }, 15 * 60 * 1000);
 
-    // ── Re-filter cached flights (no API call) ─────────────────────
-    function refilterFlights() {
-      if (!lastRawAc.length) return;
+    // ── Filter, sort, and apply flights to UI ─────────────────────
+    function applyFilterAndSort() {
       const prevHex = flights[flightIndex]?.hex;
       let ac = lastRawAc.filter(f =>
         typeof f.alt_baro === 'number' && f.alt_baro >= altFloorFt &&
@@ -2910,13 +2906,19 @@
         document.getElementById('counter').textContent = '';
         document.getElementById('info-wrap').className = '';
         updateAltBar(null);
-        return;
+        return false;
       }
       flights = ac;
       const restored = prevHex ? ac.findIndex(f => f.hex === prevHex) : -1;
       flightIndex = restored >= 0 ? restored : 0;
       render(flights[flightIndex]);
       updateStats(flights);
+      return true;
+    }
+
+    function refilterFlights() {
+      if (!lastRawAc.length) return;
+      applyFilterAndSort();
     }
 
     // ── Fetch flights ────────────────────────────────────────────────
@@ -2981,7 +2983,7 @@
 
     function demoGenerateFlights() {
       const sc = DEMO_SCENARIOS[demoScenario] || DEMO_SCENARIOS.busy;
-      return { ac: sc.phases.map((p,i) => demoGenFlight(locationLat, locationLon, p, i)), total: sc.phases.length, now: Date.now()/1000 };
+      return { ac: sc.phases.map((p,i) => demoGenFlight(locationLat, locationLon, p, i)) };
     }
 
     async function fetchFlights() {
@@ -3011,30 +3013,8 @@
         lastRawAc = (data.ac || []).filter(f =>
           typeof f.lat === 'number' && typeof f.lon === 'number'
         );
-        let ac = lastRawAc.filter(f =>
-          typeof f.alt_baro === 'number' && f.alt_baro >= altFloorFt &&
-          haversineKm(locationLat, locationLon, f.lat, f.lon) <= geofenceKm
-        );
-        ac.sort((a, b) =>
-          haversineKm(locationLat, locationLon, a.lat, a.lon) -
-          haversineKm(locationLat, locationLon, b.lat, b.lon)
-        );
-        if (!ac.length) {
-          clearAircraftMarker(); clearPhoto();
-          document.getElementById('info').textContent    = 'NO AIRCRAFT ABOVE ' + locationName + '.\nTRY INCREASING GEOFENCE OR LOWERING ALT FLOOR.\nNEXT CHECK IN 15S.';
-          ['d-alt','d-spd','d-vs','d-hdg','d-dist','d-sqk'].forEach(id => document.getElementById(id).textContent = '---');
-          document.getElementById('counter').textContent = '';
-          document.getElementById('info-wrap').className = '';
-          updateAltBar(null);
-          return;
-        }
-        const prevHex = flights[flightIndex]?.hex;
-        flights = ac;
-        const restored = prevHex ? ac.findIndex(f => f.hex === prevHex) : -1;
-        flightIndex = restored >= 0 ? restored : 0;
+        if (!applyFilterAndSort()) return;
         checkEmergencySquawks();
-        render(flights[flightIndex]);
-        updateStats(flights);
         consecutiveFailures = 0;
         firstFetchDone = true;
       } catch(e) {

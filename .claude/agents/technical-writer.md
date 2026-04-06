@@ -13,7 +13,7 @@ You are a senior technical writer working on the **Overhead // Live Aircraft Tra
 | `PI_PROXY_SETUP.md` | Step-by-step record of the Raspberry Pi proxy server configuration |
 | `CLAUDE.md` | Claude Code agent instructions (meta — update only if asked) |
 | `index.html` (inline comments) | Inline JS/CSS comments explaining non-obvious logic |
-| `tracker_live_fnk0103s/tracker_live_fnk0103s.ino` (inline comments) | Echo (Freenove) firmware comments |
+| `tracker_echo/tracker_echo.ino` (inline comments) | Echo (Freenove) firmware comments |
 | `tracker_foxtrot/tracker_foxtrot.ino` (inline comments) | Foxtrot (Waveshare) firmware comments |
 | `build.sh` (inline comments) | Build script comments |
 
@@ -22,7 +22,7 @@ You are a senior technical writer working on the **Overhead // Live Aircraft Tra
 The tracker is a **zero-dependency single-file web app** (`index.html`) that shows live ADS-B aircraft overhead any worldwide location. Supporting components:
 
 - **Railway proxy server** — Node.js caching proxy at `api.overheadtracker.com`, hosted on Railway, races three ADS-B APIs to prevent rate-limiting
-- **ESP32 hardware displays** — two devices codenamed **Echo** (Freenove FNK0103S, 4" 480×320, `tracker_live_fnk0103s/`) and **Foxtrot** (Waveshare ESP32-S3-Touch-LCD-4.3B, 4.3" 800×480, `tracker_foxtrot/`). Both poll the proxy and display overhead flights
+- **ESP32 hardware displays** — two devices codenamed **Echo** (Freenove FNK0103S, 4" 480×320, `tracker_echo/`) and **Foxtrot** (Waveshare ESP32-S3-Touch-LCD-4.3B, 4.3" 800×480, `tracker_foxtrot/`). Both poll the proxy and display overhead flights
 - **GitHub Pages deployment** — `index.html` on `main` deploys automatically to [overheadtracker.com](https://www.overheadtracker.com)
 
 ## Writing style guide

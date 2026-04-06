@@ -1,119 +1,126 @@
-# Golf — Adafruit Matrix Portal M4
+# Golf — Adafruit Matrix Portal M4 (64x32 HUB75, Arduino C++)
 
-> **Status**: CircuitPython implementation is superseded. The active firmware is the Arduino C++ port at `tracker_golf_m4/`. The CircuitPython files here are retained for reference only.
-> Deploy with `./build.sh golf` (compiles + flashes via arduino-cli to COM11).
-> See `tracker_golf_m4/` for source, and `tracker_golf_m4/secrets.h` for WiFi/location config (gitignored — copy from template below).
+## Build commands
 
-## Hardware
-
-- **Board**: Adafruit Matrix Portal M4 (SAMD51 + ESP32 WiFi co-processor)
-- **Display**: 64×32 HUB75 RGB LED matrix (single panel)
-- **Language**: CircuitPython 10.1.4 (not Arduino)
-- **COM port**: COM11
-- **No FQBN** — CircuitPython, no compilation step
-
-## Purpose
-
-Public-facing flight display. Shows overhead aircraft for a wider audience.
-Scrolling ticker or stacked layout: callsign + route + altitude/phase + speed.
-
-## Key Hardware Facts
-
-- Panel is **64×32**, not 128×64 — initialize as `Matrix(width=64, height=32, bit_depth=4)`
-- `bit_depth=4` gives 16 PWM levels for smooth fade gradients; `bit_depth=2` (4 levels) is too coarse for animations
-- Panel is mounted **upside down** — always set `display.rotation = 180`
-- `Matrix` sets `auto_refresh=False` internally — must call `display.refresh()` to push to hardware
-- G and B color channels are **swapped** on this panel: use `0x0000FF` for green, `0x00FF00` for blue
-- Color derivation with G/B swap — `0xRRGGBB`: R stays R; G hex → B on display; B hex → G on display
-  - Amber/orange on display: `0xFF00A0` (full red + ~63% green, no blue)
-  - To tune amber: raise `0xA0` toward `0xFF` for more yellow, lower toward `0x60` for deeper orange
-- `terminalio.FONT` characters are 6px wide × 8px tall
-- **Pseudo-bold / thick text**: render the same label 4 times offset by `(dx, dy)` in `((0,0),(1,0),(0,1),(1,1))` — each font pixel becomes a 2×2 block. No custom font needed.
-- **Letter spacing**: `bitmap_label` has no letter-spacing option. Render each character as a separate label, stepping `CHAR_W + GAP` px between centers.
-
-## Rotary encoder
-
-> **Not currently wired up in `code.py`** — the import, hardware init, and brightness logic were removed temporarily. The hardware notes below are preserved for when it's re-added.
-
-- **Hardware**: Adafruit I2C QT Rotary Encoder with NeoPixel (seesaw, default address `0x36`)
-- **Connection**: STEMMA QT port — no soldering, plug-and-play
-- **Purpose**: adjusts matrix brightness at runtime (0.05–1.0 in 0.05 steps per detent)
-- **Init**: `board.STEMMA_I2C()` then `Seesaw(i2c, addr=0x36)` — do NOT use `busio.I2C(board.SCL, board.SDA)`
-- **Read position**: `seesaw.encoder_position(0)` — `IncrementalEncoder` from `adafruit_seesaw.rotaryio` does not work on this board; use the raw seesaw method
-- **Brightness target**: `display.framebuffer.brightness` — `display.brightness` (FramebufferDisplay attribute) has no visual effect
-- **Encoder LED**: seesaw pin 6, controlled via `adafruit_seesaw.neopixel.NeoPixel`; set to off (`fill(0)`) on boot
-- **Encoder button**: seesaw pin 24 — `ss.pin_mode(24, ss.INPUT_PULLUP)` + `ss.digital_read(24)` (not currently used in production code)
-- **Library**: `adafruit_seesaw` is NOT in the default CircuitPython bundle that ships with the device — install manually to `CIRCUITPY:/lib/`
-
-## Libraries Required
-
-Install from the [Adafruit CircuitPython Bundle](https://circuitpython.org/libraries) into `/lib` on the CIRCUITPY drive:
-
-- `adafruit_matrixportal/`
-- `adafruit_display_text/`
-- `adafruit_portalbase/`
-- `adafruit_bus_device/`
-- `adafruit_requests.mpy`
-- `adafruit_connection_manager.mpy`
-- `neopixel.mpy`
-- `adafruit_seesaw/` — **not in the default bundle**; download separately from the bundle and copy to `CIRCUITPY:/lib/adafruit_seesaw/`
-
-Built into CircuitPython firmware (no install needed):
-- `rgbmatrix`, `framebufferio`, `displayio`, `terminalio`, `board`
-
-## Deploy Workflow
-
-No compilation — edit and copy files directly to the CIRCUITPY drive:
-
-1. Connect Matrix Portal M4 via USB — CIRCUITPY drive appears (drive letter varies; find via `wmic logicaldisk get DeviceID,VolumeName`)
-2. **Always use Python's `shutil.copy2` to copy files** — `cp` corrupts files on FAT32
-3. Copy `tracker_golf/code.py` → `CIRCUITPY:/code.py`
-4. Copy `tracker_golf/settings.toml` → `CIRCUITPY:/settings.toml` (WiFi + location, gitignored)
-5. Device auto-reloads on file save
-
-Use the `deploy-golf` skill in Claude Code to automate steps 1–3 with syntax checking.
-
-## Serial Monitor
-
-Use pyserial — VS Code serial monitor and PowerShell miss output due to timing/encoding issues:
-
-```python
-import serial, time, sys
-s = serial.Serial('COM11', 115200, timeout=0.5)
-s.write(b'\x03\x04')  # Ctrl+C + Ctrl+D = soft reset
-deadline = time.time() + 15
-while time.time() < deadline:
-    line = s.readline()
-    if line:
-        sys.stdout.buffer.write(line)
-        sys.stdout.buffer.flush()
-s.close()
+```bash
+./build.sh golf           # compile + upload to COM9
+./build.sh golf-compile   # compile only
 ```
 
-## Config (settings.toml — gitignored)
+- FQBN: `adafruit:samd:adafruit_matrixportal_m4`
+- COM9 (running) / COM10 (bootloader — triggered automatically via 1200-baud touch)
+- Serial monitor: 115200 baud
 
-Copy `settings.toml.template` to `settings.toml` on the CIRCUITPY drive and fill in real values:
+## File layout
 
-```toml
-CIRCUITPY_WIFI_SSID = "your_ssid"
-CIRCUITPY_WIFI_PASSWORD = "your_password"
-HOME_LAT = -33.8688
-HOME_LON = 151.2093
-GEOFENCE_KM = 20
-ALT_FLOOR_FT = 1000
-LOCATION_NAME = "Home"
+| File | Purpose |
+|------|---------|
+| `tracker_golf.ino` | `setup()` / `loop()`, matrix init, WiFi connect, NTP sync, page state machine, fetch/display cycle |
+| `config.h` | All constants: timing, colors, layout geometry, bar thresholds, weather/clock intervals |
+| `types.h` | `Flight` struct; `Weather` struct (`tempC`, `weatherCode`, `valid`) |
+| `globals.h` | `Page` enum (`PAGE_FLIGHT`, `PAGE_WEATHER`); extern declarations for all global state; `fetchWeather`/`drawWeatherPage` prototypes |
+| `lookup_tables.h` | ICAO type code -> display name + category; airline prefix -> color; `resolveTypeName()`, `getTypeColor()`, `getAirlineColor()` |
+| `network.ino` | HTTPS fetch from `api.overheadtracker.com`; `fetchFlight()` (ArduinoJson stream-parse, haversine filter, picks closest aircraft above altitude floor); `fetchWeather()` |
+| `display.ino` | `drawCallsign()`, `drawRoute()`, `drawBars()`, `drawProgressBar()`, `drawAll()`, `drawBootStatus()`; weather page: `wmoShortName()`, `wmoToIconType()`, `drawWeatherIcon()`, `drawWeatherPage()`; icon type constants (`ICON_SUN`–`ICON_STORM`) |
+| `wifi_setup.ino` | `connectWiFi()`, `reconnectIfNeeded()` |
+| `secrets.h` | WiFi SSID/password, HOME_LAT/LON, GEOFENCE_KM, ALT_FLOOR_FT — **gitignored** |
+
+## Display layout (64x32 px)
+
+Two pages; the button on the rotary encoder toggles between them.
+
+### Flight page (default)
+
+```
+Row  0:      [alt bar, col 0]  callsign or type name (6x8 bold)  [spd bar, col 63]
+Rows 1-16:   side bars only
+Rows 17-26:  route text (TomThumb font): origin line + destination line
+             -- or type name in category color if no route known
+             -- GA aircraft always show "GENERAL" / "AVIATION" here (see GA note below)
+Row 31:      amber progress bar (fills left-to-right over 30s)
 ```
 
-`GEOFENCE_KM` defaults to `10` in code but `20` is recommended for the LED matrix — the wider radius ensures enough flights appear on the small display.
-
-## File Layout
+### Weather page
 
 ```
-tracker_golf/
-  code.py                  # Main CircuitPython entry point (copy to CIRCUITPY root)
-  test_brightness.py       # Dev-only: radar sweep + Sydney time via worldtimeapi.org
-                           # Verifies WiFi, internet, and display; not deployed in production
-  settings.toml.template   # Safe to commit — fill in and copy as settings.toml
-  .gitignore               # Ignores settings.toml
-  CLAUDE.md                # This file
+Rows 0-9:    clock "HH:MM" — pseudo-bold amber, centered (same technique as callsign)
+Rows 12-21:  left side: procedural weather icon (~12x10 px)
+             right side: temperature in °C (white, 6x8 font)
+Row 28:      WMO condition string — TomThumb, amber, centered (e.g. "PT CLOUDY")
+```
+
+The weather page auto-activates when no flights are in the geofence, and auto-returns to the flight page when a flight reappears. Manual button presses clear the auto-switch flag and let the user stay on the chosen page until the next manual toggle.
+
+## Refresh cycle (30 s)
+
+- Progress bar advances 1px every ~468ms (`PIXEL_INTERVAL = REFRESH_MS / 64`).
+- Pixels 0-31: callsign in airline color.
+- Pixels 32-63: aircraft type name in category color; long names scroll left.
+- **GA aircraft exception**: `typeColor == C_WHITE` suppresses the mid-cycle flip. The callsign stays visible for the full 30s cycle; the route area always shows "GENERAL" / "AVIATION" in amber.
+- At px 64: fetch new data, reset bar.
+
+## NTP clock
+
+Time is synced via `WiFi.getTime()` (built into WiFiNINA) during `setup()`, up to 5 retries. The epoch + elapsed millis are combined at render time, so the clock stays accurate between reboots without re-syncing. If NTP fails, the clock shows `00:00`. UTC offset is set by `UTC_OFFSET_HOURS` in `config.h`.
+
+## Weather fetch
+
+- Endpoint: `GET api.overheadtracker.com/weather?lat=&lon=`
+- Fetched once at startup, then every 10 minutes (`WEATHER_REFRESH_MS`).
+- Response fields used: `temp` (float, °C) and `weather_code` (WMO integer).
+- WMO codes mapped to five icon types (SUN, CLOUD, RAIN, SNOW, STORM) and short condition strings.
+- If the fetch has not yet succeeded, the weather page shows "NO DATA".
+
+## Hardware quirks
+
+**Panel mounted upside-down** — always init with `rotation = 2`.
+
+**G and B output channels are physically swapped** — use `color565(R, B_vis, G_vis)` to produce the intended visual color. For example, to display amber (R=high, G=mid, B=0), pass the G and B arguments in swapped order.
+
+## Color constants (config.h)
+
+| Constant | Visual color | Used for |
+|----------|-------------|---------|
+| `C_AMBER` | amber | default callsign, progress bar, clock, weather condition, fallback |
+| `C_WHITE` | white | route origin/dest text; GA aircraft; temperature; weather icon cloud |
+| `C_BLACK` | off | background |
+| `C_DEEP_BLUE` | deep blue | altitude bar (left column) |
+| `C_LIGHT_BLUE` | light blue | speed bar (right column); rain streaks on weather icon |
+| `C_CAT_NARROW` | cyan | narrow-body jets |
+| `C_CAT_WIDE` | yellow | wide-body jets |
+| `C_CAT_JUMBO` | magenta | A380 / B747 |
+| `C_CAT_REGIONAL` | green | regional jets |
+| `C_CAT_TURBOPROP` | red | turboprops |
+
+All values encoded with G/B swap applied.
+
+## Side bars
+
+- **Left column (px 0)**: altitude in deep blue. Non-linear: `ALT_MIN_FT` (300 ft) -> 2px, `ALT_MID_FT` (2,000 ft) -> 23px (75% of bar), `ALT_MAX_FT` (30,000 ft) -> 30px.
+- **Right column (px 63)**: speed in light blue. Maps `SPD_MIN_KT` (100 kt) -> 2px, `SPD_MAX_KT` (450 kt) -> 30px.
+- Both 0px when no valid aircraft is tracked.
+
+## Key tuneable constants (config.h)
+
+| Constant | Default | Effect |
+|----------|---------|--------|
+| `REFRESH_MS` | 30000 | Full fetch cycle duration (ms) |
+| `TYPE_FLIP_PX` | 32 (`MATRIX_W / 2`) | Progress pixel at which type name replaces callsign (non-GA only) |
+| `ALT_MIN_FT` / `ALT_MID_FT` / `ALT_MAX_FT` | 300 / 2000 / 30000 | Altitude bar clamp range |
+| `SPD_MIN_KT` / `SPD_MAX_KT` | 100 / 450 | Speed bar clamp range |
+| `UTC_OFFSET_HOURS` | 11 | Local UTC offset for NTP clock (11 = AEDT; 10 = AEST) |
+| `WEATHER_REFRESH_MS` | 600000 | Weather re-fetch interval (ms) |
+| `CLOCK_UPDATE_MS` | 1000 | Weather page clock redraw interval (ms) |
+
+## Config (secrets.h — gitignored)
+
+No template file — create manually:
+
+```cpp
+#define WIFI_SSID     "your_ssid"
+#define WIFI_PASSWORD "your_password"
+#define HOME_LAT      -33.8688
+#define HOME_LON      151.2093
+#define GEOFENCE_KM   20
+#define ALT_FLOOR_FT  1000
 ```

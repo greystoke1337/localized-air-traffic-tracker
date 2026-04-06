@@ -12,7 +12,7 @@ Compile, flash, and capture serial output in one workflow.
 
 | Device | Directory | COM Port | FQBN |
 |--------|-----------|----------|------|
-| **Echo** (default) | `tracker_live_fnk0103s/` | COM4 | `esp32:esp32:esp32:PartitionScheme=min_spiffs` |
+| **Echo** (default) | `tracker_echo/` | COM4 | `esp32:esp32:esp32:PartitionScheme=min_spiffs` |
 | **Foxtrot** | `tracker_foxtrot/` | COM7 | `esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB` |
 
 If `$ARGUMENTS[0]` is "echo" or "foxtrot" (case-insensitive), use that device and shift remaining args. Otherwise default to Echo.

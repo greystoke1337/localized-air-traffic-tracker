@@ -1,11 +1,11 @@
 ---
 name: deploy-golf
-description: Deploy Golf Arduino firmware to the Adafruit Matrix Portal M4. Use when the user says "deploy golf", "flash golf", "deploy it" after editing Golf code, or after making changes to tracker_golf_m4/.
+description: Deploy Golf Arduino firmware to the Adafruit Matrix Portal M4. Use when the user says "deploy golf", "flash golf", "deploy it" after editing Golf code, or after making changes to tracker_golf/.
 ---
 
 # Deploy Golf (Adafruit Matrix Portal M4 — Arduino)
 
-Compile and upload `tracker_golf_m4/tracker_golf_m4.ino` via arduino-cli to COM9 (running) / COM10 (bootloader).
+Compile and upload `tracker_golf/tracker_golf.ino` via arduino-cli to COM9 (running) / COM10 (bootloader).
 
 ## Steps
 

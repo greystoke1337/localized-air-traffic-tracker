@@ -35,16 +35,16 @@
 
 set -e
 
-SKETCH="tracker_live_fnk0103s/tracker_live_fnk0103s.ino"
+SKETCH="tracker_echo/tracker_echo.ino"
 FQBN="esp32:esp32:esp32:PartitionScheme=min_spiffs"
 FOXTROT_SKETCH="tracker_foxtrot/tracker_foxtrot.ino"
 FOXTROT_FQBN="esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB"
 FOXTROT_BUILD_DIR="/tmp/overhead-tracker-foxtrot-build"
-DELTA_SKETCH="delta_display/delta_display.ino"
+DELTA_SKETCH="tracker_delta/tracker_delta.ino"
 DELTA_FQBN="esp32:esp32:esp32s3:PSRAM=opi,USBMode=hwcdc,PartitionScheme=app3M_fat9M_16MB,FlashSize=16M"
 DELTA_BUILD_DIR="/tmp/overhead-tracker-delta-build"
 DELTA_PORT="${DELTA_PORT:-COM8}"
-GOLF_SKETCH="tracker_golf_m4/tracker_golf_m4.ino"
+GOLF_SKETCH="tracker_golf/tracker_golf.ino"
 GOLF_FQBN="adafruit:samd:adafruit_matrixportal_m4"
 GOLF_BUILD_DIR="/tmp/overhead-tracker-golf-build"
 GOLF_PORT="${GOLF_PORT:-COM9}"
@@ -52,7 +52,7 @@ BUILD_DIR="/tmp/overhead-tracker-build"
 BAUD=115200
 OTA_HOST="${OVERHEAD_TRACKER_IP:-overhead-tracker.local}"
 OTA_PORT=3232
-BIN_FILE="$BUILD_DIR/tracker_live_fnk0103s.ino.bin"
+BIN_FILE="$BUILD_DIR/tracker_echo.ino.bin"
 TEST_DIR="tests"
 
 # ── Platform detection ───────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ run_validate() {
 
   # 2. Check for hardcoded local IPs in committed code (proxy IP in .ino is expected)
   local suspicious
-  suspicious=$(grep -rn "192\.168\." tracker_live_fnk0103s/*.ino tracker_live_fnk0103s/*.h 2>/dev/null \
+  suspicious=$(grep -rn "192\.168\." tracker_echo/*.ino tracker_echo/*.h 2>/dev/null \
     | grep -v "PROXY_HOST" | grep -v "192\.168\.4\.1" || true)
   if [ -n "$suspicious" ]; then
     fail "Hardcoded local IP found (not PROXY_HOST):"
@@ -324,7 +324,7 @@ run_test() {
   # Test 2: JSON parsing (C++ with ArduinoJson)
   if [ -f "$TEST_DIR/test_parsing.cpp" ]; then
     info "Compiling test_parsing..."
-    local json_include="tracker_live_fnk0103s/libraries/ArduinoJson/src"
+    local json_include="tracker_echo/libraries/ArduinoJson/src"
     if [ ! -d "$json_include" ]; then
       echo "  [SKIP] ArduinoJson not found at $json_include"
     elif g++ -std=c++17 -Wall -Wextra -I"$json_include" -o /tmp/test_parsing "$TEST_DIR/test_parsing.cpp"; then
@@ -486,7 +486,7 @@ print(f'\nCapture complete: {line_count} lines, {(time.time()-start)/60:.1f} min
 # ── Echo patch+flash (internal) ───────────────────────────────────────────────
 _echo_patch_flash() {
   local new_ip="$1" new_proxy_port="$2" com_port="$3"
-  local ino_file="tracker_live_fnk0103s/tracker_live_fnk0103s.ino"
+  local ino_file="tracker_echo/tracker_echo.ino"
   local old_ip old_port
   old_ip=$(sed -n 's/.*PROXY_HOST *= *"\([^"]*\)".*/\1/p' "$ino_file")
   old_port=$(sed -n 's/.*PROXY_PORT *= *\([0-9]*\).*/\1/p' "$ino_file")

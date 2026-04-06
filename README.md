@@ -79,7 +79,7 @@ Two standalone physical trackers that poll the proxy — no browser needed.
 
 ### Echo — Freenove FNK0103S (4.0", 480×320)
 
-**Hardware:** Freenove FNK0103S (ESP32 + 4" ST7796 SPI touchscreen), optional 3D-printed enclosure (STL/STEP in [`tracker_live_fnk0103s/enclosure/`](tracker_live_fnk0103s/enclosure/))
+**Hardware:** Freenove FNK0103S (ESP32 + 4" ST7796 SPI touchscreen), optional 3D-printed enclosure (STL/STEP in [`tracker_echo/enclosure/`](tracker_echo/enclosure/))
 
 **What it shows:** Header bar, nav bar with touch buttons (WX / GEO / CFG), flight card (callsign, airline name colour-coded by brand, aircraft type, route), and a 4-column dashboard: PHASE | ALT (with vertical rate) | SPEED | DIST. Cycles through overhead flights every 8 seconds. Each of the 8 flight phases (TAKEOFF, CLIMBING, CRUISING, DESCEND, APPROACH, LANDING, OVERHEAD, UNKNOWN) has its own colour in the dashboard.
 
@@ -95,7 +95,7 @@ Two standalone physical trackers that poll the proxy — no browser needed.
 
 **Libraries** (Arduino Library Manager): `LovyanGFX`, `ArduinoJson`, `ArduinoOTA`, `SD`
 
-**Before flashing:** Copy `secrets.h.example` to `secrets.h` and set your default WiFi credentials. On first boot, the captive portal lets you configure WiFi and location (stored in NVS). `PROXY_HOST` in `tracker_live_fnk0103s.ino` defaults to `api.overheadtracker.com`.
+**Before flashing:** Copy `secrets.h.example` to `secrets.h` and set your default WiFi credentials. On first boot, the captive portal lets you configure WiFi and location (stored in NVS). `PROXY_HOST` in `tracker_echo.ino` defaults to `api.overheadtracker.com`.
 
 ```bash
 ./build.sh                  # compile + auto-detect port + upload via USB
@@ -135,7 +135,7 @@ arduino-cli monitor --port COM7 --config "baudrate=115200"
 
 **Libraries** (Arduino Library Manager): `Adafruit Protomatter`, `Adafruit GFX Library`, `ArduinoJson`
 
-**Configuration:** Create `tracker_golf_m4/secrets.h` (gitignored) with your WiFi credentials and home location:
+**Configuration:** Create `tracker_golf/secrets.h` (gitignored) with your WiFi credentials and home location:
 
 ```cpp
 #define WIFI_SSID     "your_ssid"

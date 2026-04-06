@@ -4,13 +4,13 @@ __pycache__/
 tft-preview-*.png
 .claude/settings.local.json
 secrets.env
-tracker_live_fnk0103s/secrets.h
+tracker_echo/secrets.h
 tracker_foxtrot/secrets.h
 tracker_delta/secrets.h
 *.zip
 *.jpg
 *.png
-!tracker_live_fnk0103s/enclosure/**
+!tracker_echo/enclosure/**
 
 # IDE
 .idea/

@@ -11,7 +11,7 @@
     - ArduinoOTA (built into Arduino ESP32 core — no install needed)
 
   File structure:
-    tracker_live_fnk0103s.ino  — setup() + loop() + global state (this file)
+    tracker_echo.ino  — setup() + loop() + global state (this file)
     config.h                   — all #defines (layout, colours, pins, timing)
     types.h                    — Flight, WeatherData, enums
     globals.h                  — extern declarations + forward declarations

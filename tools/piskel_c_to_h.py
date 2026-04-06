@@ -8,7 +8,7 @@ Usage:
     python tools/piskel_c_to_h.py <piskel_export.c> [frame_delay_ms]
 
 Output:
-    tracker_golf_m4/anim_boot.h  (overwritten in place)
+    tracker_golf/anim_boot.h  (overwritten in place)
 
 Piskel stores each pixel as 0xAARRGGBB.
 The Golf panel has G and B output channels physically swapped, so pixels are
@@ -19,7 +19,7 @@ import re
 import sys
 from pathlib import Path
 
-OUT_PATH = Path(__file__).parent.parent / "tracker_golf_m4" / "anim_boot.h"
+OUT_PATH = Path(__file__).parent.parent / "tracker_golf" / "anim_boot.h"
 
 
 def argb_to_565_swapped(val):

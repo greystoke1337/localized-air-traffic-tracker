@@ -3,7 +3,7 @@
         {
             "name": "ESP32",
             "includePath": [
-                "${workspaceFolder}/tracker_live_fnk0103s/libraries/**",
+                "${workspaceFolder}/tracker_echo/libraries/**",
                 "${env:LOCALAPPDATA}/Arduino15/packages/esp32/hardware/esp32/3.3.7/cores/esp32",
                 "${env:LOCALAPPDATA}/Arduino15/packages/esp32/hardware/esp32/3.3.7/variants/esp32",
                 "${env:LOCALAPPDATA}/Arduino15/packages/esp32/hardware/esp32/3.3.7/libraries/**",

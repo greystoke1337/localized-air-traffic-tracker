@@ -624,7 +624,7 @@ const weatherIconCache = {};
 function loadWeatherIcon(name) {
   if (weatherIconCache[name]) return weatherIconCache[name];
   const img = new Image();
-  img.src = 'tracker_golf_m4/weatherIcons/' + name + '.png';
+  img.src = 'tracker_golf/weatherIcons/' + name + '.png';
   img.onload = () => { weatherIconCache[name] = img; draw(); };
   weatherIconCache[name] = img; // store even if not yet loaded
   return img;

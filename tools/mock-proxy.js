@@ -246,7 +246,7 @@ server.listen(port, () => {
   console.log(`\n=== MOCK PROXY: ${mode} mode on port ${port} ===`);
   console.log(`    Scenario: ${scenario} — ${scDesc}\n`);
   console.log(`Local IP: ${ip}`);
-  console.log(`Set PROXY_HOST in tracker_live_fnk0103s.ino line 37 to "${ip}"`);
+  console.log(`Set PROXY_HOST in tracker_echo.ino line 37 to "${ip}"`);
   console.log(`Then:  ./build.sh compile && ./build.sh upload COM4`);
   console.log(`       ./build.sh monitor COM4  (in another terminal)\n`);
   console.log(`Expected ESP32 behavior:`);

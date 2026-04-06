@@ -9,7 +9,7 @@ Usage:
     python tools/piskel_to_h.py <spritesheet.png> [frame_delay_ms]
 
 Output:
-    tracker_golf_m4/anim_boot.h   (overwritten in place)
+    tracker_golf/anim_boot.h   (overwritten in place)
 
 The Golf panel has G and B output channels physically swapped, so every pixel is
 encoded as R5B6G5 instead of standard R5G6B5.  The conversion handles this.
@@ -28,7 +28,7 @@ except ImportError:
 
 FRAME_W = 64
 FRAME_H = 32
-OUT_PATH = Path(__file__).parent.parent / "tracker_golf_m4" / "anim_boot.h"
+OUT_PATH = Path(__file__).parent.parent / "tracker_golf" / "anim_boot.h"
 
 
 def to_565_swapped(r, g, b):

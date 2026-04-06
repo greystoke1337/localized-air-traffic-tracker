@@ -33,9 +33,9 @@ flash.html                  # Web Serial firmware flasher (Chrome/Edge, esptool.
 firmware/                   # Compiled Foxtrot binaries + manifest.json for flash.html
 server/                     # Railway-hosted proxy (server.js, package.json)
 pi-display/                 # Raspberry Pi TFT display (display.py, watchdog.sh)
-tracker_live_fnk0103s/      # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
+tracker_echo/      # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
 tracker_foxtrot/            # Foxtrot — Waveshare 4.3 (ESP32-S3, RGB, 800×480, LovyanGFX immediate-mode)
-tracker_golf_m4/            # Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix, Arduino)
+tracker_golf/            # Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix, Arduino)
 tools/                      # synthetic-data.js, mock-proxy.js, serial_monitor.ps1
 tests/                      # Desktop logic tests (test_flight_logic.c, test_parsing.cpp)
 ```
@@ -85,7 +85,7 @@ Edit `index.html`, test via `file://`, push to `master` (auto-deploys to GitHub 
 ### Testing with synthetic data
 Web app: `index.html?demo=true&scenario=emergency`. Mock proxy: `node tools/mock-proxy.js normal 3000 --scenario crowded`.
 
-For Echo, Foxtrot, Golf, server, and Pi — see the `CLAUDE.md` in each subdirectory (`tracker_live_fnk0103s/`, `tracker_foxtrot/`, `tracker_golf_m4/`, `server/`, `pi-display/`).
+For Echo, Foxtrot, Golf, server, and Pi — see the `CLAUDE.md` in each subdirectory (`tracker_echo/`, `tracker_foxtrot/`, `tracker_golf/`, `server/`, `pi-display/`).
 
 ---
 

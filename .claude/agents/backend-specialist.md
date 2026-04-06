@@ -38,7 +38,7 @@ The proxy races three upstream ADS-B APIs simultaneously and uses the fastest re
 | Board | Freenove FNK0103S (ESP32, HSPI) |
 | Display | 4.0" 480x320 ST7796 SPI (landscape) |
 | Touch | XPT2046 resistive (SPI) |
-| Firmware | `tracker_live_fnk0103s/` |
+| Firmware | `tracker_echo/` |
 | Libraries | LovyanGFX, ArduinoJson, SD |
 | Build | `./build.sh compile` then `./build.sh upload COM4` |
 | FQBN | `esp32:esp32:esp32:PartitionScheme=min_spiffs` |

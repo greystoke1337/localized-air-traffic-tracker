@@ -79,38 +79,19 @@ function bucketKey(lat, lon, radius) {
 }
 
 // ── Cache eviction (LRU-like: evict oldest by timestamp) ────────────
-function cacheSet(key, entry) {
-  cache.set(key, entry);
-  if (cache.size > MAX_CACHE_ENTRIES) {
+function lruSet(map, maxSize, key, entry) {
+  map.set(key, entry);
+  if (map.size > maxSize) {
     let oldestKey = null, oldestTs = Infinity;
-    for (const [k, v] of cache) {
+    for (const [k, v] of map) {
       if (v.timestamp < oldestTs) { oldestTs = v.timestamp; oldestKey = k; }
     }
-    if (oldestKey) cache.delete(oldestKey);
+    if (oldestKey) map.delete(oldestKey);
   }
 }
-
-function routeCacheSet(key, entry) {
-  routeCache.set(key, entry);
-  if (routeCache.size > MAX_ROUTE_ENTRIES) {
-    let oldestKey = null, oldestTs = Infinity;
-    for (const [k, v] of routeCache) {
-      if (v.timestamp < oldestTs) { oldestTs = v.timestamp; oldestKey = k; }
-    }
-    if (oldestKey) routeCache.delete(oldestKey);
-  }
-}
-
-function airportCacheSet(icao, entry) {
-  airportCache.set(icao, entry);
-  if (airportCache.size > MAX_AIRPORT_ENTRIES) {
-    let oldestKey = null, oldestTs = Infinity;
-    for (const [k, v] of airportCache) {
-      if (v.timestamp < oldestTs) { oldestTs = v.timestamp; oldestKey = k; }
-    }
-    if (oldestKey) airportCache.delete(oldestKey);
-  }
-}
+function cacheSet(key, entry) { lruSet(cache, MAX_CACHE_ENTRIES, key, entry); }
+function routeCacheSet(key, entry) { lruSet(routeCache, MAX_ROUTE_ENTRIES, key, entry); }
+function airportCacheSet(icao, entry) { lruSet(airportCache, MAX_AIRPORT_ENTRIES, icao, entry); }
 
 // ── .env loader ──────────────────────────────────────────────────────
 try {

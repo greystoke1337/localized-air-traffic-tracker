@@ -1,6 +1,6 @@
 /*
   Desktop test for JSON parsing logic.
-  Compile: g++ -std=c++17 -Wall -Wextra -Itests/../tracker_live_fnk0103s/libraries/ArduinoJson/src -o test_parsing test_parsing.cpp
+  Compile: g++ -std=c++17 -Wall -Wextra -Itests/../tracker_echo/libraries/ArduinoJson/src -o test_parsing test_parsing.cpp
   Run:     ./test_parsing
   Or:      ./build.sh test
 

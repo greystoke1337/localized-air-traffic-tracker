@@ -24,7 +24,7 @@ Core UI regions (web):
 
 ## ESP32 display devices
 
-**Echo** (Freenove, `tracker_live_fnk0103s/`): 480x320 ST7796 SPI, resistive touch, LovyanGFX direct drawing.
+**Echo** (Freenove, `tracker_echo/`): 480x320 ST7796 SPI, resistive touch, LovyanGFX direct drawing.
 
 **Foxtrot** (Waveshare, `tracker_foxtrot/`): 800x480 ST7262 parallel RGB, capacitive GT911 touch. Uses **ESP32_Display_Panel + LVGL v8.4.0** (retained-mode GUI).
 
