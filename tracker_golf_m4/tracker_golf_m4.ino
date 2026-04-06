@@ -104,7 +104,7 @@ void setup() {
   lastClockMs   = now;
   progressPixel = 0;
 
-  drawAll(currentFlight, 0);
+  drawAll(currentFlight, progressPixel);
 }
 
 void loop() {
@@ -123,7 +123,7 @@ void loop() {
       int h, m; currentTime(h, m);
       drawWeatherPage(currentWeather, h, m);
     } else {
-      drawAll(currentFlight, progressPixel, progressPixel >= TYPE_FLIP_PX);
+      drawAll(currentFlight, progressPixel);
     }
   }
 
@@ -137,7 +137,7 @@ void loop() {
       int h, m; currentTime(h, m);
       drawWeatherPage(currentWeather, h, m);
     } else {
-      drawAll(currentFlight, progressPixel, progressPixel >= TYPE_FLIP_PX);
+      drawAll(currentFlight, progressPixel);
     }
   }
   lastBtnState = btnNow;
@@ -156,7 +156,7 @@ void loop() {
       progressPixel < MATRIX_W && now - lastPixelMs >= PIXEL_INTERVAL) {
     progressPixel++;
     lastPixelMs += PIXEL_INTERVAL;
-    drawAll(currentFlight, progressPixel, progressPixel >= TYPE_FLIP_PX);
+    drawAll(currentFlight, progressPixel);
   }
 
   // Weather refresh (every 10 minutes, regardless of current page)
@@ -176,7 +176,7 @@ void loop() {
     progressPixel = 0;
 
     if (currentPage == PAGE_FLIGHT) {
-      drawAll(currentFlight, 0);  // snap back to callsign view before blocking fetch
+      drawAll(currentFlight, progressPixel);  // snap back to callsign view before blocking fetch
     }
 
     bool ok = fetchFlight(currentFlight);
@@ -210,7 +210,7 @@ void loop() {
       int h, m; currentTime(h, m);
       drawWeatherPage(currentWeather, h, m);
     } else {
-      drawAll(currentFlight, 0);
+      drawAll(currentFlight, progressPixel);
     }
   }
 }

@@ -567,16 +567,136 @@
     body.dotmatrix.light-mode #alt-bar-wrap { background: rgba(107,58,0,0.06); }
 
     /* Mode toggle — floating top-right */
-    #mode-toggle {
+    #mode-toggle, #big-toggle {
       position: fixed;
       top: 12px;
-      right: 12px;
       z-index: 100;
       padding: 6px 10px;
       font-size: 0.7rem;
       min-height: 32px;
       opacity: 0.6;
       transition: opacity 0.2s, background 0.2s;
+    }
+    #mode-toggle { right: 12px; }
+    #big-toggle  { right: 68px; }
+
+    /* ── Big display mode ── */
+    body.big-display {
+      max-width: 100vw;
+      padding: 0;
+      overflow: hidden;
+      height: 100vh;
+    }
+    body.big-display .classic-layout { display: none; }
+    body.big-display #mode-toggle, body.big-display #big-toggle { display: none; }
+
+    #big-panel {
+      display: none;
+      flex-direction: column;
+      height: 100vh;
+      padding: clamp(14px, 3vw, 28px);
+      box-sizing: border-box;
+      gap: 0;
+    }
+    body.big-display #big-panel { display: flex; }
+
+    #big-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: clamp(0.75rem, 1.8vw, 1rem);
+      opacity: 0.6;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--c-dim);
+      flex-shrink: 0;
+    }
+    #big-header-title { letter-spacing: 0.08em; }
+    #big-exit {
+      padding: 6px 14px;
+      font-size: clamp(0.65rem, 1.5vw, 0.8rem);
+      min-height: 0;
+      opacity: 0.8;
+    }
+
+    #big-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: clamp(10px, 2vh, 24px) 0;
+      gap: clamp(6px, 1.5vh, 14px);
+    }
+
+    #big-callsign {
+      font-size: clamp(3.5rem, 14vw, 9rem);
+      letter-spacing: 0.06em;
+      line-height: 1;
+      margin: 0;
+    }
+    #big-airline {
+      font-size: clamp(1.2rem, 4vw, 2.8rem);
+      opacity: 0.75;
+      line-height: 1.1;
+    }
+    #big-route {
+      font-size: clamp(1rem, 3.5vw, 2.4rem);
+      color: var(--c-main);
+      letter-spacing: 0.04em;
+      line-height: 1.2;
+    }
+    #big-phase {
+      font-size: clamp(1rem, 3vw, 2rem);
+      letter-spacing: 0.08em;
+    }
+
+    #big-stats {
+      display: flex;
+      gap: clamp(4px, 1vw, 10px);
+      margin-top: clamp(6px, 1.5vh, 16px);
+    }
+    .big-stat {
+      flex: 1;
+      text-align: center;
+      padding: clamp(8px, 2vh, 18px) clamp(4px, 1vw, 12px);
+      border: 1px solid var(--c-dim);
+    }
+    .big-stat-label {
+      font-size: clamp(0.55rem, 1.3vw, 0.75rem);
+      opacity: 0.5;
+      display: block;
+      letter-spacing: 0.06em;
+    }
+    .big-stat-value {
+      font-size: clamp(1.4rem, 5vw, 3.2rem);
+      display: block;
+      margin-top: 4px;
+      line-height: 1;
+    }
+
+    #big-footer {
+      display: flex;
+      align-items: center;
+      gap: clamp(8px, 1.5vw, 16px);
+      padding-top: 10px;
+      border-top: 1px solid var(--c-dim);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    #big-nav { display: flex; gap: 6px; align-items: center; }
+    #big-nav button { padding: 8px 16px; font-size: clamp(0.7rem, 1.5vw, 0.85rem); min-height: 0; }
+    #big-counter {
+      font-size: clamp(0.75rem, 1.8vw, 1rem);
+      opacity: 0.6;
+      min-width: 8em;
+      text-align: center;
+    }
+    #big-flight-list {
+      font-size: clamp(0.6rem, 1.3vw, 0.75rem);
+      opacity: 0.4;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -598,6 +718,48 @@
 </head>
 <body class="dotmatrix">
   <button id="mode-toggle" onclick="toggleMode()" data-tip="Switch dark/light mode (D).">DARK</button>
+  <button id="big-toggle" onclick="toggleBigDisplay()" data-tip="Big display mode for viewing from a distance.">BIG</button>
+
+  <!-- ── Big display panel (kiosk / away mode) ── -->
+  <div id="big-panel">
+    <div id="big-header">
+      <span id="big-header-title">OVERHEAD // <span id="big-location">---</span></span>
+      <button id="big-exit" onclick="toggleBigDisplay()">EXIT BIG MODE</button>
+    </div>
+    <div id="big-main">
+      <div id="big-callsign">---</div>
+      <div id="big-airline"></div>
+      <div id="big-route"></div>
+      <div id="big-phase"></div>
+      <div id="big-stats">
+        <div class="big-stat">
+          <span class="big-stat-label">ALTITUDE</span>
+          <span class="big-stat-value" id="big-alt">---</span>
+        </div>
+        <div class="big-stat">
+          <span class="big-stat-label">SPEED</span>
+          <span class="big-stat-value" id="big-spd">---</span>
+        </div>
+        <div class="big-stat">
+          <span class="big-stat-label">DISTANCE</span>
+          <span class="big-stat-value" id="big-dist">---</span>
+        </div>
+        <div class="big-stat">
+          <span class="big-stat-label">V/SPEED</span>
+          <span class="big-stat-value" id="big-vs">---</span>
+        </div>
+      </div>
+    </div>
+    <div id="big-footer">
+      <div id="big-nav">
+        <button onclick="prev(); resetAutoCycle()" aria-label="Previous aircraft">&#9664; PREV</button>
+        <span id="big-counter">---</span>
+        <button onclick="next(); resetAutoCycle()" aria-label="Next aircraft">NEXT &#9654;</button>
+      </div>
+      <span id="big-flight-list"></span>
+    </div>
+  </div>
+
   <div class="classic-layout">
 
     <!-- Title: location-display updated by JS on each location change -->
@@ -690,6 +852,7 @@
         <div class="kbd-row"><span class="kbd-key">R</span><span class="kbd-desc">Manual refresh</span></div>
         <div class="kbd-row"><span class="kbd-key">S</span><span class="kbd-desc">Toggle sound</span></div>
         <div class="kbd-row"><span class="kbd-key">D</span><span class="kbd-desc">Toggle dark / light mode</span></div>
+        <div class="kbd-row"><span class="kbd-key">B</span><span class="kbd-desc">Toggle big display mode</span></div>
         <div class="kbd-row"><span class="kbd-key">?</span><span class="kbd-desc">Show / hide this help</span></div>
         <div class="kbd-row"><span class="kbd-key">Esc</span><span class="kbd-desc">Close this panel</span></div>
         <div class="kbd-row" style="margin-top:10px;opacity:0.45;font-size:0.65rem;justify-content:center;">Click outside or press Esc to close</div>
@@ -790,6 +953,7 @@
     let animFrameId = null;
     let lastWeatherData = null;
     let isDarkMode = true;
+    let isBigDisplay = false;
 
     function timeoutSignal(ms) {
       return typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(ms) : undefined;
@@ -817,6 +981,76 @@
       currentTheme = name;
     }
 
+
+    function toggleBigDisplay() {
+      isBigDisplay = !isBigDisplay;
+      document.body.classList.toggle('big-display', isBigDisplay);
+      try { localStorage.setItem('isBigDisplay', isBigDisplay); } catch(e) {}
+      if (isBigDisplay) {
+        document.getElementById('big-location').textContent = locationName || '---';
+        if (flights.length) updateBigPanel(flights[flightIndex]);
+      }
+      if (map) setTimeout(() => map.invalidateSize(), 50);
+    }
+
+    function updateBigPanel(f, distLoc, phase) {
+      if (!f) return;
+      const call    = (f.flight || '---').trim().toUpperCase();
+      const airline = airlineFromCallsign(call);
+      if (distLoc === undefined) distLoc = haversineKm(locationLat, locationLon, f.lat, f.lon);
+      if (phase    === undefined) phase   = flightPhase(f, distLoc);
+      const inlineDep = f.dep || f.orig_iata || null;
+      const inlineArr = f.arr || f.dest_iata || null;
+      const route   = f.route || formatRoute(inlineDep, inlineArr);
+
+      document.getElementById('big-callsign').textContent = call;
+
+      const airlineEl = document.getElementById('big-airline');
+      airlineEl.textContent = '';
+      if (airline.color) {
+        const sp = document.createElement('span');
+        sp.style.color = airline.color;
+        sp.textContent = airline.name;
+        airlineEl.appendChild(sp);
+      } else {
+        airlineEl.textContent = airline.name;
+      }
+
+      document.getElementById('big-route').textContent = route || '';
+
+      const phaseEl = document.getElementById('big-phase');
+      phaseEl.textContent = '';
+      if (phase.cls) {
+        const sp = document.createElement('span');
+        sp.className = phase.cls + '-text';
+        sp.textContent = phase.label;
+        phaseEl.appendChild(sp);
+      } else {
+        phaseEl.textContent = phase.label;
+      }
+
+      document.getElementById('big-alt').textContent  = formatAlt(f.alt_baro);
+      document.getElementById('big-spd').textContent  = formatSpd(f.gs);
+      document.getElementById('big-dist').textContent = formatDist(distLoc);
+
+      const bigVsEl = document.getElementById('big-vs');
+      bigVsEl.textContent = formatVs(f.baro_rate);
+      bigVsEl.className = 'big-stat-value';
+      if (typeof f.baro_rate === 'number') {
+        if      (f.baro_rate >  100) bigVsEl.classList.add('vs-climbing');
+        else if (f.baro_rate < -100) bigVsEl.classList.add('vs-descending');
+      }
+
+      document.getElementById('big-counter').textContent = '[' + (flightIndex+1) + '/' + flights.length + ']';
+
+      document.getElementById('big-flight-list').textContent = flights
+        .map((ac, i) => {
+          const c = (ac.flight || '?').trim().toUpperCase();
+          const p = flightPhase(ac, haversineKm(locationLat, locationLon, ac.lat, ac.lon));
+          return (i === flightIndex ? '\u25B6 ' : '') + c + ' ' + p.label;
+        })
+        .join('  \u00B7  ');
+    }
 
     function toggleMode() {
       isDarkMode = !isDarkMode;
@@ -1455,6 +1689,17 @@
           if      (interpState.baroRate >  100) vsEl.classList.add('vs-climbing');
           else if (interpState.baroRate < -100) vsEl.classList.add('vs-descending');
           else                                  vsEl.classList.add('vs-level');
+        }
+        if (isBigDisplay) {
+          document.getElementById('big-dist').textContent = formatDist(distLoc);
+          if (typeof alt === 'number') document.getElementById('big-alt').textContent = formatAlt(alt);
+          if (typeof interpState.baroRate === 'number') {
+            const bigVs = document.getElementById('big-vs');
+            bigVs.textContent = formatVs(Math.round(interpState.baroRate));
+            bigVs.className = 'big-stat-value';
+            if      (interpState.baroRate >  100) bigVs.classList.add('vs-climbing');
+            else if (interpState.baroRate < -100) bigVs.classList.add('vs-descending');
+          }
         }
       }
     }
@@ -2339,6 +2584,7 @@
       }
 
       logFlight(f, phase, distLoc);
+      if (isBigDisplay) updateBigPanel(f, distLoc, phase);
       fetchPhoto(reg, f.hex || '', (f.t || '').toUpperCase());
       let mapLat = f.lat, mapLon = f.lon;
       if (lastDataAge > 1000 && typeof f.gs === 'number' && f.gs > 0 && typeof f.track === 'number') {
@@ -2456,6 +2702,7 @@
         locationLat  = lat;
         locationLon  = lon;
         document.getElementById('location-display').textContent = locationName;
+        document.getElementById('big-location').textContent = locationName;
         document.getElementById('error').textContent = '';
         lastPhotoReg = null;
         prevTopHex   = null;
@@ -2689,6 +2936,7 @@
       if (e.key === 'r' || e.key === 'R') { manualRefresh(); return; }
       if (e.key === 's' || e.key === 'S') { toggleSound(); return; }
       if (e.key === 'd' || e.key === 'D') { toggleMode(); return; }
+      if (e.key === 'b' || e.key === 'B') { toggleBigDisplay(); return; }
       if (e.key === '?')  { showKbdHelp(); return; }
       if (e.key === 'Escape') { hideKbdHelp(); return; }
     });
@@ -2718,6 +2966,16 @@
           isDarkMode = false;
           document.body.classList.add('light-mode');
           document.getElementById('mode-toggle').textContent = 'LIGHT';
+        }
+      } catch(e) {}
+    })();
+
+    // Big display mode
+    (function () {
+      try {
+        if (localStorage.getItem('isBigDisplay') === 'true') {
+          isBigDisplay = true;
+          document.body.classList.add('big-display');
         }
       } catch(e) {}
     })();

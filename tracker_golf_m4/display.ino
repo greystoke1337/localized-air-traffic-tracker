@@ -3,15 +3,8 @@
 #include <Fonts/TomThumb.h>
 #include "anim_boot.h"
 
-// Weather icon type constants
-#define ICON_SUN   0
-#define ICON_CLOUD 1
-#define ICON_RAIN  2
-#define ICON_SNOW  3
-#define ICON_STORM 4
-
 // Draw the callsign pseudo-bold (4 overlapping copies at +1 offsets, matching CircuitPython technique)
-static void drawCallsign(const char *cs, int scrollOffset = 0, uint16_t color = C_AMBER) {
+static void drawCallsign(const char *cs, uint16_t color = C_AMBER) {
   if (!cs || !cs[0]) return;
   matrix.setFont(nullptr);   // built-in 6×8 font
   matrix.setTextSize(1);
@@ -19,13 +12,12 @@ static void drawCallsign(const char *cs, int scrollOffset = 0, uint16_t color = 
 
   int n      = strlen(cs);
   int totalW = n * (CHAR_W + CHAR_GAP) - CHAR_GAP;
-  int startX = (totalW > MATRIX_W) ? -scrollOffset : (MATRIX_W - totalW) / 2;
+  int startX = (MATRIX_W - totalW) / 2;
 
   // 4-offset pseudo-bold
   for (int dy = 0; dy <= 1; dy++) {
     for (int dx = 0; dx <= 1; dx++) {
       for (int i = 0; i < n; i++) {
-        // setCursor positions baseline; for built-in font, baseline = y + 7
         matrix.setCursor(startX + i * (CHAR_W + CHAR_GAP) + dx, CALLSIGN_Y + dy);
         matrix.setTextColor(color);
         matrix.print(cs[i]);
@@ -34,37 +26,74 @@ static void drawCallsign(const char *cs, int scrollOffset = 0, uint16_t color = 
   }
 }
 
-// Draw route as two centred lines using TomThumb font.
-// If no route, show aircraft type centred between the two lines.
-static void drawRoute(const char *origin, const char *dest, const char *type, uint16_t typeColor = C_AMBER, uint16_t routeColor = C_WHITE) {
+// Print a TomThumb string centered horizontally at a given y baseline.
+static void printCenteredTT(const char *text, int y, uint16_t color) {
+  if (!text || !text[0]) return;
+  matrix.setFont(&TomThumb);
+  matrix.setTextSize(1);
+  matrix.setTextWrap(false);
+  matrix.setTextColor(color);
+  int16_t x1, y1;
+  uint16_t w, h;
+  matrix.getTextBounds(text, 0, y, &x1, &y1, &w, &h);
+  matrix.setCursor((MATRIX_W - (int)w) / 2, y);
+  matrix.print(text);
+  matrix.setFont(nullptr);
+}
+
+// Draw altitude (deep blue) and speed (green) side-by-side on the same row.
+// Numbers use full color; unit suffixes (FT, KT) are drawn dimmer.
+static void drawAltSpeed(int alt, int speed) {
   matrix.setFont(&TomThumb);
   matrix.setTextSize(1);
   matrix.setTextWrap(false);
 
-  int16_t x1, y1;
-  uint16_t w, h;
+  {
+    char numBuf[8];
+    if (alt > 0) snprintf(numBuf, sizeof(numBuf), "%d", alt);
+    else         snprintf(numBuf, sizeof(numBuf), "---");
+    matrix.setTextColor(C_DEEP_BLUE);
+    matrix.setCursor(3, ALTITUDE_Y);
+    matrix.print(numBuf);
+    matrix.setTextColor(C_AMBER);
+    matrix.print("FT");
+  }
 
-  auto printCentered = [&](const char *text, int y) {
-    matrix.getTextBounds(text, 0, y, &x1, &y1, &w, &h);
-    matrix.setCursor((MATRIX_W - (int)w) / 2, y);
-    matrix.print(text);
-  };
-
-  if (typeColor == C_WHITE) {
-    // GA aircraft: rego already in callsign area; label the category here
-    matrix.setTextColor(routeColor);
-    printCentered("GENERAL",  ROUTE_TOP_Y);
-    printCentered("AVIATION", ROUTE_BOT_Y);
-  } else if (origin && origin[0]) {
-    matrix.setTextColor(routeColor);
-    printCentered(origin, ROUTE_TOP_Y);
-    if (dest && dest[0]) printCentered(dest, ROUTE_BOT_Y);
-  } else if (type && type[0]) {
-    matrix.setTextColor(typeColor);
-    printCentered(type, (ROUTE_TOP_Y + ROUTE_BOT_Y) / 2);
+  {
+    char numBuf[8];
+    if (speed > 0) snprintf(numBuf, sizeof(numBuf), "%d", speed);
+    else           snprintf(numBuf, sizeof(numBuf), "---");
+    // Measure full string width for right-alignment
+    char fullBuf[10];
+    snprintf(fullBuf, sizeof(fullBuf), "%sKT", numBuf);
+    int16_t x1, y1; uint16_t w, h;
+    matrix.getTextBounds(fullBuf, 0, ALTITUDE_Y, &x1, &y1, &w, &h);
+    matrix.setCursor(MATRIX_W - 2 - (int)w, ALTITUDE_Y);
+    matrix.setTextColor(C_GREEN);
+    matrix.print(numBuf);
+    matrix.setTextColor(C_AMBER);
+    matrix.print("KT");
   }
 
   matrix.setFont(nullptr);
+}
+
+// Draw route as a single centered line.
+// GA: show model name (e.g. "PILATUS PC-12") in amber.
+// Airline with codes: "SYD>MEL" in white.
+// Airline without codes: type name in amber.
+static void drawRoute(const char *depCode, const char *arrCode, const char *type, bool isGA) {
+  if (isGA) {
+    printCenteredTT(type && type[0] ? type : "GA", ROUTE_Y, C_AMBER);
+  } else if (depCode && depCode[0] && arrCode && arrCode[0]) {
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%s>%s", depCode, arrCode);
+    printCenteredTT(buf, ROUTE_Y, C_WHITE);
+  } else if (depCode && depCode[0]) {
+    printCenteredTT(depCode, ROUTE_Y, C_WHITE);
+  } else if (type && type[0]) {
+    printCenteredTT(type, ROUTE_Y, C_AMBER);
+  }
 }
 
 // Maps altitude to a non-linear bar height (300-2000ft = 75% of bar, 2000-30000ft = 25%)
@@ -107,28 +136,25 @@ static void drawDistanceBar(float dist, bool valid) {
   matrix.fillRect(startX, MATRIX_H - 1, barW, 1, C_AMBER);
 }
 
-// Full frame: clear → bars → callsign → route → progress → show
-void drawAll(const Flight &f, int progressPx, bool showType) {
+// Full frame: clear → bars → callsign/type → alt+speed → route → distance bar → show
+void drawAll(const Flight &f, int px) {
   matrix.fillScreen(C_BLACK);
   drawBars(f.alt, f.speed);
 
-  int scrollOffset = 0;
-  if (showType && f.type[0]) {
-    int totalW = strlen(f.type) * (CHAR_W + CHAR_GAP) - CHAR_GAP;
-    if (totalW > MATRIX_W) {
-      int maxScroll = totalW - MATRIX_W + 2;
-      int t      = progressPx - TYPE_FLIP_PX;
-      int period = 2 * maxScroll;
-      int mod    = t % period;
-      scrollOffset = (mod <= maxScroll) ? mod : (period - mod);
-    }
+  bool isGA      = (f.typeColor == C_WHITE);
+  bool showType  = f.valid && !isGA && px >= TYPE_FLIP_PX;
+
+  if (showType) {
+    drawCallsign(f.type, f.typeColor);
+  } else {
+    drawCallsign(f.valid ? f.callsign : "------", f.callsignColor);
   }
-  bool isGA = (f.typeColor == C_WHITE);
-  bool flipToType = showType && f.type[0] && !isGA;
-  uint16_t csColor = flipToType ? f.typeColor : f.callsignColor;
-  drawCallsign(flipToType ? f.type : f.callsign, scrollOffset, csColor);
-  uint16_t routeColor = isGA ? C_AMBER : C_WHITE;
-  drawRoute(f.origin, f.dest, f.type, f.typeColor, routeColor);
+
+  if (f.valid) {
+    if (!isGA) drawAltSpeed(f.alt, f.speed);
+    drawRoute(f.depCode, f.arrCode, f.type, isGA);
+  }
+
   drawDistanceBar(f.dist, f.valid);
   matrix.show();
 }
@@ -263,77 +289,6 @@ static const char* wmoShortName(int code) {
   return "STORM";
 }
 
-// Map WMO code → icon type constant
-static int wmoToIconType(int code) {
-  if (code == 0 || code == 1)       return ICON_SUN;
-  if (code >= 95)                   return ICON_STORM;
-  if (code >= 85 || (code >= 71 && code <= 77)) return ICON_SNOW;
-  if (code >= 51)                   return ICON_RAIN;
-  return ICON_CLOUD;
-}
-
-// Draw a procedural weather icon at pixel (x, y), occupying a ~12×10 region.
-// G/B channels are swapped on this panel — all colors already account for that.
-static void drawWeatherIcon(int x, int y, int iconType) {
-  // Cloud blob shared by CLOUD/RAIN/SNOW/STORM — white, top of the icon
-  auto drawCloud = [&](int cx, int cy) {
-    // Two bumps + base rectangle
-    matrix.fillCircle(cx - 2, cy,     2, C_WHITE);
-    matrix.fillCircle(cx + 2, cy - 1, 2, C_WHITE);
-    matrix.fillRect(cx - 4, cy + 1, 9, 2, C_WHITE);
-  };
-
-  switch (iconType) {
-    case ICON_SUN: {
-      // Circle body (radius 3) + 8 single-pixel rays
-      matrix.drawCircle(x + 5, y + 4, 3, C_AMBER);
-      matrix.drawPixel(x + 5, y,      C_AMBER); // top
-      matrix.drawPixel(x + 5, y + 8,  C_AMBER); // bottom
-      matrix.drawPixel(x,     y + 4,  C_AMBER); // left
-      matrix.drawPixel(x + 10, y + 4, C_AMBER); // right
-      matrix.drawPixel(x + 1,  y + 1, C_AMBER); // diagonals
-      matrix.drawPixel(x + 9,  y + 1, C_AMBER);
-      matrix.drawPixel(x + 1,  y + 7, C_AMBER);
-      matrix.drawPixel(x + 9,  y + 7, C_AMBER);
-      break;
-    }
-    case ICON_CLOUD: {
-      drawCloud(x + 6, y + 4);
-      break;
-    }
-    case ICON_RAIN: {
-      drawCloud(x + 6, y + 2);
-      // Three angled rain streaks below
-      uint16_t rc = C_LIGHT_BLUE;
-      matrix.drawPixel(x + 2, y + 6, rc);
-      matrix.drawPixel(x + 2, y + 8, rc);
-      matrix.drawPixel(x + 5, y + 7, rc);
-      matrix.drawPixel(x + 5, y + 9, rc);
-      matrix.drawPixel(x + 8, y + 6, rc);
-      matrix.drawPixel(x + 8, y + 8, rc);
-      break;
-    }
-    case ICON_SNOW: {
-      drawCloud(x + 6, y + 2);
-      // Six snow dots in two rows
-      matrix.drawPixel(x + 2, y + 6, C_WHITE);
-      matrix.drawPixel(x + 5, y + 7, C_WHITE);
-      matrix.drawPixel(x + 8, y + 6, C_WHITE);
-      matrix.drawPixel(x + 2, y + 9, C_WHITE);
-      matrix.drawPixel(x + 5, y + 9, C_WHITE);
-      matrix.drawPixel(x + 8, y + 9, C_WHITE);
-      break;
-    }
-    case ICON_STORM: {
-      drawCloud(x + 6, y + 2);
-      // Lightning bolt: zigzag in amber
-      matrix.drawLine(x + 7, y + 5, x + 5, y + 7, C_AMBER);
-      matrix.drawLine(x + 5, y + 7, x + 7, y + 7, C_AMBER);
-      matrix.drawLine(x + 7, y + 7, x + 5, y + 9, C_AMBER);
-      break;
-    }
-  }
-}
 
 // Full weather page: clock + icon + temperature + condition
 void drawWeatherPage(const Weather &w, int hour, int min) {
@@ -359,34 +314,18 @@ void drawWeatherPage(const Weather &w, int hour, int min) {
   }
 
   if (w.valid) {
-    // Weather icon — 12×10 region, left side, rows 12-21
-    drawWeatherIcon(2, 12, wmoToIconType(w.weatherCode));
-
-    // Temperature — right of icon, vertically centred alongside it
+    // Temperature — centered, vertically centred at row 15
     char tempStr[8];
     snprintf(tempStr, sizeof(tempStr), "%d\xb0" "C", (int)roundf(w.tempC));
     int tW = strlen(tempStr) * (CHAR_W + CHAR_GAP) - CHAR_GAP;
-    matrix.setCursor(16 + (48 - tW) / 2, 15);
+    matrix.setCursor((MATRIX_W - tW) / 2, 15);
     matrix.setTextColor(C_WHITE);
     matrix.print(tempStr);
 
-    // Condition — TomThumb, centred, bottom row
-    matrix.setFont(&TomThumb);
-    matrix.setTextColor(C_AMBER);
-    const char *cond = wmoShortName(w.weatherCode);
-    int16_t bx, by;
-    uint16_t bw, bh;
-    matrix.getTextBounds(cond, 0, 28, &bx, &by, &bw, &bh);
-    matrix.setCursor((MATRIX_W - (int)bw) / 2, 28);
-    matrix.print(cond);
-    matrix.setFont(nullptr);
+    // Condition — TomThumb, amber, centred at bottom
+    printCenteredTT(wmoShortName(w.weatherCode), 29, C_AMBER);
   } else {
-    // Weather not yet fetched — show placeholder
-    matrix.setFont(&TomThumb);
-    matrix.setTextColor(C_DEEP_BLUE);
-    matrix.setCursor(18, 20);
-    matrix.print("NO DATA");
-    matrix.setFont(nullptr);
+    printCenteredTT("NO DATA", 20, C_DEEP_BLUE);
   }
 
   matrix.show();

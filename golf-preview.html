@@ -163,11 +163,13 @@
     <select id="ctl-scenario" style="flex:1;background:#181008;color:#ffa200;border:1px solid #3a2000;padding:4px 6px;font-family:'Courier New',monospace;font-size:12px;">
       <option value="boot">Boot animation (synthwave grid)</option>
       <option value="custom">Custom</option>
-      <option value="narrow-route" selected>Narrow-body + route (QFA11 B738)</option>
-      <option value="wide-no-route">Wide-body no route (ETH716 B77W)</option>
-      <option value="type-flip">Type phase (progress 40+)</option>
+      <option value="narrow-route" selected>Narrow-body SYD→MEL (QFA11 B738)</option>
+      <option value="widebody-intl">Wide-body intl SYD→LHR (QFA1 A388)</option>
+      <option value="wide-no-route">No route (ETH716 B77W)</option>
+      <option value="turboprop">Turboprop MEL→SYD (REX101 AT76)</option>
+      <option value="ga">GA aircraft (VH-XYZ PC12)</option>
       <option value="no-aircraft">No aircraft (------)</option>
-      <option value="turboprop">Turboprop (REX101 AT76)</option>
+      <option value="weather">Weather page</option>
     </select>
   </div>
 
@@ -187,12 +189,12 @@
     <span class="resolved" id="type-resolved">B737-800</span>
   </div>
   <div class="ctl-row">
-    <label>Origin</label>
-    <input type="text" id="ctl-origin" value="Sydney" maxlength="20">
+    <label>Dep IATA</label>
+    <input type="text" id="ctl-origin" value="SYD" maxlength="6" style="width:50px;flex:none;">
   </div>
   <div class="ctl-row">
-    <label>Dest</label>
-    <input type="text" id="ctl-dest" value="Melbourne" maxlength="20">
+    <label>Arr IATA</label>
+    <input type="text" id="ctl-dest" value="MEL" maxlength="6" style="width:50px;flex:none;">
   </div>
 
   <h2>TELEMETRY</h2>
@@ -225,9 +227,33 @@
   </div>
 
   <div id="info">
-    px 0–31: callsign in airline color<br>
-    px 32–63: type name in category color<br>
+    callsign: airline color (always)<br>
+    altitude: row 16 (TomThumb, amber)<br>
+    route: row 23 as "DEP>ARR" (white)<br>
+    GA: model name instead of route<br>
     row 31: distance bar (wide = overhead)
+  </div>
+
+  <h2>WEATHER PAGE</h2>
+  <div class="ctl-row">
+    <label>Temp °C</label>
+    <input type="range" id="ctl-wtemp" min="-20" max="45" step="1" value="23">
+    <span class="val" id="val-wtemp">23°C</span>
+  </div>
+  <div class="ctl-row">
+    <label>WMO code</label>
+    <input type="range" id="ctl-wcode" min="0" max="99" step="1" value="2">
+    <span class="val" id="val-wcode">2</span>
+  </div>
+  <div class="ctl-row">
+    <label>Hour</label>
+    <input type="range" id="ctl-whour" min="0" max="23" step="1" value="14">
+    <span class="val" id="val-whour">14</span>
+  </div>
+  <div class="ctl-row">
+    <label>Minute</label>
+    <input type="range" id="ctl-wmin" min="0" max="59" step="1" value="32">
+    <span class="val" id="val-wmin">32</span>
   </div>
 
   <div id="editor-section">
@@ -238,9 +264,9 @@
       <span style="font-size:10px;color:#3a2000;margin-left:4px;">drag rows on canvas</span>
     </div>
     <div id="editor-layout-values">
-      CALLSIGN_Y  = <span id="ev-callsign-y">2</span><br>
-      ROUTE_TOP_Y = <span id="ev-route-top-y">18</span><br>
-      ROUTE_BOT_Y = <span id="ev-route-bot-y">25</span>
+      CALLSIGN_Y = <span id="ev-callsign-y">4</span><br>
+      ALTITUDE_Y = <span id="ev-altitude-y">16</span><br>
+      ROUTE_Y    = <span id="ev-route-y">23</span>
     </div>
     <button id="btn-open-config">OPEN config.h…</button>
     <div id="config-file-status" style="font-size:10px;color:#3a2000;margin:4px 0;min-height:14px;"></div>
@@ -252,15 +278,17 @@
 <script>
 // ─── Constants ──────────────────────────────────────────────────────────────
 const W = 64, H = 32, SCALE = 10;
-let CALLSIGN_Y = 2;
+let CALLSIGN_Y  = 4;
+let ALTITUDE_Y  = 16;
+let ROUTE_Y     = 23;
 const CHAR_W = 6, CHAR_GAP = 1;   // stride = 7px
-let ROUTE_TOP_Y = 18;
-let ROUTE_BOT_Y = 25;
-const TYPE_FLIP_PX = 32;
 const BAR_MAX_H = 30;
 const ALT_MIN = 300, ALT_MID = 2000, ALT_MAX = 30000;
 const SPD_MIN = 50, SPD_MAX = 450;
 const GEOFENCE_KM = 10;
+
+// Current page
+let currentPage = 'flight'; // 'flight' | 'weather'
 
 // ─── Color palette ───────────────────────────────────────────────────────────
 const C_OFF       = '#141414';
@@ -494,54 +522,137 @@ function drawDistanceBar(dist, valid) {
   for (let x = startX; x < startX + barW; x++) setPixel(x, H - 1, C_AMBER);
 }
 
-// Scroll offset for bouncing type name when it overflows
-function scrollOffset(text, progressPx) {
-  const totalW = text.length * (CHAR_W + CHAR_GAP) - CHAR_GAP;
-  if (totalW <= W) return 0;
-  const maxScroll = totalW - W + 2;
-  const t = progressPx - TYPE_FLIP_PX;
-  if (t <= 0) return 0;
-  const period = 2 * maxScroll;
-  const mod = ((t % period) + period) % period;
-  return mod <= maxScroll ? mod : period - mod;
-}
-
-// ─── Main draw ───────────────────────────────────────────────────────────────
-function draw() {
-  const s = readControls();
-
-  // Clear framebuffer
+// ─── Main draw (flight page) ─────────────────────────────────────────────────
+function drawFlightPage(s) {
   for (let y = 0; y < H; y++) fb[y].fill(C_OFF);
-
   drawBars(s.alt, s.speed);
 
-  const showType = s.progressPx >= TYPE_FLIP_PX && !!s.typeName;
+  const isGA = s.typeColor === C_GA;
+  drawCallsign(s.valid ? s.callsign : '------', 0, s.callsignColor);
 
-  if (!s.valid) {
-    drawCallsign('------', 0, C_AMBER);
-  } else if (showType) {
-    const off = scrollOffset(s.typeName, s.progressPx);
-    drawCallsign(s.typeName, off, s.typeColor);
-  } else {
-    drawCallsign(s.callsign, 0, s.callsignColor);
-  }
-
-  const csColor = showType ? s.typeColor : s.callsignColor;
-  const routeColor = (csColor === C_WHITE || csColor === C_GA) ? C_AMBER : C_WHITE;
-
-  if (s.typeColor === C_GA) {
-    drawTextTomThumb('GENERAL',  ROUTE_TOP_Y, routeColor);
-    drawTextTomThumb('AVIATION', ROUTE_BOT_Y, routeColor);
-  } else if (s.origin) {
-    drawTextTomThumb(s.origin, ROUTE_TOP_Y, routeColor);
-    if (s.dest) drawTextTomThumb(s.dest, ROUTE_BOT_Y, routeColor);
-  } else if (s.typeName) {
-    const midY = Math.floor((ROUTE_TOP_Y + ROUTE_BOT_Y) / 2);
-    drawTextTomThumb(s.typeName, midY, s.typeColor);
+  if (s.valid) {
+    // Altitude line (non-GA only)
+    if (!isGA && s.alt > 0) {
+      drawTextTomThumb(s.alt + 'FT', ALTITUDE_Y, C_AMBER);
+    }
+    // Route line
+    if (isGA) {
+      // Show model name in amber
+      drawTextTomThumb(s.typeName || 'GA', ROUTE_Y, C_AMBER);
+    } else if (s.depCode && s.arrCode) {
+      drawTextTomThumb(s.depCode + '>' + s.arrCode, ROUTE_Y, C_WHITE);
+    } else if (s.depCode) {
+      drawTextTomThumb(s.depCode, ROUTE_Y, C_WHITE);
+    } else if (s.typeName) {
+      drawTextTomThumb(s.typeName, ROUTE_Y, C_AMBER);
+    }
   }
 
   drawDistanceBar(s.dist, s.valid);
-  flush();
+}
+
+// ─── Weather page draw ───────────────────────────────────────────────────────
+// WMO code → icon filename (in weatherIcons/)
+function wmoIconFile(code) {
+  if (code === 0)            return 'sunny';
+  if (code <= 3)             return 'partiallyCloudy';
+  if (code >= 95)            return 'thunderstorm';
+  if (code >= 85 || (code >= 71 && code <= 77)) return 'snow';
+  if (code >= 51)            return 'rainy';
+  return 'cloudy';
+}
+
+function wmoShortName(code) {
+  if (code === 0 || code === 1) return 'CLEAR';
+  if (code <= 3)              return 'PT CLOUDY';
+  if (code <= 48)             return 'CLOUDY';
+  if (code <= 55)             return 'DRIZZLE';
+  if (code <= 67)             return 'RAIN';
+  if (code <= 77)             return 'SNOW';
+  if (code <= 82)             return 'SHOWERS';
+  if (code <= 86)             return 'SNOW SHWRS';
+  return 'STORM';
+}
+
+function drawWeatherPage(w) {
+  for (let y = 0; y < H; y++) fb[y].fill(C_OFF);
+
+  // Clock pseudo-bold
+  const h = w.hour, m = w.min;
+  const timeStr = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  const totalW = timeStr.length * (CHAR_W + CHAR_GAP) - CHAR_GAP;
+  const startX = Math.floor((W - totalW) / 2);
+  for (let dy = 0; dy <= 1; dy++) {
+    for (let dx = 0; dx <= 1; dx++) {
+      for (let i = 0; i < timeStr.length; i++) {
+        const code = timeStr.charCodeAt(i);
+        const glyph = (code >= 32 && code <= 126) ? GLCD[code - 32] : GLCD[0];
+        const cx = startX + i * (CHAR_W + CHAR_GAP) + dx;
+        const cy = 2 + dy;
+        for (let col = 0; col < 5; col++) {
+          const colByte = glyph[col];
+          for (let row = 0; row < 8; row++) {
+            if ((colByte >> row) & 1) setPixel(cx + col, cy + row, C_AMBER);
+          }
+        }
+      }
+    }
+  }
+
+  // Temperature text (right side, row 15)
+  const tempStr = Math.round(w.tempC) + '\u00b0C';
+  const tW = tempStr.length * (CHAR_W + CHAR_GAP) - CHAR_GAP;
+  const tX = 17 + Math.floor((47 - tW) / 2);
+  for (let i = 0; i < tempStr.length; i++) {
+    const code = tempStr.charCodeAt(i);
+    const glyph = (code >= 32 && code <= 126) ? GLCD[code - 32] : GLCD[0];
+    const cx = tX + i * (CHAR_W + CHAR_GAP);
+    for (let col = 0; col < 5; col++) {
+      const colByte = glyph[col];
+      for (let row = 0; row < 8; row++) {
+        if ((colByte >> row) & 1) setPixel(cx + col, 15 + row, C_WHITE);
+      }
+    }
+  }
+
+  // Condition text (TomThumb, bottom)
+  drawTextTomThumb(wmoShortName(w.weatherCode), 29, C_AMBER);
+}
+
+// ─── Weather icon overlay (drawn on canvas directly after flush) ──────────────
+const weatherIconCache = {};
+function loadWeatherIcon(name) {
+  if (weatherIconCache[name]) return weatherIconCache[name];
+  const img = new Image();
+  img.src = 'tracker_golf_m4/weatherIcons/' + name + '.png';
+  img.onload = () => { weatherIconCache[name] = img; draw(); };
+  weatherIconCache[name] = img; // store even if not yet loaded
+  return img;
+}
+
+function drawWeatherIconOverlay(wmoCode) {
+  const name = wmoIconFile(wmoCode);
+  const img = loadWeatherIcon(name);
+  if (!img.complete || !img.naturalWidth) return;
+  // Icon region: x=3, y=11, w=12, h=12 → scaled to canvas coords
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 3 * SCALE + 1, 11 * SCALE + 1, 12 * SCALE - 2, 12 * SCALE - 2);
+  ctx.restore();
+}
+
+// ─── Main draw dispatcher ────────────────────────────────────────────────────
+function draw() {
+  if (currentPage === 'weather') {
+    const w = readWeatherControls();
+    drawWeatherPage(w);
+    flush();
+    drawWeatherIconOverlay(w.weatherCode);
+  } else {
+    const s = readControls();
+    drawFlightPage(s);
+    flush();
+  }
 }
 
 // ─── Canvas flush ─────────────────────────────────────────────────────────────
@@ -664,9 +775,9 @@ const editor = { active: false, dragging: null, dragStartCanvasY: 0, dragStartRo
 
 function getEditorElements() {
   return [
-    { id: 'callsign', getY: () => CALLSIGN_Y,  setY: v => { CALLSIGN_Y  = v; }, minY: 0,  maxY: 20, label: 'CALLSIGN_Y' },
-    { id: 'routeTop', getY: () => ROUTE_TOP_Y, setY: v => { ROUTE_TOP_Y = v; }, minY: 10, maxY: ROUTE_BOT_Y - 3, label: 'ROUTE_TOP_Y' },
-    { id: 'routeBot', getY: () => ROUTE_BOT_Y, setY: v => { ROUTE_BOT_Y = v; }, minY: ROUTE_TOP_Y + 3, maxY: 30, label: 'ROUTE_BOT_Y' },
+    { id: 'callsign', getY: () => CALLSIGN_Y, setY: v => { CALLSIGN_Y = v; }, minY: 0,  maxY: 12, label: 'CALLSIGN_Y' },
+    { id: 'altitude', getY: () => ALTITUDE_Y, setY: v => { ALTITUDE_Y = v; }, minY: 12, maxY: 19, label: 'ALTITUDE_Y' },
+    { id: 'route',    getY: () => ROUTE_Y,    setY: v => { ROUTE_Y    = v; }, minY: 19, maxY: 30, label: 'ROUTE_Y' },
   ];
 }
 
@@ -706,9 +817,9 @@ function drawOverlay() {
 }
 
 function updateEditorSidebar() {
-  document.getElementById('ev-callsign-y').textContent  = CALLSIGN_Y;
-  document.getElementById('ev-route-top-y').textContent = ROUTE_TOP_Y;
-  document.getElementById('ev-route-bot-y').textContent = ROUTE_BOT_Y;
+  document.getElementById('ev-callsign-y').textContent = CALLSIGN_Y;
+  document.getElementById('ev-altitude-y').textContent = ALTITUDE_Y;
+  document.getElementById('ev-route-y').textContent    = ROUTE_Y;
 }
 
 overlayCanvas.addEventListener('mousedown', e => {
@@ -771,15 +882,15 @@ document.getElementById('btn-export-config').addEventListener('click', async () 
     let content = await file.text();
 
     // Replace only the numeric value, preserve whitespace and any trailing comment
-    content = content.replace(/^(#define CALLSIGN_Y\s+)\d+/m,  `$1${CALLSIGN_Y}`);
-    content = content.replace(/^(#define ROUTE_TOP_Y\s+)\d+/m, `$1${ROUTE_TOP_Y}`);
-    content = content.replace(/^(#define ROUTE_BOT_Y\s+)\d+/m, `$1${ROUTE_BOT_Y}`);
+    content = content.replace(/^(#define CALLSIGN_Y\s+)\d+/m, `$1${CALLSIGN_Y}`);
+    content = content.replace(/^(#define ALTITUDE_Y\s+)\d+/m, `$1${ALTITUDE_Y}`);
+    content = content.replace(/^(#define ROUTE_Y\s+)\d+/m,    `$1${ROUTE_Y}`);
 
     const writable = await configFileHandle.createWritable();
     await writable.write(content);
     await writable.close();
 
-    out.textContent = `Saved to ${configFileHandle.name}\nCALLSIGN_Y=${CALLSIGN_Y}  ROUTE_TOP_Y=${ROUTE_TOP_Y}  ROUTE_BOT_Y=${ROUTE_BOT_Y}`;
+    out.textContent = `Saved to ${configFileHandle.name}\nCALLSIGN_Y=${CALLSIGN_Y}  ALTITUDE_Y=${ALTITUDE_Y}  ROUTE_Y=${ROUTE_Y}`;
     out.style.display = 'block';
   } catch (e) {
     out.textContent = 'Error: ' + e.message;
@@ -807,27 +918,37 @@ function readControls() {
     alt === 0 ? '---' : alt >= 10000 ? 'FL' + String(Math.floor(alt/100)).padStart(3,'0') : alt + ' ft';
   document.getElementById('val-speed').textContent = speed === 0 ? '---' : speed + ' kt';
   document.getElementById('val-dist').textContent = dist.toFixed(1) + ' km';
-  document.getElementById('val-progress').textContent = progressPx + (progressPx >= TYPE_FLIP_PX ? ' (type)' : ' (cs)');
+  document.getElementById('val-progress').textContent = progressPx + ' px';
 
   return {
     callsign,
     callsignColor: getAirlineColor(airlinePfx || callsign.slice(0,3)),
     typeName: typeInfo.name,
     typeColor: typeInfo.color,
-    origin: document.getElementById('ctl-origin').value.trim(),
-    dest:   document.getElementById('ctl-dest').value.trim(),
+    depCode: document.getElementById('ctl-origin').value.trim().toUpperCase(),
+    arrCode: document.getElementById('ctl-dest').value.trim().toUpperCase(),
     alt, speed, dist, progressPx,
     valid: callsign.length > 0 && callsign !== '------',
   };
 }
 
+function readWeatherControls() {
+  return {
+    tempC:       parseFloat(document.getElementById('ctl-wtemp').value) || 0,
+    weatherCode: parseInt(document.getElementById('ctl-wcode').value)   || 0,
+    hour:        parseInt(document.getElementById('ctl-whour').value)   || 0,
+    min:         parseInt(document.getElementById('ctl-wmin').value)    || 0,
+  };
+}
+
 // ─── Scenario presets ────────────────────────────────────────────────────────
 const SCENARIOS = {
-  'narrow-route': {cs:'QFA11',al:'QFA',ty:'B738',or:'Sydney',de:'Melbourne',alt:28000,spd:440,dis:4.5,px:10},
-  'wide-no-route':{cs:'ETH716',al:'ETH',ty:'B77W',or:'',de:'',alt:35000,spd:490,dis:8.0,px:5},
-  'type-flip':    {cs:'QFA11',al:'QFA',ty:'B738',or:'Sydney',de:'Melbourne',alt:28000,spd:440,dis:4.5,px:40},
-  'no-aircraft':  {cs:'------',al:'',ty:'',or:'',de:'',alt:0,spd:0,dis:10.0,px:0},
-  'turboprop':    {cs:'REX101',al:'REX',ty:'AT76',or:'Albury',de:'Sydney',alt:12000,spd:280,dis:6.1,px:40},
+  'narrow-route': {cs:'QFA11', al:'QFA',ty:'B738',or:'SYD',de:'MEL',alt:28000,spd:440,dis:4.5,px:10},
+  'wide-no-route':{cs:'ETH716',al:'ETH',ty:'B77W',or:'',   de:'',   alt:35000,spd:490,dis:8.0,px:5},
+  'no-aircraft':  {cs:'------',al:'',   ty:'',    or:'',   de:'',   alt:0,    spd:0,  dis:10.0,px:0},
+  'turboprop':    {cs:'REX101',al:'REX',ty:'AT76',or:'MEL', de:'SYD',alt:12000,spd:280,dis:6.1,px:20},
+  'widebody-intl':{cs:'QFA1',  al:'QFA',ty:'A388',or:'SYD', de:'LHR',alt:38000,spd:490,dis:3.0,px:15},
+  'ga':           {cs:'VH-XYZ',al:'',   ty:'PC12',or:'',   de:'',   alt:5500, spd:180,dis:2.2,px:5},
 };
 
 function applyScenario(name) {
@@ -848,11 +969,29 @@ function applyScenario(name) {
 document.getElementById('ctl-scenario').addEventListener('change', function() {
   if (this.value === 'boot') {
     if (animHandle) { cancelAnimationFrame(animHandle); animHandle = null; document.getElementById('ctl-animate').checked = false; }
+    currentPage = 'flight';
     startBootAnim();
+  } else if (this.value === 'weather') {
+    stopBootAnim();
+    currentPage = 'weather';
+    draw();
   } else {
     stopBootAnim();
+    currentPage = 'flight';
     if (this.value !== 'custom') applyScenario(this.value);
   }
+});
+
+// Weather controls live update
+['ctl-wtemp','ctl-wcode','ctl-whour','ctl-wmin'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    document.getElementById('val-wtemp').textContent = document.getElementById('ctl-wtemp').value + '\u00b0C';
+    document.getElementById('val-wcode').textContent = document.getElementById('ctl-wcode').value;
+    document.getElementById('val-whour').textContent = document.getElementById('ctl-whour').value;
+    document.getElementById('val-wmin').textContent  = document.getElementById('ctl-wmin').value;
+    if (currentPage === 'weather') draw();
+  });
 });
 
 // ─── Animation loop ──────────────────────────────────────────────────────────

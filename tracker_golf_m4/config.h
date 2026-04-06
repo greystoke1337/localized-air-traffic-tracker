@@ -12,6 +12,8 @@
 #define C_DEEP_BLUE   0x0200
 // Light blue bar (visually): R=0x00 G=0x60 B=0x80 → swapped → color565(0x00, 0x80, 0x60) = 0x040C
 #define C_LIGHT_BLUE  0x040C
+// Green (visually): R=0x00 G=0xFF B=0x00 → swapped → color565(0x00, 0x00, 0xFF) = 0x001F
+#define C_GREEN       0x001F
 #define C_WHITE       0xFFFF
 #define C_BLACK       0x0000
 
@@ -22,6 +24,9 @@
 #define C_CAT_REGIONAL  0x001F  // visual green    — regional jets
 #define C_CAT_TURBOPROP 0xF800  // visual red      — turboprops
 
+// Progress bar pixel at which callsign flips to aircraft type name (non-GA only)
+#define TYPE_FLIP_PX  32
+
 // Refresh timing
 #define REFRESH_MS     30000UL
 // Progress bar: advance one pixel per interval (64 pixels over 30s ≈ 468ms each)
@@ -31,7 +36,7 @@
 #define MAX_FAIL_COUNT 3
 
 // Callsign layout (built-in 6×8 font, drawn pseudo-bold with 4 offsets)
-#define CALLSIGN_Y    4    // top of callsign text (post-rotation origin = top-left)
+#define CALLSIGN_Y    3    // top of callsign text (post-rotation origin = top-left)
 #define CHAR_W        6
 #define CHAR_GAP      1
 
@@ -47,12 +52,9 @@
 #define SPD_MIN_KT     50    // → 2px (slow approach / GA)
 #define SPD_MAX_KT    450    // → BAR_MAX_H (jet cruise)
 
-// Route layout (TomThumb font, 5px tall)
-#define ROUTE_TOP_Y   19
-#define ROUTE_BOT_Y   26
-
-// Progress pixel at which the route area flips to show aircraft type
-#define TYPE_FLIP_PX  (MATRIX_W / 2)
+// Flight page text layout (TomThumb font rows)
+#define ALTITUDE_Y    19   // altitude text, e.g. "35000FT"
+#define ROUTE_Y       28   // route text, e.g. "SYD>MEL" (single line)
 
 // Rotary encoder brightness control (Protomatter setDuty: 0=dim, 2=bright on 120 MHz SAMD51)
 #define BRIGHTNESS_DEFAULT  1

@@ -48,7 +48,8 @@ bool fetchFlight(Flight &out) {
   acf["flight"]   = true;
   acf["alt_baro"] = true;
   acf["gs"]       = true;
-  acf["route"]    = true;
+  acf["dep"]      = true;
+  acf["arr"]      = true;
   acf["t"]        = true;
   acf["lat"]      = true;
   acf["lon"]      = true;
@@ -67,9 +68,9 @@ bool fetchFlight(Flight &out) {
   if (ac.isNull()) {
     out.valid = false;
     strncpy(out.callsign, "------", sizeof(out.callsign));
-    out.origin[0] = '\0';
-    out.dest[0]   = '\0';
-    out.type[0]   = '\0';
+    out.depCode[0] = '\0';
+    out.arrCode[0] = '\0';
+    out.type[0]    = '\0';
     out.alt = 0; out.speed = 0; out.dist = (float)GEOFENCE_KM;
     out.callsignColor = C_AMBER;
     out.typeColor     = C_AMBER;
@@ -90,10 +91,11 @@ bool fetchFlight(Flight &out) {
     float d   = haversine(HOME_LAT, HOME_LON, lat, lon);
     if (d >= bestDist) continue;
 
-    const char *cs    = aircraft["flight"] | "------";
-    const char *route = aircraft["route"]  | "";
-    const char *type  = aircraft["t"]      | "";
-    int speed         = aircraft["gs"]     | 0;
+    const char *cs   = aircraft["flight"] | "------";
+    const char *dep  = aircraft["dep"]    | "";
+    const char *arr  = aircraft["arr"]    | "";
+    const char *type = aircraft["t"]      | "";
+    int speed        = aircraft["gs"]     | 0;
 
     // Callsign — copy and trim trailing spaces
     strncpy(best.callsign, cs, sizeof(best.callsign) - 1);
@@ -101,21 +103,9 @@ bool fetchFlight(Flight &out) {
     int len = strlen(best.callsign);
     while (len > 0 && best.callsign[len - 1] == ' ') best.callsign[--len] = '\0';
 
-    // Route — split on " > "
-    best.origin[0] = '\0';
-    best.dest[0]   = '\0';
-    const char *sep = strstr(route, " > ");
-    if (sep) {
-      size_t olen = sep - route;
-      if (olen >= sizeof(best.origin)) olen = sizeof(best.origin) - 1;
-      strncpy(best.origin, route, olen);
-      best.origin[olen] = '\0';
-      strncpy(best.dest, sep + 3, sizeof(best.dest) - 1);
-      best.dest[sizeof(best.dest) - 1] = '\0';
-    } else if (route[0]) {
-      strncpy(best.origin, route, sizeof(best.origin) - 1);
-      best.origin[sizeof(best.origin) - 1] = '\0';
-    }
+    // Convert ICAO airport codes to IATA for display
+    icaoToIata(dep, best.depCode, sizeof(best.depCode));
+    icaoToIata(arr, best.arrCode, sizeof(best.arrCode));
 
     resolveTypeName(type, best.type, sizeof(best.type));
     best.callsignColor = getAirlineColor(cs);
@@ -129,17 +119,17 @@ bool fetchFlight(Flight &out) {
 
   if (best.valid) {
     out = best;
-    Serial.printf("[NET] %s  %s > %s  alt=%d spd=%d dist=%.1fkm\n",
-      out.callsign, out.origin, out.dest, out.alt, out.speed, bestDist);
+    Serial.printf("[NET] %s  %s>%s  alt=%d spd=%d dist=%.1fkm\n",
+      out.callsign, out.depCode, out.arrCode, out.alt, out.speed, bestDist);
     return true;
   }
 
   // No aircraft above altitude floor
   out.valid = false;
   strncpy(out.callsign, "------", sizeof(out.callsign));
-  out.origin[0] = '\0';
-  out.dest[0]   = '\0';
-  out.type[0]   = '\0';
+  out.depCode[0] = '\0';
+  out.arrCode[0] = '\0';
+  out.type[0]    = '\0';
   out.alt = 0; out.speed = 0; out.dist = (float)GEOFENCE_KM;
   out.callsignColor = C_AMBER;
   out.typeColor     = C_AMBER;
@@ -194,6 +184,6 @@ bool fetchWeather(Weather &out) {
   out.tempC       = doc["temp"] | 0.0f;
   out.weatherCode = doc["weather_code"] | 0;
   out.valid       = true;
-  Serial.printf("[WEATHER] %.1f°C code=%d\n", out.tempC, out.weatherCode);
+  Serial.printf("[WEATHER] %.1f C code=%d\n", out.tempC, out.weatherCode);
   return true;
 }

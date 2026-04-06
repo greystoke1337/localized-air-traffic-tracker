@@ -33,6 +33,6 @@ bool fetchFlight(Flight &out);
 bool fetchWeather(Weather &out);
 
 // display.ino
-void drawAll(const Flight &f, int progressPx, bool showType = false);
+void drawAll(const Flight &f, int px = 0);
 void drawWeatherPage(const Weather &w, int hour, int min);
 void drawBootStatus(const char *msg);

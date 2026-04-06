@@ -127,3 +127,50 @@ static uint16_t getAirlineColor(const char *callsign) {
   }
   return C_AMBER;
 }
+
+// ICAO → IATA airport code lookup
+struct IcaoIataEntry { const char icao[5]; const char iata[4]; };
+static const IcaoIataEntry ICAO_IATA[] = {
+  // Australia
+  {"YSSY","SYD"}, {"YMML","MEL"}, {"YBBN","BNE"}, {"YPAD","ADL"},
+  {"YPPH","PER"}, {"YMAV","CBR"}, {"YBTL","TSV"}, {"YBCS","CNS"},
+  {"YMEN","MEB"}, {"YHBA","HBA"}, {"YBMC","MCY"}, {"YGOL","OOL"},
+  {"YSCB","CBR"}, {"YMBA","MKY"},
+  // New Zealand
+  {"NZAA","AKL"}, {"NZCH","CHC"}, {"NZWN","WLG"}, {"NZQN","ZQN"},
+  // United Kingdom
+  {"EGLL","LHR"}, {"EGKK","LGW"}, {"EGGW","LTN"}, {"EGSS","STN"},
+  {"EGPH","EDI"}, {"EGCC","MAN"},
+  // Europe
+  {"LFPG","CDG"}, {"LEMD","MAD"}, {"EHAM","AMS"}, {"EDDF","FRA"},
+  {"LIRF","FCO"}, {"LEBL","BCN"},
+  // Asia
+  {"WSSS","SIN"}, {"VHHH","HKG"}, {"RJTT","HND"}, {"RJAA","NRT"},
+  {"RKSI","ICN"}, {"VTBS","BKK"}, {"WMKK","KUL"}, {"VIDP","DEL"},
+  {"VABB","BOM"}, {"OMDB","DXB"}, {"OERK","RUH"},
+  // North America (most US follow KXXX→XXX — handled by fallback below)
+  {"KORD","ORD"}, {"KLAX","LAX"}, {"KJFK","JFK"}, {"KATL","ATL"},
+  {"KDEN","DEN"}, {"KSFO","SFO"}, {"KLAS","LAS"}, {"KMIA","MIA"},
+  {"KMDW","MDW"}, {"KMSP","MSP"}, {"KBOS","BOS"}, {"KDTW","DTW"},
+  {"KPHX","PHX"}, {"KSEA","SEA"}, {"KEWR","EWR"}, {"KLGA","LGA"},
+  {"CYYZ","YYZ"}, {"CYVR","YVR"}, {"CYUL","YUL"},
+};
+static const int ICAO_IATA_COUNT = sizeof(ICAO_IATA) / sizeof(ICAO_IATA[0]);
+
+// Converts an ICAO airport code to an IATA code. Falls back to stripping
+// the leading K (US ICAO) or raw input truncated to 4 chars if not in table.
+static void icaoToIata(const char *icao, char *out, size_t outLen) {
+  if (!icao || !icao[0]) { out[0] = '\0'; return; }
+  for (int i = 0; i < ICAO_IATA_COUNT; i++) {
+    if (strncasecmp(icao, ICAO_IATA[i].icao, 4) == 0) {
+      strncpy(out, ICAO_IATA[i].iata, outLen - 1);
+      out[outLen - 1] = '\0';
+      return;
+    }
+  }
+  // Fallback: strip leading K (US ICAO) or use raw input, max 4 chars
+  const char *src = (icao[0] == 'K' && icao[1] != '\0') ? icao + 1 : icao;
+  strncpy(out, src, outLen - 1);
+  out[outLen - 1] = '\0';
+  if (strlen(out) > 4) out[4] = '\0';
+}
