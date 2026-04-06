@@ -621,9 +621,15 @@
     #big-main {
       flex: 1;
       display: flex;
+      flex-direction: column;
+      padding: clamp(10px, 2vh, 24px) 0;
+      min-height: 0;
+    }
+    #big-top {
+      flex: 1;
+      display: flex;
       flex-direction: row;
       gap: clamp(10px, 2vw, 24px);
-      padding: clamp(10px, 2vh, 24px) 0;
       min-height: 0;
     }
     #big-info {
@@ -721,12 +727,17 @@
     }
 
     /* ── Big display — portrait orientation ── */
-    body.big-display.big-portrait #big-main {
-      flex-direction: column;
+    body.big-display.big-portrait #big-top {
+      flex-direction: row;
+      flex: 1;
+      gap: clamp(10px, 2vw, 24px);
+    }
+    body.big-display.big-portrait #big-info {
+      flex: 1;
     }
     body.big-display.big-portrait #big-map-container {
-      width: 100%;
-      height: 42%;
+      width: 45%;
+      height: auto;
       min-width: unset;
       flex-shrink: 0;
     }
@@ -744,7 +755,20 @@
       font-size: clamp(1.2rem, 4vw, 2.6rem);
     }
     body.big-display.big-portrait #big-photo-slot {
-      max-height: clamp(60px, 15vh, 140px);
+      flex-shrink: 0;
+      height: 30%;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: clamp(4px, 1vh, 10px);
+    }
+    body.big-display.big-portrait #big-photo-slot img {
+      height: 100%;
+      width: auto;
+      max-width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
     }
 
     /* ── Big display — aircraft photo ── */
@@ -790,39 +814,41 @@
   <div id="big-panel">
     <div id="big-header">
       <span id="big-header-title">OVERHEAD // <span id="big-location">---</span></span>
-      <button id="big-orient-toggle" onclick="toggleBigOrientation()" style="padding:6px 12px;font-size:clamp(0.65rem,1.5vw,0.8rem);min-height:0;opacity:0.8;" aria-label="Toggle orientation">↔</button>
+      <button id="big-orient-toggle" onclick="toggleBigOrientation()" style="padding:6px 12px;font-size:clamp(0.65rem,1.5vw,0.8rem);min-height:0;opacity:0.8;" aria-label="Toggle orientation">LANDSCAPE</button>
       <button id="big-exit" onclick="toggleBigDisplay()">EXIT BIG MODE</button>
     </div>
     <div id="big-main">
-      <div id="big-info">
-        <div id="big-callsign">---</div>
-        <div id="big-airline"></div>
-        <div id="big-route"></div>
-        <div id="big-phase"></div>
-        <div id="big-stats">
-          <div class="big-stat">
-            <span class="big-stat-label">ALTITUDE</span>
-            <span class="big-stat-value" id="big-alt">---</span>
-          </div>
-          <div class="big-stat">
-            <span class="big-stat-label">SPEED</span>
-            <span class="big-stat-value" id="big-spd">---</span>
-          </div>
-          <div class="big-stat">
-            <span class="big-stat-label">DISTANCE</span>
-            <span class="big-stat-value" id="big-dist">---</span>
-          </div>
-          <div class="big-stat">
-            <span class="big-stat-label">V/SPEED</span>
-            <span class="big-stat-value" id="big-vs">---</span>
+      <div id="big-top">
+        <div id="big-info">
+          <div id="big-callsign">---</div>
+          <div id="big-airline"></div>
+          <div id="big-route"></div>
+          <div id="big-phase"></div>
+          <div id="big-stats">
+            <div class="big-stat">
+              <span class="big-stat-label">ALTITUDE</span>
+              <span class="big-stat-value" id="big-alt">---</span>
+            </div>
+            <div class="big-stat">
+              <span class="big-stat-label">SPEED</span>
+              <span class="big-stat-value" id="big-spd">---</span>
+            </div>
+            <div class="big-stat">
+              <span class="big-stat-label">DISTANCE</span>
+              <span class="big-stat-value" id="big-dist">---</span>
+            </div>
+            <div class="big-stat">
+              <span class="big-stat-label">V/SPEED</span>
+              <span class="big-stat-value" id="big-vs">---</span>
+            </div>
           </div>
         </div>
-        <div id="big-photo-slot" class="photo-wrap" style="display:none">
-          <img id="big-photo-img" alt="Aircraft photo">
-        </div>
-        <p id="big-photo-credit"></p>
+        <div id="big-map-container"></div>
       </div>
-      <div id="big-map-container"></div>
+      <div id="big-photo-slot" class="photo-wrap" style="display:none">
+        <img id="big-photo-img" alt="Aircraft photo">
+      </div>
+      <p id="big-photo-credit"></p>
     </div>
     <div id="big-footer">
       <div id="big-nav">
@@ -1084,7 +1110,7 @@
       const portrait = getBigOrientation() === 'portrait';
       document.body.classList.toggle('big-portrait', portrait);
       const btn = document.getElementById('big-orient-toggle');
-      if (btn) btn.textContent = portrait ? '↕' : '↔';
+      if (btn) btn.textContent = portrait ? 'PORTRAIT' : 'LANDSCAPE';
       if (map) setTimeout(() => map.invalidateSize(), 50);
     }
 
