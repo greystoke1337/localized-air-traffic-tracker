@@ -108,3 +108,21 @@ Use these sub-agents for domain-specific tasks:
 | Backend Specialist | `.claude/agents/backend-specialist.md` | Railway proxy server, ESP32 firmware, API integrations |
 | Technical Writer | `.claude/agents/technical-writer.md` | README, PI_PROXY_SETUP.md, inline comments, documentation |
 | UI/UX Designer | `.claude/agents/ux-designer.md` | UI implementation, layout, CRT aesthetic, accessibility, mobile responsiveness, TFT display UI |
+
+---
+
+## Gemini CLI Workflow
+
+Gemini CLI (`gemini`) is installed and configured with shell helpers in `~/.bashrc`. Use it to **explore and draft** (free, large context), then bring targeted requests to Claude to **execute and integrate**.
+
+| Command | Use for |
+|---------|---------|
+| `golf-ask "question"` | Explore all Golf M4 firmware files |
+| `server-ask "question"` | Explore server.js |
+| `gask "question" file...` | Ask about specific files |
+| `gdir "question" dir/` | Ask about all source files in a directory |
+| `greview` | Review uncommitted diff for bugs |
+| `gstaged` | Review staged changes before committing |
+| `glog` | Summarise recent git history |
+
+**Pattern:** `golf-ask "Where is brightness controlled?"` → then `"Change brightness step in display.ino:142 from 10 to 20"`

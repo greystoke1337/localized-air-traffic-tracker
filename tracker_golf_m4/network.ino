@@ -146,3 +146,54 @@ bool fetchFlight(Flight &out) {
   Serial.println("[NET] No aircraft above floor");
   return true;
 }
+
+bool fetchWeather(Weather &out) {
+  WiFiSSLClient client;
+  client.setTimeout(10000);
+
+  if (!client.connect("api.overheadtracker.com", 443)) {
+    Serial.println("[WEATHER] Connect failed");
+    return false;
+  }
+
+  char req[192];
+  snprintf(req, sizeof(req),
+    "GET /weather?lat=%.4f&lon=%.4f HTTP/1.1\r\n"
+    "Host: api.overheadtracker.com\r\n"
+    "Connection: close\r\n"
+    "\r\n",
+    (float)HOME_LAT, (float)HOME_LON);
+  client.print(req);
+
+  unsigned long deadline = millis() + 10000UL;
+  while (client.connected() && millis() < deadline) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r" || line == "") break;
+  }
+
+  if (millis() >= deadline) {
+    client.stop();
+    Serial.println("[WEATHER] Timeout reading headers");
+    return false;
+  }
+
+  JsonDocument filter;
+  filter["temp"]         = true;
+  filter["weather_code"] = true;
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, client, DeserializationOption::Filter(filter));
+  client.stop();
+
+  if (err) {
+    Serial.print("[WEATHER] JSON error: ");
+    Serial.println(err.c_str());
+    return false;
+  }
+
+  out.tempC       = doc["temp"] | 0.0f;
+  out.weatherCode = doc["weather_code"] | 0;
+  out.valid       = true;
+  Serial.printf("[WEATHER] %.1f°C code=%d\n", out.tempC, out.weatherCode);
+  return true;
+}

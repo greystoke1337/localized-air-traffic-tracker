@@ -31,7 +31,7 @@
 #define MAX_FAIL_COUNT 3
 
 // Callsign layout (built-in 6×8 font, drawn pseudo-bold with 4 offsets)
-#define CALLSIGN_Y    2    // top of callsign text (post-rotation origin = top-left)
+#define CALLSIGN_Y    4    // top of callsign text (post-rotation origin = top-left)
 #define CHAR_W        6
 #define CHAR_GAP      1
 
@@ -39,7 +39,8 @@
 #define BAR_MAX_H     30   // full-bar height in pixels (rows 1–30; row 0 empty, row 31 = progress)
 
 // Altitude bar thresholds (left column)
-#define ALT_MIN_FT    500     // → 2px (near ground / altitude floor)
+#define ALT_MIN_FT    300     // → 2px (near ground / altitude floor)
+#define ALT_MID_FT    2000    // → 23px (3/4 of bar height)
 #define ALT_MAX_FT    30000   // → BAR_MAX_H (high cruise)
 
 // Speed bar thresholds (right column)
@@ -47,8 +48,8 @@
 #define SPD_MAX_KT    450    // → BAR_MAX_H (jet cruise)
 
 // Route layout (TomThumb font, 5px tall)
-#define ROUTE_TOP_Y   18
-#define ROUTE_BOT_Y   25
+#define ROUTE_TOP_Y   19
+#define ROUTE_BOT_Y   26
 
 // Progress pixel at which the route area flips to show aircraft type
 #define TYPE_FLIP_PX  (MATRIX_W / 2)
@@ -57,3 +58,13 @@
 #define BRIGHTNESS_DEFAULT  1
 #define BRIGHTNESS_MIN      0
 #define BRIGHTNESS_MAX      2
+
+// Seesaw encoder push-button pin (active-low)
+#define ENCODER_BTN_PIN     24
+
+// Weather page
+#define UTC_OFFSET_HOURS    11          // AEDT (UTC+11); change to 10 for AEST
+#define WEATHER_REFRESH_MS  600000UL   // re-fetch weather every 10 minutes
+#define CLOCK_UPDATE_MS     1000UL     // redraw weather page every second for clock
+
+

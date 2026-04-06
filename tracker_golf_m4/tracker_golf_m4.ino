@@ -27,12 +27,28 @@ Adafruit_Protomatter matrix(
 Adafruit_seesaw encoder;
 uint8_t         brightness     = BRIGHTNESS_DEFAULT;
 int32_t         lastEncoderPos = 0;
+bool            lastBtnState   = true;   // active-low; idle = high
 
 Flight        currentFlight;
+Weather       currentWeather;
+Page          currentPage  = PAGE_FLIGHT;
+bool          autoSwitched = false;   // true when page switched automatically (no flight)
 int           failCount    = 0;
 unsigned long lastFetchMs  = 0;
 unsigned long lastPixelMs  = 0;
 int           progressPixel = 0;
+unsigned long lastWeatherMs = 0;
+unsigned long lastClockMs   = 0;
+uint32_t      ntpEpoch      = 0;
+uint32_t      ntpMillis     = 0;
+
+// Returns current local time components adjusted by UTC_OFFSET_HOURS
+static void currentTime(int &hour, int &min) {
+  if (!ntpEpoch) { hour = 0; min = 0; return; }
+  uint32_t t = ntpEpoch + (millis() - ntpMillis) / 1000 + (uint32_t)UTC_OFFSET_HOURS * 3600UL;
+  hour = (t / 3600) % 24;
+  min  = (t / 60)   % 60;
+}
 
 void setup() {
   Serial.begin(115200);
@@ -51,6 +67,7 @@ void setup() {
     matrix.setDuty(brightness);
     lastEncoderPos = encoder.getEncoderPosition();
     encoder.enableEncoderInterrupt();
+    encoder.pinMode(ENCODER_BTN_PIN, INPUT_PULLUP);
     Serial.println("[ENC] Seesaw encoder ready");
   } else {
     Serial.println("[ENC] Seesaw not found — brightness fixed");
@@ -59,14 +76,32 @@ void setup() {
   playBootAnimFor(8000);   // animate while WiFi connects (~3-8 s)
   connectWiFi();
 
-  playBootAnimFor(4000);   // animate while first fetch runs (~2-3 s)
-  currentFlight.valid = false;
+  // NTP time sync
+  for (int i = 0; i < 5 && !ntpEpoch; i++) {
+    ntpEpoch = WiFi.getTime();
+    if (!ntpEpoch) delay(1000);
+  }
+  ntpMillis = millis();
+  if (ntpEpoch) {
+    int h, m;
+    currentTime(h, m);
+    Serial.printf("[NTP] Synced — local time %02d:%02d\n", h, m);
+  } else {
+    Serial.println("[NTP] Sync failed — clock will show 00:00");
+  }
+
+  playBootAnimFor(4000);   // animate while first fetches run
+  currentFlight.valid  = false;
+  currentWeather.valid = false;
   fetchFlight(currentFlight);
+  fetchWeather(currentWeather);
   failCount = 0;
 
   unsigned long now = millis();
-  lastFetchMs  = now;
-  lastPixelMs  = now;
+  lastFetchMs   = now;
+  lastPixelMs   = now;
+  lastWeatherMs = now;
+  lastClockMs   = now;
   progressPixel = 0;
 
   drawAll(currentFlight, 0);
@@ -82,23 +117,67 @@ void loop() {
     lastEncoderPos = pos;
     brightness = (uint8_t)constrain((int)brightness + delta, BRIGHTNESS_MIN, BRIGHTNESS_MAX);
     matrix.setDuty(brightness);
+    flashBrightness(brightness);
+    // Redraw whichever page is active
+    if (currentPage == PAGE_WEATHER) {
+      int h, m; currentTime(h, m);
+      drawWeatherPage(currentWeather, h, m);
+    } else {
+      drawAll(currentFlight, progressPixel, progressPixel >= TYPE_FLIP_PX);
+    }
   }
+
+  // Button press — toggle page (active-low, edge-triggered)
+  bool btnNow = !encoder.digitalRead(ENCODER_BTN_PIN);
+  if (btnNow && !lastBtnState) {
+    Serial.println("[BTN] Page toggle");
+    autoSwitched = false;   // manual toggle clears auto-switch flag
+    currentPage = (currentPage == PAGE_FLIGHT) ? PAGE_WEATHER : PAGE_FLIGHT;
+    if (currentPage == PAGE_WEATHER) {
+      int h, m; currentTime(h, m);
+      drawWeatherPage(currentWeather, h, m);
+    } else {
+      drawAll(currentFlight, progressPixel, progressPixel >= TYPE_FLIP_PX);
+    }
+  }
+  lastBtnState = btnNow;
 
   reconnectIfNeeded();
 
-  // Advance progress bar one pixel at a time
-  if (progressPixel < MATRIX_W && now - lastPixelMs >= PIXEL_INTERVAL) {
+  // Weather page: update clock every second
+  if (currentPage == PAGE_WEATHER && now - lastClockMs >= CLOCK_UPDATE_MS) {
+    lastClockMs = now;
+    int h, m; currentTime(h, m);
+    drawWeatherPage(currentWeather, h, m);
+  }
+
+  // Advance flight progress bar (only relevant when on flight page)
+  if (currentPage == PAGE_FLIGHT &&
+      progressPixel < MATRIX_W && now - lastPixelMs >= PIXEL_INTERVAL) {
     progressPixel++;
     lastPixelMs += PIXEL_INTERVAL;
     drawAll(currentFlight, progressPixel, progressPixel >= TYPE_FLIP_PX);
   }
 
-  // Full refresh cycle
+  // Weather refresh (every 10 minutes, regardless of current page)
+  if (now - lastWeatherMs >= WEATHER_REFRESH_MS) {
+    lastWeatherMs = now;
+    fetchWeather(currentWeather);
+    if (currentPage == PAGE_WEATHER) {
+      int h, m; currentTime(h, m);
+      drawWeatherPage(currentWeather, h, m);
+    }
+  }
+
+  // Flight refresh cycle (every 30 seconds)
   if (now - lastFetchMs >= REFRESH_MS) {
     lastFetchMs   = now;
     lastPixelMs   = now;
     progressPixel = 0;
-    drawAll(currentFlight, 0);  // snap back to callsign view before blocking fetch
+
+    if (currentPage == PAGE_FLIGHT) {
+      drawAll(currentFlight, 0);  // snap back to callsign view before blocking fetch
+    }
 
     bool ok = fetchFlight(currentFlight);
     if (!ok) {
@@ -116,6 +195,22 @@ void loop() {
       connectWiFi();
     }
 
-    drawAll(currentFlight, 0);
+    // Auto page-switch logic: no flights → weather page; flight reappears → flight page
+    if (!currentFlight.valid && currentPage == PAGE_FLIGHT) {
+      Serial.println("[MAIN] No flights — switching to weather page");
+      currentPage  = PAGE_WEATHER;
+      autoSwitched = true;
+    } else if (currentFlight.valid && currentPage == PAGE_WEATHER && autoSwitched) {
+      Serial.println("[MAIN] Flight detected — returning to flight page");
+      currentPage  = PAGE_FLIGHT;
+      autoSwitched = false;
+    }
+
+    if (currentPage == PAGE_WEATHER) {
+      int h, m; currentTime(h, m);
+      drawWeatherPage(currentWeather, h, m);
+    } else {
+      drawAll(currentFlight, 0);
+    }
   }
 }

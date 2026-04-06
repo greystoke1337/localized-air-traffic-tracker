@@ -12,3 +12,9 @@ struct Flight {
   uint16_t callsignColor;    // airline-derived
   uint16_t typeColor;        // aircraft-category-derived
 };
+
+struct Weather {
+  float tempC;
+  int   weatherCode;
+  bool  valid;
+};
