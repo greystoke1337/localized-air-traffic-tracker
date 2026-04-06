@@ -621,10 +621,31 @@
     #big-main {
       flex: 1;
       display: flex;
+      flex-direction: row;
+      gap: clamp(10px, 2vw, 24px);
+      padding: clamp(10px, 2vh, 24px) 0;
+      min-height: 0;
+    }
+    #big-info {
+      flex: 1;
+      display: flex;
       flex-direction: column;
       justify-content: center;
-      padding: clamp(10px, 2vh, 24px) 0;
       gap: clamp(6px, 1.5vh, 14px);
+      min-width: 0;
+    }
+    #big-map-container {
+      width: 42%;
+      min-width: 180px;
+      border: 1px solid var(--c-dim);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    #big-map-container #dm-map {
+      width: 100% !important;
+      height: 100% !important;
+      margin: 0 !important;
+      border: none !important;
     }
 
     #big-callsign {
@@ -727,28 +748,31 @@
       <button id="big-exit" onclick="toggleBigDisplay()">EXIT BIG MODE</button>
     </div>
     <div id="big-main">
-      <div id="big-callsign">---</div>
-      <div id="big-airline"></div>
-      <div id="big-route"></div>
-      <div id="big-phase"></div>
-      <div id="big-stats">
-        <div class="big-stat">
-          <span class="big-stat-label">ALTITUDE</span>
-          <span class="big-stat-value" id="big-alt">---</span>
-        </div>
-        <div class="big-stat">
-          <span class="big-stat-label">SPEED</span>
-          <span class="big-stat-value" id="big-spd">---</span>
-        </div>
-        <div class="big-stat">
-          <span class="big-stat-label">DISTANCE</span>
-          <span class="big-stat-value" id="big-dist">---</span>
-        </div>
-        <div class="big-stat">
-          <span class="big-stat-label">V/SPEED</span>
-          <span class="big-stat-value" id="big-vs">---</span>
+      <div id="big-info">
+        <div id="big-callsign">---</div>
+        <div id="big-airline"></div>
+        <div id="big-route"></div>
+        <div id="big-phase"></div>
+        <div id="big-stats">
+          <div class="big-stat">
+            <span class="big-stat-label">ALTITUDE</span>
+            <span class="big-stat-value" id="big-alt">---</span>
+          </div>
+          <div class="big-stat">
+            <span class="big-stat-label">SPEED</span>
+            <span class="big-stat-value" id="big-spd">---</span>
+          </div>
+          <div class="big-stat">
+            <span class="big-stat-label">DISTANCE</span>
+            <span class="big-stat-value" id="big-dist">---</span>
+          </div>
+          <div class="big-stat">
+            <span class="big-stat-label">V/SPEED</span>
+            <span class="big-stat-value" id="big-vs">---</span>
+          </div>
         </div>
       </div>
+      <div id="big-map-container"></div>
     </div>
     <div id="big-footer">
       <div id="big-nav">
@@ -986,9 +1010,14 @@
       isBigDisplay = !isBigDisplay;
       document.body.classList.toggle('big-display', isBigDisplay);
       try { localStorage.setItem('isBigDisplay', isBigDisplay); } catch(e) {}
+      const dmMap = document.getElementById('dm-map');
       if (isBigDisplay) {
         document.getElementById('big-location').textContent = locationName || '---';
+        document.getElementById('big-map-container').appendChild(dmMap);
         if (flights.length) updateBigPanel(flights[flightIndex]);
+      } else {
+        const photoWrap = document.getElementById('photo-wrap');
+        photoWrap.parentNode.insertBefore(dmMap, photoWrap);
       }
       if (map) setTimeout(() => map.invalidateSize(), 50);
     }
