@@ -17,6 +17,7 @@
   }
   #matrix-wrap {
     flex-shrink: 0;
+    position: relative;
     border: 2px solid #3a2000;
     box-shadow: 0 0 40px rgba(255,162,0,0.08);
     border-radius: 6px;
@@ -97,12 +98,62 @@
     color: #3a2000;
     line-height: 1.7;
   }
+  #editor-section {
+    border-top: 1px solid #3a2000;
+    padding-top: 8px;
+  }
+  #editor-layout-values {
+    font-size: 10px;
+    color: #7b2800;
+    line-height: 1.9;
+    margin-bottom: 6px;
+  }
+  #btn-export-config {
+    width: 100%;
+    background: #181008;
+    color: #ffa200;
+    border: 1px solid #ffa200;
+    padding: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  #btn-export-config:hover:not(:disabled) { background: #2a1800; }
+  #btn-export-config:disabled { opacity: 0.4; cursor: default; }
+  #btn-open-config {
+    width: 100%;
+    background: #181008;
+    color: #ffa200;
+    border: 1px solid #3a2000;
+    padding: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    margin-bottom: 0;
+  }
+  #btn-open-config:hover { background: #2a1800; }
+  #export-output {
+    margin-top: 6px;
+    font-size: 10px;
+    color: #00e0a0;
+    white-space: pre;
+    background: #0a1408;
+    border: 1px solid #1a3020;
+    padding: 6px;
+    display: none;
+    line-height: 1.7;
+  }
 </style>
 </head>
 <body>
 
 <div id="matrix-wrap">
-  <canvas id="matrix" width="640" height="320"></canvas>
+  <div style="position:relative;width:640px;height:320px;">
+    <canvas id="matrix" width="640" height="320" style="position:absolute;top:0;left:0;"></canvas>
+    <canvas id="editor-overlay" width="640" height="320" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+  </div>
   <div id="matrix-label">64 × 32 HUB75 — GOLF M4</div>
 </div>
 
@@ -110,6 +161,7 @@
   <h2>SCENARIOS</h2>
   <div class="ctl-row">
     <select id="ctl-scenario" style="flex:1;background:#181008;color:#ffa200;border:1px solid #3a2000;padding:4px 6px;font-family:'Courier New',monospace;font-size:12px;">
+      <option value="boot">Boot animation (synthwave grid)</option>
       <option value="custom">Custom</option>
       <option value="narrow-route" selected>Narrow-body + route (QFA11 B738)</option>
       <option value="wide-no-route">Wide-body no route (ETH716 B77W)</option>
@@ -177,19 +229,37 @@
     px 32–63: type name in category color<br>
     row 31: distance bar (wide = overhead)
   </div>
+
+  <div id="editor-section">
+    <h2>LAYOUT EDITOR</h2>
+    <div class="ctl-row">
+      <label>Edit layout</label>
+      <input type="checkbox" id="ctl-edit-mode">
+      <span style="font-size:10px;color:#3a2000;margin-left:4px;">drag rows on canvas</span>
+    </div>
+    <div id="editor-layout-values">
+      CALLSIGN_Y  = <span id="ev-callsign-y">2</span><br>
+      ROUTE_TOP_Y = <span id="ev-route-top-y">18</span><br>
+      ROUTE_BOT_Y = <span id="ev-route-bot-y">25</span>
+    </div>
+    <button id="btn-open-config">OPEN config.h…</button>
+    <div id="config-file-status" style="font-size:10px;color:#3a2000;margin:4px 0;min-height:14px;"></div>
+    <button id="btn-export-config" disabled>SAVE TO config.h</button>
+    <pre id="export-output"></pre>
+  </div>
 </div>
 
 <script>
 // ─── Constants ──────────────────────────────────────────────────────────────
 const W = 64, H = 32, SCALE = 10;
-const CALLSIGN_Y = 2;
+let CALLSIGN_Y = 2;
 const CHAR_W = 6, CHAR_GAP = 1;   // stride = 7px
-const ROUTE_TOP_Y = 18;
-const ROUTE_BOT_Y = 25;
+let ROUTE_TOP_Y = 18;
+let ROUTE_BOT_Y = 25;
 const TYPE_FLIP_PX = 32;
 const BAR_MAX_H = 30;
-const ALT_MIN = 500, ALT_MAX = 30000;
-const SPD_MIN = 100, SPD_MAX = 450;
+const ALT_MIN = 300, ALT_MID = 2000, ALT_MAX = 30000;
+const SPD_MIN = 50, SPD_MAX = 450;
 const GEOFENCE_KM = 10;
 
 // ─── Color palette ───────────────────────────────────────────────────────────
@@ -337,6 +407,18 @@ function setPixel(x, y, col) {
 }
 
 // ─── Rendering helpers ───────────────────────────────────────────────────────
+function mapAltBarH(alt) {
+  if (alt <= 0) return 0;
+  if (alt <= ALT_MIN) return 2;
+  if (alt >= ALT_MAX) return BAR_MAX_H;
+  const BAR_MID_H = 23; // 2 + 75% of 28
+  if (alt <= ALT_MID) {
+    return Math.round(2 + (alt - ALT_MIN) * (BAR_MID_H - 2) / (ALT_MID - ALT_MIN));
+  } else {
+    return Math.round(BAR_MID_H + (alt - ALT_MID) * (BAR_MAX_H - BAR_MID_H) / (ALT_MAX - ALT_MID));
+  }
+}
+
 function mapBarH(val, lo, hi) {
   if (val <= 0) return 0;
   if (val <= lo) return 2;
@@ -345,7 +427,7 @@ function mapBarH(val, lo, hi) {
 }
 
 function drawBars(alt, speed) {
-  const ah = mapBarH(alt, ALT_MIN, ALT_MAX);
+  const ah = mapAltBarH(alt);
   const sh = mapBarH(speed, SPD_MIN, SPD_MAX);
   // bottom-up from row 30 (row 31 = distance bar)
   for (let y = H - ah - 1; y < H - 1; y++) setPixel(0, y, C_DEEP_BLUE);
@@ -444,9 +526,15 @@ function draw() {
     drawCallsign(s.callsign, 0, s.callsignColor);
   }
 
-  if (s.origin) {
-    drawTextTomThumb(s.origin, ROUTE_TOP_Y, C_WHITE);
-    if (s.dest) drawTextTomThumb(s.dest, ROUTE_BOT_Y, C_WHITE);
+  const csColor = showType ? s.typeColor : s.callsignColor;
+  const routeColor = (csColor === C_WHITE || csColor === C_GA) ? C_AMBER : C_WHITE;
+
+  if (s.typeColor === C_GA) {
+    drawTextTomThumb('GENERAL',  ROUTE_TOP_Y, routeColor);
+    drawTextTomThumb('AVIATION', ROUTE_BOT_Y, routeColor);
+  } else if (s.origin) {
+    drawTextTomThumb(s.origin, ROUTE_TOP_Y, routeColor);
+    if (s.dest) drawTextTomThumb(s.dest, ROUTE_BOT_Y, routeColor);
   } else if (s.typeName) {
     const midY = Math.floor((ROUTE_TOP_Y + ROUTE_BOT_Y) / 2);
     drawTextTomThumb(s.typeName, midY, s.typeColor);
@@ -498,6 +586,206 @@ function flush() {
   }
   ctx.shadowBlur = 0;
 }
+
+// ─── Boot animation ──────────────────────────────────────────────────────────
+const BOOT_STARS_X = [4, 12, 19, 28, 37, 45, 53, 60];
+const BOOT_STARS_Y = [2,  7,  3,  9,  1,  6,  4,  8];
+const BOOT_VP_X = 32, BOOT_VP_Y = 11, BOOT_FLOOR_H = 21;
+const BOOT_LANE_BX = [0, 8, 16, 24, 32, 40, 48, 56, 63];
+const BOOT_N_HLINES = 5, BOOT_SPEED = 0.7;
+
+function drawLineFb(x0, y0, x1, y1, color) {
+  let dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  let dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  while (true) {
+    setPixel(x0, y0, color);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+
+let bootHandle = null;
+let bootT = 0;
+let bootLastTs = 0;
+
+function drawBootFrame(t) {
+  for (let y = 0; y < H; y++) fb[y].fill(C_OFF);
+
+  for (let i = 0; i < 8; i++) setPixel(BOOT_STARS_X[i], BOOT_STARS_Y[i], 'rgb(80,80,80)');
+
+  for (let x = 0; x < W; x++) setPixel(x, BOOT_VP_Y - 1, 'rgb(80,40,0)');
+  for (let x = 0; x < W; x++) setPixel(x, BOOT_VP_Y, C_AMBER);
+
+  const dimCyan = 'rgb(0,35,35)';
+  for (let i = 0; i < BOOT_LANE_BX.length; i++)
+    drawLineFb(BOOT_VP_X, BOOT_VP_Y, BOOT_LANE_BX[i], H - 1, dimCyan);
+
+  const offset = (t * BOOT_SPEED) % 1.0;
+  for (let i = 0; i < BOOT_N_HLINES; i++) {
+    let frac = i / BOOT_N_HLINES + offset;
+    let z = frac >= 1.0 ? frac - 1.0 : frac;
+    if (z < 0.02) continue;
+    const sy = BOOT_VP_Y + Math.floor(BOOT_FLOOR_H * z * z);
+    if (sy >= H) continue;
+    const halfW = Math.floor(BOOT_VP_X * z);
+    if (halfW < 1) continue;
+    const b = Math.round(40 + 180 * z);
+    const col = `rgb(0,${b},${b})`;
+    for (let x = BOOT_VP_X - halfW; x <= BOOT_VP_X + halfW; x++) setPixel(x, sy, col);
+  }
+
+  flush();
+}
+
+function bootTick(ts) {
+  if (bootHandle === null) return;
+  if (bootLastTs) bootT += (ts - bootLastTs) / 1000;
+  bootLastTs = ts;
+  drawBootFrame(bootT);
+  bootHandle = requestAnimationFrame(bootTick);
+}
+
+function startBootAnim() {
+  bootT = 0; bootLastTs = 0;
+  bootHandle = requestAnimationFrame(bootTick);
+}
+
+function stopBootAnim() {
+  if (bootHandle !== null) { cancelAnimationFrame(bootHandle); bootHandle = null; }
+}
+
+// ─── Layout Editor ───────────────────────────────────────────────────────────
+const overlayCanvas = document.getElementById('editor-overlay');
+const octx = overlayCanvas.getContext('2d');
+const editor = { active: false, dragging: null, dragStartCanvasY: 0, dragStartRowY: 0 };
+
+function getEditorElements() {
+  return [
+    { id: 'callsign', getY: () => CALLSIGN_Y,  setY: v => { CALLSIGN_Y  = v; }, minY: 0,  maxY: 20, label: 'CALLSIGN_Y' },
+    { id: 'routeTop', getY: () => ROUTE_TOP_Y, setY: v => { ROUTE_TOP_Y = v; }, minY: 10, maxY: ROUTE_BOT_Y - 3, label: 'ROUTE_TOP_Y' },
+    { id: 'routeBot', getY: () => ROUTE_BOT_Y, setY: v => { ROUTE_BOT_Y = v; }, minY: ROUTE_TOP_Y + 3, maxY: 30, label: 'ROUTE_BOT_Y' },
+  ];
+}
+
+function hitTest(canvasY) {
+  const elements = getEditorElements();
+  let best = null, minDist = 16;
+  elements.forEach(el => {
+    const d = Math.abs(canvasY - el.getY() * SCALE);
+    if (d < minDist) { minDist = d; best = el.id; }
+  });
+  return best;
+}
+
+function drawOverlay() {
+  octx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  if (!editor.active) return;
+  getEditorElements().forEach(el => {
+    const rowY = el.getY();
+    const y = rowY * SCALE;
+    const isDragging = editor.dragging === el.id;
+    if (isDragging) {
+      octx.fillStyle = 'rgba(255,162,0,0.15)';
+      octx.fillRect(0, y, 640, SCALE);
+    }
+    octx.beginPath();
+    octx.setLineDash(isDragging ? [] : [5, 5]);
+    octx.strokeStyle = isDragging ? '#FFA200' : 'rgba(255,162,0,0.5)';
+    octx.lineWidth = isDragging ? 2 : 1;
+    octx.moveTo(0, y + 0.5);
+    octx.lineTo(640, y + 0.5);
+    octx.stroke();
+    octx.setLineDash([]);
+    octx.font = '9px monospace';
+    octx.fillStyle = isDragging ? '#FFA200' : 'rgba(255,162,0,0.5)';
+    octx.fillText(`${el.label}: ${rowY}`, 5, y > 15 ? y - 3 : y + 10);
+  });
+}
+
+function updateEditorSidebar() {
+  document.getElementById('ev-callsign-y').textContent  = CALLSIGN_Y;
+  document.getElementById('ev-route-top-y').textContent = ROUTE_TOP_Y;
+  document.getElementById('ev-route-bot-y').textContent = ROUTE_BOT_Y;
+}
+
+overlayCanvas.addEventListener('mousedown', e => {
+  const rect = overlayCanvas.getBoundingClientRect();
+  const cy = e.clientY - rect.top;
+  const hit = hitTest(cy);
+  if (hit) {
+    editor.dragging = hit;
+    editor.dragStartCanvasY = cy;
+    editor.dragStartRowY = getEditorElements().find(x => x.id === hit).getY();
+    overlayCanvas.style.cursor = 'ns-resize';
+    drawOverlay();
+  }
+});
+
+overlayCanvas.addEventListener('mousemove', e => {
+  const rect = overlayCanvas.getBoundingClientRect();
+  const cy = e.clientY - rect.top;
+  if (editor.dragging) {
+    const el = getEditorElements().find(x => x.id === editor.dragging);
+    const deltaRows = Math.round((cy - editor.dragStartCanvasY) / SCALE);
+    let nextY = Math.max(el.minY, Math.min(el.maxY, editor.dragStartRowY + deltaRows));
+    el.setY(nextY);
+    draw();
+    drawOverlay();
+    updateEditorSidebar();
+  } else {
+    overlayCanvas.style.cursor = hitTest(cy) ? 'ns-resize' : 'default';
+  }
+});
+
+const endDrag = () => { if (editor.dragging) { editor.dragging = null; overlayCanvas.style.cursor = 'default'; drawOverlay(); } };
+overlayCanvas.addEventListener('mouseup', endDrag);
+overlayCanvas.addEventListener('mouseleave', endDrag);
+
+document.getElementById('ctl-edit-mode').addEventListener('change', e => {
+  editor.active = e.target.checked;
+  overlayCanvas.style.pointerEvents = editor.active ? 'auto' : 'none';
+  drawOverlay();
+});
+
+let configFileHandle = null;
+
+document.getElementById('btn-open-config').addEventListener('click', async () => {
+  try {
+    [configFileHandle] = await window.showOpenFilePicker({
+      types: [{ description: 'C Header', accept: { 'text/plain': ['.h'] } }],
+      multiple: false,
+    });
+    document.getElementById('config-file-status').textContent = '● ' + configFileHandle.name;
+    document.getElementById('btn-export-config').disabled = false;
+  } catch (e) { /* user cancelled */ }
+});
+
+document.getElementById('btn-export-config').addEventListener('click', async () => {
+  if (!configFileHandle) return;
+  const out = document.getElementById('export-output');
+  try {
+    const file = await configFileHandle.getFile();
+    let content = await file.text();
+
+    // Replace only the numeric value, preserve whitespace and any trailing comment
+    content = content.replace(/^(#define CALLSIGN_Y\s+)\d+/m,  `$1${CALLSIGN_Y}`);
+    content = content.replace(/^(#define ROUTE_TOP_Y\s+)\d+/m, `$1${ROUTE_TOP_Y}`);
+    content = content.replace(/^(#define ROUTE_BOT_Y\s+)\d+/m, `$1${ROUTE_BOT_Y}`);
+
+    const writable = await configFileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+
+    out.textContent = `Saved to ${configFileHandle.name}\nCALLSIGN_Y=${CALLSIGN_Y}  ROUTE_TOP_Y=${ROUTE_TOP_Y}  ROUTE_BOT_Y=${ROUTE_BOT_Y}`;
+    out.style.display = 'block';
+  } catch (e) {
+    out.textContent = 'Error: ' + e.message;
+    out.style.display = 'block';
+  }
+});
 
 // ─── Controls ────────────────────────────────────────────────────────────────
 function readControls() {
@@ -558,7 +846,13 @@ function applyScenario(name) {
 }
 
 document.getElementById('ctl-scenario').addEventListener('change', function() {
-  if (this.value !== 'custom') applyScenario(this.value);
+  if (this.value === 'boot') {
+    if (animHandle) { cancelAnimationFrame(animHandle); animHandle = null; document.getElementById('ctl-animate').checked = false; }
+    startBootAnim();
+  } else {
+    stopBootAnim();
+    if (this.value !== 'custom') applyScenario(this.value);
+  }
 });
 
 // ─── Animation loop ──────────────────────────────────────────────────────────
@@ -579,6 +873,8 @@ function animTick(ts) {
 
 document.getElementById('ctl-animate').addEventListener('change', function() {
   if (this.checked) {
+    stopBootAnim();
+    document.getElementById('ctl-scenario').value = 'custom';
     lastPixelTime = performance.now();
     animHandle = requestAnimationFrame(animTick);
   } else {
@@ -588,7 +884,7 @@ document.getElementById('ctl-animate').addEventListener('change', function() {
 });
 
 // ─── Live update on control changes ─────────────────────────────────────────
-document.querySelectorAll('#controls input:not(#ctl-animate), #controls select').forEach(el => {
+document.querySelectorAll('#controls input:not(#ctl-animate):not(#ctl-edit-mode), #controls select').forEach(el => {
   ['input','change'].forEach(evt => el.addEventListener(evt, () => {
     if (el.id !== 'ctl-scenario') document.getElementById('ctl-scenario').value = 'custom';
     if (!document.getElementById('ctl-animate').checked) draw();
