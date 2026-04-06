@@ -720,6 +720,51 @@
       white-space: nowrap;
     }
 
+    /* ── Big display — portrait orientation ── */
+    body.big-display.big-portrait #big-main {
+      flex-direction: column;
+    }
+    body.big-display.big-portrait #big-map-container {
+      width: 100%;
+      height: 42%;
+      min-width: unset;
+      flex-shrink: 0;
+    }
+    body.big-display.big-portrait #big-stats {
+      flex-wrap: wrap;
+    }
+    body.big-display.big-portrait .big-stat {
+      flex: 1 1 calc(50% - 6px);
+      min-width: 0;
+    }
+    body.big-display.big-portrait #big-callsign {
+      font-size: clamp(2.5rem, 10vw, 6rem);
+    }
+    body.big-display.big-portrait .big-stat-value {
+      font-size: clamp(1.2rem, 4vw, 2.6rem);
+    }
+    body.big-display.big-portrait #big-photo-slot {
+      max-height: clamp(60px, 15vh, 140px);
+    }
+
+    /* ── Big display — aircraft photo ── */
+    #big-photo-slot {
+      max-height: clamp(80px, 20vh, 200px);
+      overflow: hidden;
+      margin-top: clamp(4px, 1vh, 10px);
+    }
+    #big-photo-slot img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    #big-photo-credit {
+      font-size: clamp(0.5rem, 1vw, 0.65rem);
+      opacity: 0.35;
+      margin-top: 3px;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .blink { animation: none; opacity: 1; }
       #info-wrap.fetching { animation: none; }
@@ -745,6 +790,7 @@
   <div id="big-panel">
     <div id="big-header">
       <span id="big-header-title">OVERHEAD // <span id="big-location">---</span></span>
+      <button id="big-orient-toggle" onclick="toggleBigOrientation()" style="padding:6px 12px;font-size:clamp(0.65rem,1.5vw,0.8rem);min-height:0;opacity:0.8;" aria-label="Toggle orientation">↔</button>
       <button id="big-exit" onclick="toggleBigDisplay()">EXIT BIG MODE</button>
     </div>
     <div id="big-main">
@@ -771,6 +817,10 @@
             <span class="big-stat-value" id="big-vs">---</span>
           </div>
         </div>
+        <div id="big-photo-slot" class="photo-wrap" style="display:none">
+          <img id="big-photo-img" alt="Aircraft photo">
+        </div>
+        <p id="big-photo-credit"></p>
       </div>
       <div id="big-map-container"></div>
     </div>
@@ -978,6 +1028,7 @@
     let lastWeatherData = null;
     let isDarkMode = true;
     let isBigDisplay = false;
+    let bigOrientationOverride = null; // 'portrait' | 'landscape' | null (auto)
 
     function timeoutSignal(ms) {
       return typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(ms) : undefined;
@@ -1014,12 +1065,33 @@
       if (isBigDisplay) {
         document.getElementById('big-location').textContent = locationName || '---';
         document.getElementById('big-map-container').appendChild(dmMap);
+        applyBigOrientation();
         if (flights.length) updateBigPanel(flights[flightIndex]);
       } else {
+        document.body.classList.remove('big-portrait');
         const photoWrap = document.getElementById('photo-wrap');
         photoWrap.parentNode.insertBefore(dmMap, photoWrap);
       }
       if (map) setTimeout(() => map.invalidateSize(), 50);
+    }
+
+    function getBigOrientation() {
+      if (bigOrientationOverride) return bigOrientationOverride;
+      return window.innerWidth <= window.innerHeight ? 'portrait' : 'landscape';
+    }
+
+    function applyBigOrientation() {
+      const portrait = getBigOrientation() === 'portrait';
+      document.body.classList.toggle('big-portrait', portrait);
+      const btn = document.getElementById('big-orient-toggle');
+      if (btn) btn.textContent = portrait ? '↕' : '↔';
+      if (map) setTimeout(() => map.invalidateSize(), 50);
+    }
+
+    function toggleBigOrientation() {
+      bigOrientationOverride = getBigOrientation() === 'portrait' ? 'landscape' : 'portrait';
+      try { localStorage.setItem('bigOrientationOverride', bigOrientationOverride); } catch(e) {}
+      applyBigOrientation();
     }
 
     function updateBigPanel(f, distLoc, phase) {
@@ -2666,12 +2738,19 @@
       document.getElementById('dm-photo').alt = desc;
       document.getElementById('photo-wrap').style.display = 'block';
       document.getElementById('dm-photo-credit').textContent = credit;
+      document.getElementById('big-photo-img').src = src;
+      document.getElementById('big-photo-img').alt = desc;
+      document.getElementById('big-photo-slot').style.display = 'block';
+      document.getElementById('big-photo-credit').textContent = credit;
     }
     function clearPhoto() {
       document.getElementById('dm-photo').src = '';
       document.getElementById('dm-photo').alt = '';
       document.getElementById('photo-wrap').style.display = 'none';
       document.getElementById('dm-photo-credit').textContent = '';
+      document.getElementById('big-photo-img').src = '';
+      document.getElementById('big-photo-slot').style.display = 'none';
+      document.getElementById('big-photo-credit').textContent = '';
     }
 
 
@@ -2972,6 +3051,9 @@
     document.getElementById('location-input').addEventListener('keydown', e => {
       if (e.key === 'Enter') setLocation();
     });
+    window.addEventListener('resize', () => {
+      if (isBigDisplay && !bigOrientationOverride) applyBigOrientation();
+    });
 
 
     // ── Sliders ──────────────────────────────────────────────────────
@@ -3005,6 +3087,10 @@
         if (localStorage.getItem('isBigDisplay') === 'true') {
           isBigDisplay = true;
           document.body.classList.add('big-display');
+        }
+        const savedOrient = localStorage.getItem('bigOrientationOverride');
+        if (savedOrient === 'portrait' || savedOrient === 'landscape') {
+          bigOrientationOverride = savedOrient;
         }
       } catch(e) {}
     })();
