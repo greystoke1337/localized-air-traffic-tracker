@@ -2745,14 +2745,16 @@
           'https://api.planespotters.net/pub/photos/hex/' + hex + '?reg=' + reg + '&icaoType=' + type,
           { signal: timeoutSignal(6000) }
         );
-        if (!res.ok) return;
+        if (!res.ok) throw 'no-photo';
         const data  = await res.json();
         const photo = data.photos && data.photos[0];
-        if (!photo) return;
+        if (!photo) throw 'no-photo';
         const src    = photo.thumbnail_large?.src || photo.thumbnail?.src;
         const credit = photo.photographer ? '© ' + photo.photographer : '';
-        if (src) setPhoto(src, credit, reg, type);
-      } catch(e) {}
+        if (src) setPhoto(src, credit, reg, type); else throw 'no-photo';
+      } catch(e) {
+        if (DEMO_MODE) setPhoto("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 120'%3E%3Crect fill='%23111' width='200' height='120'/%3E%3Ctext x='100' y='55' text-anchor='middle' fill='%2333aa44' font-family='monospace' font-size='11'%3EDEMO%3C/text%3E%3Ctext x='100' y='75' text-anchor='middle' fill='%23336644' font-family='monospace' font-size='9'%3ENO PHOTO%3C/text%3E%3C/svg%3E", 'DEMO', reg, type);
+      }
     }
 
     function setPhoto(src, credit, reg, typeStr) {
@@ -2950,11 +2952,21 @@
       const DEG = Math.PI / 180, R = 6371;
       const rand = (a,b) => a + Math.random()*(b-a), ri = (a,b) => Math.floor(rand(a,b+1)), pick = a => a[Math.floor(Math.random()*a.length)];
       const airlines = [
-        {p:'QFA',r:'VH-OQ',t:['A388','B789']},{p:'VOZ',r:'VH-YI',t:['B738','A320']},{p:'JST',r:'VH-VK',t:['A320','A321']},
-        {p:'UAE',r:'A6-EO',t:['A388','B77W']},{p:'SIA',r:'9V-SK',t:['A388','A359']},{p:'BAW',r:'G-XLE',t:['A388','B789']},
-        {p:'AAL',r:'N178',t:['B738','A321']},{p:'DAL',r:'N501',t:['A359','B763']},{p:'UAL',r:'N127',t:['B789','B77W']},
-        {p:'AFR',r:'F-HPB',t:['A388','B77W']},{p:'DLH',r:'D-AIM',t:['A388','A359']},{p:'CPA',r:'B-LR',t:['A359','B77W']},
-        {p:'ANA',r:'JA88',t:['B789','B77W']},{p:'RYR',r:'EI-DL',t:['B738','B38M']},{p:'EZY',r:'G-EZB',t:['A320','A20N']},
+        {p:'QFA',r:['VH-OQA','VH-ZNA'],h:['7C4920','7C8064'],t:['A388','B789']},
+        {p:'VOZ',r:['VH-YIR','VH-YFR'],h:['7C7AB1','7C7A45'],t:['B738','B738']},
+        {p:'JST',r:['VH-VFJ','VH-XSJ'],h:['7C6B0D','7C7701'],t:['A320','A320']},
+        {p:'UAE',r:['A6-EOA','A6-EGA'],h:['89639A','89619A'],t:['A388','B77W']},
+        {p:'SIA',r:['9V-SKI','9V-SMF'],h:['76CD69','76CDA6'],t:['A388','A359']},
+        {p:'BAW',r:['G-XLEA','G-ZBKA'],h:['40688B','406D77'],t:['A388','B789']},
+        {p:'AAL',r:['N903AA','N803NN'],h:['AC7A52','AAEE3B'],t:['A321','B738']},
+        {p:'DAL',r:['N501DN','N178DZ'],h:['A63DFF','A13748'],t:['A359','B763']},
+        {p:'UAL',r:['N29961','N2140U'],h:['A31A2D','A1CAC9'],t:['B789','B77W']},
+        {p:'AFR',r:['F-HPJA','F-GSQC'],h:['39BD20','394A02'],t:['A388','B77W']},
+        {p:'DLH',r:['D-AIMA','D-AIXA'],h:['3C65A1','3C6701'],t:['A388','A359']},
+        {p:'CPA',r:['B-LRA','B-KPA'],h:['780A9B','780201'],t:['A359','B77W']},
+        {p:'ANA',r:['JA871A','JA787A'],h:['86E778','869210'],t:['B789','B77W']},
+        {p:'RYR',r:['EI-DLB','EI-HGN'],h:['4CA2BF','4CAD3A'],t:['B738','B38M']},
+        {p:'EZY',r:['G-EZWB','G-UZHB'],h:['406753','4072C8'],t:['A320','A20N']},
       ];
       const apts = ['YSSY','YMML','YBBN','EGLL','KJFK','KLAX','OMDB','WSSS','VHHH','RJTT','LFPG','EDDF'];
       const al = airlines[idx % airlines.length];
@@ -2976,7 +2988,8 @@
       const lat2=Math.asin(Math.sin(lat1)*Math.cos(dist/R)+Math.cos(lat1)*Math.sin(dist/R)*Math.cos(b));
       const lon2=lon1+Math.atan2(Math.sin(b)*Math.sin(dist/R)*Math.cos(lat1),Math.cos(dist/R)-Math.sin(lat1)*Math.sin(lat2));
       const dep=pick(apts),arr=pick(apts.filter(a=>a!==dep));
-      return {hex:Math.floor(Math.random()*0xFFFFFF).toString(16).padStart(6,'0'),flight:(al.p+ri(100,999)+'        ').slice(0,8),r:al.r+String.fromCharCode(65+ri(0,25)),t:pick(al.t),
+      const ti = ri(0, al.r.length - 1);
+      return {hex:al.h[ti],flight:(al.p+ri(100,999)+'        ').slice(0,8),r:al.r[ti],t:al.t[ti],
         lat:+(lat2/DEG).toFixed(5),lon:+(lon2/DEG).toFixed(5),alt_baro:alt,gs:spd,baro_rate:vs,track:+((brg+180+rand(-30,30))%360).toFixed(1),squawk:sq,
         category:pick(['A2','A3','A4','A5']),dep,arr,route:dep+' > '+arr};
     }
