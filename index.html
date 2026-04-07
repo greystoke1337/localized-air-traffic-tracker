@@ -612,9 +612,9 @@
     }
     #big-header-title { letter-spacing: 0.08em; }
     #big-exit {
-      padding: 6px 14px;
+      padding: 10px 14px;
       font-size: clamp(0.65rem, 1.5vw, 0.8rem);
-      min-height: 0;
+      min-height: 44px;
       opacity: 0.8;
     }
 
@@ -678,7 +678,7 @@
       line-height: 1.2;
     }
     #big-phase {
-      font-size: clamp(1rem, 3vw, 2rem);
+      font-size: clamp(1.2rem, 3.5vw, 2.4rem);
       letter-spacing: 0.08em;
     }
 
@@ -694,8 +694,8 @@
       border: 1px solid var(--c-dim);
     }
     .big-stat-label {
-      font-size: clamp(0.55rem, 1.3vw, 0.75rem);
-      opacity: 0.5;
+      font-size: clamp(0.65rem, 1.3vw, 0.75rem);
+      opacity: 0.7;
       display: block;
       letter-spacing: 0.06em;
     }
@@ -716,7 +716,7 @@
       flex-wrap: wrap;
     }
     #big-nav { display: flex; gap: 6px; align-items: center; }
-    #big-nav button { padding: 8px 16px; font-size: clamp(0.7rem, 1.5vw, 0.85rem); min-height: 0; }
+    #big-nav button { padding: 10px 20px; font-size: clamp(0.7rem, 1.5vw, 0.85rem); min-height: 44px; }
     #big-counter {
       font-size: clamp(0.75rem, 1.8vw, 1rem);
       opacity: 0.6;
@@ -724,13 +724,14 @@
       text-align: center;
     }
     #big-flight-list {
-      font-size: clamp(0.6rem, 1.3vw, 0.75rem);
-      opacity: 0.4;
+      font-size: clamp(0.7rem, 1.3vw, 0.75rem);
+      opacity: 0.6;
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    @media (max-width: 600px) { #big-flight-list { display: none; } }
 
     /* ── Big display — portrait orientation ── */
     body.big-display.big-portrait #big-main {
@@ -747,6 +748,7 @@
       grid-column: 1;
       grid-row: 1;
       overflow: auto;
+      scrollbar-width: none;
     }
     body.big-display.big-portrait #big-map-container {
       grid-column: 2;
@@ -771,9 +773,15 @@
     body.big-display.big-portrait #big-photo-slot {
       grid-column: 1;
       grid-row: 2;
-      aspect-ratio: 1 / 1;
+      aspect-ratio: 16 / 9;
+      max-height: 28vh;
       width: 100%;
       overflow: hidden;
+    }
+    body.big-display.big-portrait #big-photo-credit {
+      grid-column: 1;
+      grid-row: 3;
+      margin: 0;
     }
     body.big-display.big-portrait #big-photo-slot img {
       width: 100%;
@@ -824,7 +832,7 @@
   <div id="big-panel">
     <div id="big-header">
       <span id="big-header-title">OVERHEAD // <span id="big-location">---</span></span>
-      <button id="big-orient-toggle" onclick="toggleBigOrientation()" style="padding:6px 12px;font-size:clamp(0.65rem,1.5vw,0.8rem);min-height:0;opacity:0.8;" aria-label="Toggle orientation">LANDSCAPE</button>
+      <button id="big-orient-toggle" onclick="toggleBigOrientation()" style="padding:10px 12px;font-size:clamp(0.65rem,1.5vw,0.8rem);min-height:44px;opacity:0.8;" aria-label="Toggle orientation">LANDSCAPE</button>
       <button id="big-exit" onclick="toggleBigDisplay()">EXIT BIG MODE</button>
     </div>
     <div id="big-main">
@@ -859,7 +867,7 @@
       <div id="big-photo-slot" class="photo-wrap" style="display:none">
         <img id="big-photo-img" alt="Aircraft photo">
       </div>
-      <p id="big-photo-credit"></p>
+      <span id="big-photo-credit"></span>
     </div>
     <div id="big-footer">
       <div id="big-nav">
@@ -1104,8 +1112,13 @@
         document.getElementById('big-map-container').appendChild(dmMap);
         applyBigOrientation();
         if (flights.length) updateBigPanel(flights[flightIndex]);
+        resetAutoCycle();
       } else {
+        clearInterval(autoCycleTimer);
+        autoCycleTimer = null;
         document.body.classList.remove('big-portrait');
+        bigOrientationOverride = null;
+        try { localStorage.removeItem('bigOrientationOverride'); } catch(e) {}
         const photoWrap = document.getElementById('photo-wrap');
         photoWrap.parentNode.insertBefore(dmMap, photoWrap);
       }
@@ -2796,10 +2809,10 @@
     function next() { go(flightIndex + 1); }
     function prev() { go(flightIndex - 1); }
 
-    let autoCycleTimer = setInterval(() => { if (flights.length > 1) next(); }, 15000);
+    let autoCycleTimer = null;
     function resetAutoCycle() {
       clearInterval(autoCycleTimer);
-      autoCycleTimer = setInterval(() => { if (flights.length > 1) next(); }, 15000);
+      if (isBigDisplay) autoCycleTimer = setInterval(() => { if (flights.length > 1) next(); }, 15000);
     }
     let lastManualRefresh = 0;
     function manualRefresh() {
