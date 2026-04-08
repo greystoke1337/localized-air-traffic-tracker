@@ -16,5 +16,9 @@ struct Flight {
 struct Weather {
   float tempC;
   int   weatherCode;
+  float windSpeedKmh;
+  int   visibilityKm;
+  char  windCardinal[4];
+  int   utcOffsetSec;
   bool  valid;
 };

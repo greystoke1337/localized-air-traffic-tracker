@@ -2239,6 +2239,25 @@ function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 
+// ── Golf OTA firmware endpoints ───────────────────────────────────────────────
+app.get('/firmware/golf/version', (req, res) => {
+  const versionFile = path.join(__dirname, 'firmware', 'golf-version.txt');
+  try {
+    const version = parseInt(fs.readFileSync(versionFile, 'utf8').trim(), 10);
+    res.json({ version: isNaN(version) ? 0 : version });
+  } catch {
+    res.json({ version: 0 });
+  }
+});
+
+app.get('/firmware/golf/binary', (req, res) => {
+  const binFile = path.join(__dirname, 'firmware', 'golf.bin');
+  if (!fs.existsSync(binFile)) return res.status(404).send('Not found');
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Disposition', 'attachment; filename="golf.bin"');
+  fs.createReadStream(binFile).pipe(res);
+});
+
 let server;
 if (require.main === module) {
   server = app.listen(PORT, '0.0.0.0', () => {

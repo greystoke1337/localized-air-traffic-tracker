@@ -95,7 +95,7 @@ bool fetchFlight(Flight &out) {
     const char *dep  = aircraft["dep"]    | "";
     const char *arr  = aircraft["arr"]    | "";
     const char *type = aircraft["t"]      | "";
-    int speed        = aircraft["gs"]     | 0;
+    int speed        = (int)roundf(aircraft["gs"] | 0.0f);
 
     // Callsign — copy and trim trailing spaces
     strncpy(best.callsign, cs, sizeof(best.callsign) - 1);
@@ -168,8 +168,12 @@ bool fetchWeather(Weather &out) {
   }
 
   JsonDocument filter;
-  filter["temp"]         = true;
-  filter["weather_code"] = true;
+  filter["temp"]            = true;
+  filter["weather_code"]    = true;
+  filter["wind_speed"]      = true;
+  filter["wind_cardinal"]   = true;
+  filter["visibility_km"]   = true;
+  filter["utc_offset_secs"] = true;
 
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, client, DeserializationOption::Filter(filter));
@@ -181,9 +185,16 @@ bool fetchWeather(Weather &out) {
     return false;
   }
 
-  out.tempC       = doc["temp"] | 0.0f;
-  out.weatherCode = doc["weather_code"] | 0;
-  out.valid       = true;
-  Serial.printf("[WEATHER] %.1f C code=%d\n", out.tempC, out.weatherCode);
+  out.tempC        = doc["temp"]         | 0.0f;
+  out.weatherCode  = doc["weather_code"] | 0;
+  out.windSpeedKmh = doc["wind_speed"]   | 0.0f;
+  out.visibilityKm = (int)roundf((float)(doc["visibility_km"] | 0.0f));
+  out.utcOffsetSec = doc["utc_offset_secs"] | (UTC_OFFSET_HOURS * 3600);
+  const char *wc   = doc["wind_cardinal"] | "";
+  strncpy(out.windCardinal, wc, sizeof(out.windCardinal) - 1);
+  out.windCardinal[sizeof(out.windCardinal) - 1] = '\0';
+  out.valid        = true;
+  Serial.printf("[WEATHER] %.1f C code=%d wind=%s %.0f vis=%dkm utcOff=%d\n",
+    out.tempC, out.weatherCode, out.windCardinal, out.windSpeedKmh, out.visibilityKm, out.utcOffsetSec);
   return true;
 }

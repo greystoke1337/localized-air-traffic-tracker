@@ -36,4 +36,46 @@ After upload, open the serial monitor at 115200 baud to confirm:
 Tell the user:
 - Whether compile succeeded (or show any errors)
 - Whether upload succeeded
-- The COM port used (default COM11)
+- The COM port used (default COM9)
+
+---
+
+## OTA (wireless) deployment
+
+Golf supports WiFi OTA. The device checks for updates on boot and every 6 hours.
+
+### Local OTA (fast dev iteration — no Railway needed)
+
+```bash
+# 1. Compile + serve binary locally on :8080
+./build.sh golf-serve
+# Prints the exact #define lines to add to secrets.h, e.g.:
+#   #define OTA_LOCAL_HOST  "192.168.1.42"
+#   #define OTA_LOCAL_PORT  8080
+
+# 2. Add those lines to tracker_golf/secrets.h, then flash once via USB
+./build.sh golf
+
+# 3. From now on: edit code → golf-serve → reboot device → done (no USB needed)
+```
+
+The local server always reports version 9999 so the device always pulls the latest while the server is running. Ctrl-C to stop; device falls back to Railway on the next check.
+
+### Remote OTA (Railway — for deploying to the live device)
+
+```bash
+# 1. Compile + stage binary + increment version counter
+./build.sh golf-publish
+
+# 2. Deploy the server (must run from project root)
+railway up
+
+# 3. Device self-updates within 6 hours, or reboot it to trigger immediately
+```
+
+`golf-publish` copies the compiled `.bin` to `server/firmware/golf.bin` and increments `server/firmware/golf-version.txt`. The device compares its `FIRMWARE_VERSION` (in `config.h`) against the server value and self-flashes if the server is newer.
+
+**When to use each method:**
+- USB (`./build.sh golf`): first-time setup, or when OTA is broken
+- Local OTA (`./build.sh golf-serve`): active development — fast iteration without USB
+- Remote OTA (`./build.sh golf-publish` + `railway up`): deploying a finished update to the live device

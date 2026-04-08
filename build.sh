@@ -30,6 +30,8 @@
 #   OVERHEAD_TRACKER_IP=x.x.x.x ./build.sh ota  → OTA to specific IP
 #   ./build.sh golf              → compile + upload Golf (Matrix Portal M4) to COM9 (auto-touches bootloader)
 #   ./build.sh golf-compile      → compile Golf only
+#   ./build.sh golf-publish      → compile Golf + copy binary + increment version in server/firmware/ (then railway up)
+#   ./build.sh golf-serve        → compile Golf + serve binary locally on :8080 (HTTP OTA for dev; set OTA_LOCAL_HOST in secrets.h)
 #
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -715,6 +717,79 @@ run_golf_compile() {
   info "Golf compile complete."
 }
 
+run_golf_serve() {
+  run_golf_compile
+
+  local BIN="$GOLF_BUILD_DIR/tracker_golf.ino.bin"
+  local PORT=8080
+  local TMP_JS
+  TMP_JS=$(mktemp "/tmp/golf-serve-XXXXXX.js")
+  # Node.js is a native Windows process — use mixed (forward-slash) Windows path it can open
+  local WIN_BIN
+  WIN_BIN=$(cygpath -m "$BIN" 2>/dev/null || echo "$BIN")
+
+  cat > "$TMP_JS" << JSEOF
+const http = require('http');
+const fs   = require('fs');
+const os   = require('os');
+const bin  = fs.readFileSync('$WIN_BIN');
+const port = $PORT;
+
+let localIP = 'YOUR_MACHINE_IP';
+for (const iface of Object.values(os.networkInterfaces())) {
+  for (const addr of iface) {
+    if (addr.family === 'IPv4' && !addr.internal) { localIP = addr.address; break; }
+  }
+  if (localIP !== 'YOUR_MACHINE_IP') break;
+}
+
+console.log('[OTA] Local server on :' + port + '  (' + bin.length + ' bytes)');
+console.log('[OTA] Add to secrets.h:');
+console.log('        #define OTA_LOCAL_HOST  "' + localIP + '"');
+console.log('        #define OTA_LOCAL_PORT   ' + port);
+console.log('[OTA] Ctrl-C to stop.');
+
+http.createServer((req, res) => {
+  if (req.url === '/firmware/golf/version') {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ version: 9999 }));
+    console.log('[OTA] Version check — served 9999');
+  } else if (req.url === '/firmware/golf/binary') {
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment; filename="golf.bin"');
+    res.end(bin);
+    console.log('[OTA] Binary served (' + bin.length + ' bytes)');
+  } else {
+    res.statusCode = 404;
+    res.end('Not found');
+  }
+}).listen(port, '0.0.0.0');
+JSEOF
+
+  node "$TMP_JS"
+  rm -f "$TMP_JS"
+}
+
+run_golf_publish() {
+  run_golf_compile
+
+  local BIN="$GOLF_BUILD_DIR/tracker_golf.ino.bin"
+  local DEST="server/firmware"
+  local VER_FILE="$DEST/golf-version.txt"
+
+  mkdir -p "$DEST"
+  cp "$BIN" "$DEST/golf.bin"
+  info "Binary → $DEST/golf.bin ($(wc -c < "$DEST/golf.bin") bytes)"
+
+  local cur=0
+  [ -f "$VER_FILE" ] && cur=$(cat "$VER_FILE")
+  local next=$((cur + 1))
+  echo "$next" > "$VER_FILE"
+  info "Version: $cur → $next"
+
+  info "golf-publish done. Run 'railway up' from project root to deploy."
+}
+
 # ── Safe (test + validate — full pre-push check) ─────────────────────────────
 run_safe() {
   info "SAFE — full pre-push validation"
@@ -745,5 +820,7 @@ case "$CMD" in
   delta-compile)    run_delta_compile ;;
   golf)             run_golf "$@" ;;
   golf-compile)     run_golf_compile ;;
+  golf-publish)     run_golf_publish ;;
+  golf-serve)       run_golf_serve ;;
   all|*)            run_compile && run_upload "$@" ;;
 esac
