@@ -6,9 +6,7 @@
 #include "types.h"
 
 extern Adafruit_Protomatter matrix;
-extern Adafruit_seesaw      encoder;
 extern uint8_t              brightness;
-extern int32_t              lastEncoderPos;
 
 enum Page { PAGE_FLIGHT, PAGE_WEATHER };
 
@@ -21,6 +19,7 @@ extern unsigned long lastFetchMs;
 extern unsigned long lastPixelMs;
 extern int           progressPixel;
 extern unsigned long lastWeatherMs;
+extern unsigned long lastScrollMs;
 extern uint32_t      ntpEpoch;
 extern uint32_t      ntpMillis;
 
@@ -36,3 +35,8 @@ bool fetchWeather(Weather &out);
 void drawAll(const Flight &f, int px = 0);
 void drawWeatherPage(const Weather &w, int hour, int min);
 void drawBootStatus(const char *msg);
+void drawBootSplash();
+void drawOTAStatus(const char *msg);
+
+// ota.ino
+void checkOTA();

@@ -24,10 +24,7 @@ Adafruit_Protomatter matrix(
   true  // double-buffer
 );
 
-Adafruit_seesaw encoder;
-uint8_t         brightness     = BRIGHTNESS_DEFAULT;
-int32_t         lastEncoderPos = 0;
-bool            lastBtnState   = true;   // active-low; idle = high
+uint8_t brightness = BRIGHTNESS_DEFAULT;
 
 Flight        currentFlight;
 Weather       currentWeather;
@@ -39,13 +36,17 @@ unsigned long lastPixelMs  = 0;
 int           progressPixel = 0;
 unsigned long lastWeatherMs = 0;
 unsigned long lastClockMs   = 0;
+unsigned long lastScrollMs  = 0;
 uint32_t      ntpEpoch      = 0;
 uint32_t      ntpMillis     = 0;
 
-// Returns current local time components adjusted by UTC_OFFSET_HOURS
+// Returns current local time components, using DST-aware offset from weather if available
 static void currentTime(int &hour, int &min) {
   if (!ntpEpoch) { hour = 0; min = 0; return; }
-  uint32_t t = ntpEpoch + (millis() - ntpMillis) / 1000 + (uint32_t)UTC_OFFSET_HOURS * 3600UL;
+  int32_t offset = currentWeather.valid
+    ? (int32_t)currentWeather.utcOffsetSec
+    : (int32_t)UTC_OFFSET_HOURS * 3600;
+  uint32_t t = ntpEpoch + (millis() - ntpMillis) / 1000 + (uint32_t)offset;
   hour = (t / 3600) % 24;
   min  = (t / 60)   % 60;
 }
@@ -63,15 +64,7 @@ void setup() {
   // 180° rotation — panel is mounted upside-down
   matrix.setRotation(2);
 
-  if (encoder.begin(0x36)) {
-    matrix.setDuty(brightness);
-    lastEncoderPos = encoder.getEncoderPosition();
-    encoder.enableEncoderInterrupt();
-    encoder.pinMode(ENCODER_BTN_PIN, INPUT_PULLUP);
-    Serial.println("[ENC] Seesaw encoder ready");
-  } else {
-    Serial.println("[ENC] Seesaw not found — brightness fixed");
-  }
+  matrix.setDuty(2);  // hardware duty fixed at max; brightness is software-scaled
 
   playBootAnimFor(8000);   // animate while WiFi connects (~3-8 s)
   connectWiFi();
@@ -95,6 +88,7 @@ void setup() {
   currentWeather.valid = false;
   fetchFlight(currentFlight);
   fetchWeather(currentWeather);
+  drawBootSplash();
   failCount = 0;
 
   unsigned long now = millis();
@@ -110,38 +104,6 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  // Rotary encoder brightness (setDuty range 0-2 on 120 MHz SAMD51)
-  int32_t pos = encoder.getEncoderPosition();
-  if (pos != lastEncoderPos) {
-    int delta = pos - lastEncoderPos;
-    lastEncoderPos = pos;
-    brightness = (uint8_t)constrain((int)brightness + delta, BRIGHTNESS_MIN, BRIGHTNESS_MAX);
-    matrix.setDuty(brightness);
-    flashBrightness(brightness);
-    // Redraw whichever page is active
-    if (currentPage == PAGE_WEATHER) {
-      int h, m; currentTime(h, m);
-      drawWeatherPage(currentWeather, h, m);
-    } else {
-      drawAll(currentFlight, progressPixel);
-    }
-  }
-
-  // Button press — toggle page (active-low, edge-triggered)
-  bool btnNow = !encoder.digitalRead(ENCODER_BTN_PIN);
-  if (btnNow && !lastBtnState) {
-    Serial.println("[BTN] Page toggle");
-    autoSwitched = false;   // manual toggle clears auto-switch flag
-    currentPage = (currentPage == PAGE_FLIGHT) ? PAGE_WEATHER : PAGE_FLIGHT;
-    if (currentPage == PAGE_WEATHER) {
-      int h, m; currentTime(h, m);
-      drawWeatherPage(currentWeather, h, m);
-    } else {
-      drawAll(currentFlight, progressPixel);
-    }
-  }
-  lastBtnState = btnNow;
-
   reconnectIfNeeded();
 
   // Weather page: update clock every second
@@ -156,6 +118,15 @@ void loop() {
       progressPixel < MATRIX_W && now - lastPixelMs >= PIXEL_INTERVAL) {
     progressPixel++;
     lastPixelMs += PIXEL_INTERVAL;
+    drawAll(currentFlight, progressPixel);
+  }
+
+  // Fast redraw for type name scroll (bounce animation when name overflows display)
+  if (currentPage == PAGE_FLIGHT && currentFlight.valid &&
+      progressPixel >= TYPE_FLIP_PX &&
+      (int)(strlen(currentFlight.type) * (CHAR_W + CHAR_GAP) - CHAR_GAP) > MATRIX_W &&
+      now - lastScrollMs >= SCROLL_INTERVAL_MS) {
+    lastScrollMs = now;
     drawAll(currentFlight, progressPixel);
   }
 

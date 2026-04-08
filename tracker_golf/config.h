@@ -56,13 +56,23 @@
 #define ALTITUDE_Y    19   // altitude text, e.g. "35000FT"
 #define ROUTE_Y       28   // route text, e.g. "SYD>MEL" (single line)
 
-// Rotary encoder brightness control (Protomatter setDuty: 0=dim, 2=bright on 120 MHz SAMD51)
-#define BRIGHTNESS_DEFAULT  1
+// Rotary encoder brightness control (software scaling of RGB565 pixel values, 0=off, 255=full)
+// Hardware setDuty is fixed at max (2); all dimming is done in software via dim() in display.ino.
+#define BRIGHTNESS_DEFAULT  77
 #define BRIGHTNESS_MIN      0
-#define BRIGHTNESS_MAX      2
+#define BRIGHTNESS_MAX      255
+#define BRIGHTNESS_STEP     25   // encoder ticks per step (~10 steps across full range)
 
 // Seesaw encoder push-button pin (active-low)
 #define ENCODER_BTN_PIN     24
+
+// Type name scroll (bounce left-to-right when name is wider than display)
+#define SCROLL_INTERVAL_MS  40UL  // fast redraw interval for scroll (~25fps)
+#define SCROLL_SPEED_MS     200    // ms per pixel of scroll position
+
+// OTA firmware update
+#define FIRMWARE_VERSION      1          // increment on each golf-publish
+#define OTA_CHECK_INTERVAL_MS 21600000UL // check for updates every 6 hours
 
 // Weather page
 #define UTC_OFFSET_HOURS    11          // AEDT (UTC+11); change to 10 for AEST

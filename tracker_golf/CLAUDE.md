@@ -3,13 +3,48 @@
 ## Build commands
 
 ```bash
-./build.sh golf           # compile + upload to COM9
-./build.sh golf-compile   # compile only
+./build.sh golf           # compile + upload to COM9 (USB, development)
+./build.sh golf-compile   # compile only (error check)
+./build.sh golf-publish   # compile + stage binary + increment OTA version (then: railway up)
+./build.sh golf-serve     # compile + serve binary locally on :8080 (HTTP OTA for fast iteration)
 ```
 
 - FQBN: `adafruit:samd:adafruit_matrixportal_m4`
 - COM9 (running) / COM10 (bootloader — triggered automatically via 1200-baud touch)
 - Serial monitor: 115200 baud
+
+## Brightness
+
+Brightness is software-scaled via the `dim()` helper in `display.ino`, which scales each RGB565 channel by `brightness/255` with a minimum of 1 per non-zero channel (so dark colors stay faintly visible). Hardware `setDuty` is fixed at max (2).
+
+The rotary encoder is currently **disabled** — brightness is hardcoded at `BRIGHTNESS_DEFAULT` (77 = ~30%) in `config.h`. To change brightness, update that constant and reflash.
+
+The boot animation (`playBootAnimFor`) is always drawn at full brightness so its faint grid lines remain visible regardless of the brightness setting.
+
+## OTA firmware updates
+
+OTA auto-checks (on boot and every 6 hours) are **disabled**. The device only self-updates when triggered manually via local or remote OTA.
+
+**Remote publish (Railway):**
+1. `./build.sh golf-publish` — compiles, copies `.bin` to `server/firmware/golf.bin`, increments `server/firmware/golf-version.txt`
+2. `railway up` (from project root) — deploys server with new binary
+3. Device picks up the update within 6 hours, or reboot it to trigger immediately
+
+**Local OTA (fast dev iteration — no Railway needed):**
+1. Add to `secrets.h` (gitignored):
+
+   ```cpp
+   #define OTA_LOCAL_HOST  "192.168.x.x"   // your machine's LAN IP
+   #define OTA_LOCAL_PORT  8080             // optional, default 8080
+   ```
+
+2. `./build.sh golf-serve` — compiles and starts a local HTTP server; prints the exact `#define` lines to add
+3. Reboot the device — it downloads from your machine instead of Railway; server reports version 9999 so it always updates while the server is running
+4. Ctrl-C to stop; device falls back to Railway on next check
+
+**Priority:** local server is tried first (if `OTA_LOCAL_HOST` defined); falls back to remote if unreachable.
+
+**Recovery:** If OTA corrupts the sketch, the UF2 bootloader survives — recover via USB with `./build.sh golf`.
 
 ## File layout
 
@@ -21,13 +56,14 @@
 | `globals.h` | `Page` enum (`PAGE_FLIGHT`, `PAGE_WEATHER`); extern declarations for all global state; `fetchWeather`/`drawWeatherPage` prototypes |
 | `lookup_tables.h` | ICAO type code -> display name + category; airline prefix -> color; `resolveTypeName()`, `getTypeColor()`, `getAirlineColor()` |
 | `network.ino` | HTTPS fetch from `api.overheadtracker.com`; `fetchFlight()` (ArduinoJson stream-parse, haversine filter, picks closest aircraft above altitude floor); `fetchWeather()` |
-| `display.ino` | `drawCallsign()`, `drawRoute()`, `drawBars()`, `drawProgressBar()`, `drawAll()`, `drawBootStatus()`; weather page: `wmoShortName()`, `wmoToIconType()`, `drawWeatherIcon()`, `drawWeatherPage()`; icon type constants (`ICON_SUN`–`ICON_STORM`) |
+| `display.ino` | `drawCallsign()`, `drawRoute()`, `drawBars()`, `drawProgressBar()`, `drawAll()`, `drawBootStatus()`, `drawOTAStatus()`; weather page: `wmoShortName()`, `wmoToIconType()`, `drawWeatherIcon()`, `drawWeatherPage()`; icon type constants (`ICON_SUN`–`ICON_STORM`) |
+| `ota.ino` | `checkOTA()` — version check + binary download over HTTPS; `applyOTA()` — NVMCTRL flash write from SRAM |
 | `wifi_setup.ino` | `connectWiFi()`, `reconnectIfNeeded()` |
 | `secrets.h` | WiFi SSID/password, HOME_LAT/LON, GEOFENCE_KM, ALT_FLOOR_FT — **gitignored** |
 
 ## Display layout (64x32 px)
 
-Two pages; the button on the rotary encoder toggles between them.
+Two pages; page switching via the rotary encoder button is currently **disabled** (encoder is not in use). Auto page-switching still works: no flights → weather page; flight reappears → flight page.
 
 ### Flight page (default)
 
@@ -37,7 +73,7 @@ Rows 1-16:   side bars only
 Rows 17-26:  route text (TomThumb font): origin line + destination line
              -- or type name in category color if no route known
              -- GA aircraft always show "GENERAL" / "AVIATION" here (see GA note below)
-Row 31:      amber progress bar (fills left-to-right over 30s)
+Row 31:      white distance bar (centered, full-width = overhead; narrows to 3px at geofence edge)
 ```
 
 ### Weather page
@@ -111,6 +147,8 @@ All values encoded with G/B swap applied.
 | `UTC_OFFSET_HOURS` | 11 | Local UTC offset for NTP clock (11 = AEDT; 10 = AEST) |
 | `WEATHER_REFRESH_MS` | 600000 | Weather re-fetch interval (ms) |
 | `CLOCK_UPDATE_MS` | 1000 | Weather page clock redraw interval (ms) |
+| `BRIGHTNESS_DEFAULT` | 77 | Software brightness (0–255); ~30% — change and reflash to adjust |
+| `FIRMWARE_VERSION` | 1 | OTA version stamp — must match or be less than server value to skip update |
 
 ## Config (secrets.h — gitignored)
 

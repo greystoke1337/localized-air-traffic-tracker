@@ -3,23 +3,46 @@
 #include <Fonts/TomThumb.h>
 #include "anim_boot.h"
 
+// Scale an RGB565 color by the global brightness (0=off, 255=full).
+static inline uint16_t dim(uint16_t c) {
+  if (brightness == 255 || c == 0) return c;
+  uint8_t r5 = (c >> 11) & 0x1F;
+  uint8_t g6 = (c >> 5)  & 0x3F;
+  uint8_t b5 =  c        & 0x1F;
+  uint8_t r = r5 ? max(1, (int)r5 * brightness / 255) : 0;
+  uint8_t g = g6 ? max(1, (int)g6 * brightness / 255) : 0;
+  uint8_t b = b5 ? max(1, (int)b5 * brightness / 255) : 0;
+  return (r << 11) | (g << 5) | b;
+}
+
 // Draw the callsign pseudo-bold (4 overlapping copies at +1 offsets, matching CircuitPython technique)
+// When text is wider than MATRIX_W, bounces left-to-right instead of overflowing.
 static void drawCallsign(const char *cs, uint16_t color = C_AMBER) {
   if (!cs || !cs[0]) return;
   matrix.setFont(nullptr);   // built-in 6×8 font
   matrix.setTextSize(1);
   matrix.setTextWrap(false);
 
-  int n      = strlen(cs);
-  int totalW = n * (CHAR_W + CHAR_GAP) - CHAR_GAP;
-  int startX = (MATRIX_W - totalW) / 2;
+  int n     = strlen(cs);
+  int textW = n * (CHAR_W + CHAR_GAP) - CHAR_GAP;
+  int startX;
+
+  if (textW <= MATRIX_W) {
+    startX = (MATRIX_W - textW) / 2;
+  } else {
+    int overflow    = textW - MATRIX_W;
+    uint32_t t      = millis() / SCROLL_SPEED_MS;
+    uint32_t period = (uint32_t)(2 * overflow);
+    uint32_t phase  = t % period;
+    startX = -(int)(phase <= (uint32_t)overflow ? phase : period - phase);
+  }
 
   // 4-offset pseudo-bold
   for (int dy = 0; dy <= 1; dy++) {
     for (int dx = 0; dx <= 1; dx++) {
       for (int i = 0; i < n; i++) {
         matrix.setCursor(startX + i * (CHAR_W + CHAR_GAP) + dx, CALLSIGN_Y + dy);
-        matrix.setTextColor(color);
+        matrix.setTextColor(dim(color));
         matrix.print(cs[i]);
       }
     }
@@ -32,7 +55,7 @@ static void printCenteredTT(const char *text, int y, uint16_t color) {
   matrix.setFont(&TomThumb);
   matrix.setTextSize(1);
   matrix.setTextWrap(false);
-  matrix.setTextColor(color);
+  matrix.setTextColor(dim(color));
   int16_t x1, y1;
   uint16_t w, h;
   matrix.getTextBounds(text, 0, y, &x1, &y1, &w, &h);
@@ -52,10 +75,9 @@ static void drawAltSpeed(int alt, int speed) {
     char numBuf[8];
     if (alt > 0) snprintf(numBuf, sizeof(numBuf), "%d", alt);
     else         snprintf(numBuf, sizeof(numBuf), "---");
-    matrix.setTextColor(C_DEEP_BLUE);
+    matrix.setTextColor(dim(C_DEEP_BLUE));
     matrix.setCursor(3, ALTITUDE_Y);
     matrix.print(numBuf);
-    matrix.setTextColor(C_AMBER);
     matrix.print("FT");
   }
 
@@ -69,9 +91,8 @@ static void drawAltSpeed(int alt, int speed) {
     int16_t x1, y1; uint16_t w, h;
     matrix.getTextBounds(fullBuf, 0, ALTITUDE_Y, &x1, &y1, &w, &h);
     matrix.setCursor(MATRIX_W - 2 - (int)w, ALTITUDE_Y);
-    matrix.setTextColor(C_GREEN);
+    matrix.setTextColor(dim(C_LIGHT_BLUE));
     matrix.print(numBuf);
-    matrix.setTextColor(C_AMBER);
     matrix.print("KT");
   }
 
@@ -87,7 +108,7 @@ static void drawRoute(const char *depCode, const char *arrCode, const char *type
     printCenteredTT(type && type[0] ? type : "GA", ROUTE_Y, C_AMBER);
   } else if (depCode && depCode[0] && arrCode && arrCode[0]) {
     char buf[12];
-    snprintf(buf, sizeof(buf), "%s>%s", depCode, arrCode);
+    snprintf(buf, sizeof(buf), "%s > %s", depCode, arrCode);
     printCenteredTT(buf, ROUTE_Y, C_WHITE);
   } else if (depCode && depCode[0]) {
     printCenteredTT(depCode, ROUTE_Y, C_WHITE);
@@ -123,8 +144,8 @@ static int mapBarH(int val, int minVal, int maxVal) {
 static void drawBars(int alt, int speed) {
   int ah = mapAltBarH(alt);
   int sh = mapBarH(speed, SPD_MIN_KT, SPD_MAX_KT);
-  if (ah > 0) matrix.drawFastVLine(0,           MATRIX_H - ah - 1, ah, C_DEEP_BLUE);
-  if (sh > 0) matrix.drawFastVLine(MATRIX_W - 1, MATRIX_H - sh - 1, sh, C_LIGHT_BLUE);
+  if (ah > 0) matrix.drawFastVLine(0,           MATRIX_H - ah - 1, ah, dim(C_DEEP_BLUE));
+  if (sh > 0) matrix.drawFastVLine(MATRIX_W - 1, MATRIX_H - sh - 1, sh, dim(C_LIGHT_BLUE));
 }
 
 // Centred distance bar: 64px wide when overhead, 3px at geofence edge.
@@ -133,7 +154,7 @@ static void drawDistanceBar(float dist, bool valid) {
   float clamped = dist < 0 ? 0 : (dist > (float)GEOFENCE_KM ? (float)GEOFENCE_KM : dist);
   int barW = (int)(3.0f + (1.0f - clamped / (float)GEOFENCE_KM) * (MATRIX_W - 3));
   int startX = (MATRIX_W - barW) / 2;
-  matrix.fillRect(startX, MATRIX_H - 1, barW, 1, C_AMBER);
+  matrix.fillRect(startX, MATRIX_H - 1, barW, 1, dim(C_WHITE));
 }
 
 // Full frame: clear → bars → callsign/type → alt+speed → route → distance bar → show
@@ -145,7 +166,7 @@ void drawAll(const Flight &f, int px) {
   bool showType  = f.valid && !isGA && px >= TYPE_FLIP_PX;
 
   if (showType) {
-    drawCallsign(f.type, f.typeColor);
+    drawCallsign(f.type, f.callsignColor);
   } else {
     drawCallsign(f.valid ? f.callsign : "------", f.callsignColor);
   }
@@ -221,21 +242,14 @@ void playBootAnimFor(uint32_t durationMs) {
   }
 }
 
-// Flash brightness level as 3 filled blocks — one per level (0/1/2)
+// Flash brightness level as a proportional fill bar (full-width = 255, narrow = dim).
+// Drawn at full hardware brightness so it's always visible regardless of current level.
 void flashBrightness(uint8_t level) {
-  const int BLK_W = 12, BLK_H = 10;
-  const int GAP   = 4;
-  const int totalW = 3 * BLK_W + 2 * GAP;
-  const int startX = (MATRIX_W - totalW) / 2;
-  const int startY = (MATRIX_H - BLK_H) / 2;
-
+  int barW = (int)((uint32_t)level * MATRIX_W / 255);
   matrix.fillScreen(C_BLACK);
-  for (int i = 0; i < 3; i++) {
-    uint16_t color = (i <= (int)level) ? C_AMBER : C_DEEP_BLUE;
-    matrix.fillRect(startX + i * (BLK_W + GAP), startY, BLK_W, BLK_H, color);
-  }
+  if (barW > 0) matrix.fillRect(0, MATRIX_H / 2 - 2, barW, 4, C_AMBER);
   matrix.show();
-  delay(800);
+  delay(600);
 }
 
 // Flash "DONT TOUCH!!" on press — momentary test for button input
@@ -244,7 +258,7 @@ void flashDontTouch() {
   matrix.setFont(nullptr);
   matrix.setTextSize(1);
   matrix.setTextWrap(false);
-  matrix.setTextColor(C_WHITE);
+  matrix.setTextColor(dim(C_WHITE));
 
   const char *line1 = "DONT";
   const char *line2 = "TOUCH!!";
@@ -258,13 +272,78 @@ void flashDontTouch() {
   delay(1000);
 }
 
+// "OVERHEAD TRACKER" scan-reveal boot splash — white scan line sweeps top-to-bottom,
+// revealing each text line as it passes, then holds for 800ms.
+void drawBootSplash() {
+  matrix.setFont(nullptr);
+  matrix.setTextSize(1);
+  matrix.setTextWrap(false);
+
+  const char *L1 = "OVERHEAD";
+  const char *L2 = "TRACKER";
+  int n1 = strlen(L1), n2 = strlen(L2);
+  int startX1 = (MATRIX_W - (n1 * (CHAR_W + CHAR_GAP) - CHAR_GAP)) / 2;
+  int startX2 = (MATRIX_W - (n2 * (CHAR_W + CHAR_GAP) - CHAR_GAP)) / 2;
+  const int Y1 = 5, Y2 = 19;
+
+  for (int scan = 0; scan <= MATRIX_H; scan++) {
+    matrix.fillScreen(C_BLACK);
+
+    if (scan > Y1) {
+      for (int dy = 0; dy <= 1; dy++)
+        for (int dx = 0; dx <= 1; dx++)
+          for (int i = 0; i < n1; i++) {
+            matrix.setCursor(startX1 + i * (CHAR_W + CHAR_GAP) + dx, Y1 + dy);
+            matrix.setTextColor(dim(C_AMBER));
+            matrix.print(L1[i]);
+          }
+    }
+
+    if (scan > Y2) {
+      for (int dy = 0; dy <= 1; dy++)
+        for (int dx = 0; dx <= 1; dx++)
+          for (int i = 0; i < n2; i++) {
+            matrix.setCursor(startX2 + i * (CHAR_W + CHAR_GAP) + dx, Y2 + dy);
+            matrix.setTextColor(dim(C_AMBER));
+            matrix.print(L2[i]);
+          }
+    }
+
+    if (scan < MATRIX_H)
+      matrix.drawFastHLine(0, scan, MATRIX_W, dim(C_WHITE));
+
+    matrix.show();
+    delay(15);
+  }
+  delay(800);
+}
+
+// OTA status: pseudo-bold amber message centered on display (same style as callsign)
+void drawOTAStatus(const char *msg) {
+  if (!msg || !msg[0]) return;
+  matrix.fillScreen(C_BLACK);
+  matrix.setFont(nullptr);
+  matrix.setTextSize(1);
+  matrix.setTextWrap(false);
+  int n = strlen(msg);
+  int w = n * (CHAR_W + CHAR_GAP) - CHAR_GAP;
+  for (int dy = 0; dy <= 1; dy++)
+    for (int dx = 0; dx <= 1; dx++)
+      for (int i = 0; i < n; i++) {
+        matrix.setCursor((MATRIX_W - w) / 2 + i * (CHAR_W + CHAR_GAP) + dx, CALLSIGN_Y + dy);
+        matrix.setTextColor(dim(C_AMBER));
+        matrix.print(msg[i]);
+      }
+  matrix.show();
+}
+
 // Boot status: clear screen and print a single centred status line in TomThumb
 void drawBootStatus(const char *msg) {
   matrix.fillScreen(C_BLACK);
   matrix.setFont(&TomThumb);
   matrix.setTextSize(1);
   matrix.setTextWrap(false);
-  matrix.setTextColor(C_AMBER);
+  matrix.setTextColor(dim(C_AMBER));
   int16_t x1, y1;
   uint16_t w, h;
   matrix.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
@@ -307,23 +386,42 @@ void drawWeatherPage(const Weather &w, int hour, int min) {
     for (int dx = 0; dx <= 1; dx++) {
       for (int i = 0; i < n; i++) {
         matrix.setCursor(startX + i * (CHAR_W + CHAR_GAP) + dx, 2 + dy);
-        matrix.setTextColor(C_AMBER);
+        matrix.setTextColor(dim(C_AMBER));
         matrix.print(timeStr[i]);
       }
     }
   }
 
   if (w.valid) {
-    // Temperature — centered, vertically centred at row 15
-    char tempStr[8];
-    snprintf(tempStr, sizeof(tempStr), "%d\xb0" "C", (int)roundf(w.tempC));
-    int tW = strlen(tempStr) * (CHAR_W + CHAR_GAP) - CHAR_GAP;
-    matrix.setCursor((MATRIX_W - tW) / 2, 15);
-    matrix.setTextColor(C_WHITE);
-    matrix.print(tempStr);
+    // Temperature — TomThumb, white, centered at row 15
+    char tempStr[6];
+    snprintf(tempStr, sizeof(tempStr), "%dC", (int)roundf(w.tempC));
+    printCenteredTT(tempStr, 15, C_WHITE);
 
-    // Condition — TomThumb, amber, centred at bottom
-    printCenteredTT(wmoShortName(w.weatherCode), 29, C_AMBER);
+    // Wind (left) and visibility (right) on same row
+    char windStr[10];
+    if (w.windCardinal[0])
+      snprintf(windStr, sizeof(windStr), "%s %d", w.windCardinal, (int)roundf(w.windSpeedKmh));
+    else
+      snprintf(windStr, sizeof(windStr), "%d", (int)roundf(w.windSpeedKmh));
+
+    char visStr[8];
+    snprintf(visStr, sizeof(visStr), "%dKM", w.visibilityKm);
+
+    matrix.setFont(&TomThumb);
+    matrix.setTextSize(1);
+    matrix.setTextWrap(false);
+    matrix.setTextColor(dim(C_AMBER));
+    matrix.setCursor(2, 21);
+    matrix.print(windStr);
+    int16_t x1, y1; uint16_t vw, vh;
+    matrix.getTextBounds(visStr, 0, 21, &x1, &y1, &vw, &vh);
+    matrix.setCursor(MATRIX_W - 2 - (int)vw, 21);
+    matrix.print(visStr);
+    matrix.setFont(nullptr);
+
+    // Condition — TomThumb, amber, centered at row 27
+    printCenteredTT(wmoShortName(w.weatherCode), 27, C_AMBER);
   } else {
     printCenteredTT("NO DATA", 20, C_DEEP_BLUE);
   }
