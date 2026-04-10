@@ -295,6 +295,99 @@ int fetchAndParseDirectAPI() {
   return newCount;
 }
 
+// ─── Fetch tracking mode status from proxy ──────────
+void fetchTrackStatus() {
+  if (!wifiOk()) return;
+  unsigned long t0 = millis();
+  WiFiClientSecure tcp;
+  tcp.setInsecure();
+  tcp.setTimeout(8000);
+  esp_task_wdt_reset();
+
+  char url[80];
+  snprintf(url, sizeof(url), "https://%s/track", PROXY_HOST);
+  HTTPClient http;
+  http.begin(tcp, url);
+  http.setTimeout(8000);
+  int code = http.GET();
+  esp_task_wdt_reset();
+
+  if (code != 200) {
+    Serial.printf("[TRACK] HTTP %d\n", code);
+    http.end();
+    return;
+  }
+
+  String body = http.getString();
+  http.end();
+  esp_task_wdt_reset();
+
+  StaticJsonDocument<512> doc;
+  if (deserializeJson(doc, body) != DeserializationError::Ok) {
+    Serial.println("[TRACK] JSON parse error");
+    return;
+  }
+
+  // Server says no active session — revert to geofence mode
+  if (doc["callsign"].isNull()) {
+    if (trackingMode) {
+      trackingMode = false;
+      trackCallsign[0] = 0;
+      trackProgress = -1.0f;
+      trackTerritory[0] = 0;
+      fetchFlights();
+    }
+    return;
+  }
+
+  const char* cs = doc["callsign"] | "";
+  strlcpy(trackCallsign, cs, sizeof(trackCallsign));
+  trackingMode = true;
+
+  // Flight not currently visible in ADS-B — keep last display
+  if (doc.containsKey("error")) {
+    const char* terr = doc["territory"] | "";
+    strlcpy(trackTerritory, terr, sizeof(trackTerritory));
+    Serial.printf("[TRACK] %s not found\n", trackCallsign);
+    return;
+  }
+
+  // Build Flight struct from response
+  Flight& f = flights[0];
+  memset(&f, 0, sizeof(Flight));
+  strlcpy(f.callsign, doc["callsign"] | "", sizeof(f.callsign));
+  strlcpy(f.reg,      doc["reg"]      | "", sizeof(f.reg));
+  strlcpy(f.type,     doc["type"]     | "", sizeof(f.type));
+  strlcpy(f.squawk,   doc["squawk"]   | "----", sizeof(f.squawk));
+  strlcpy(f.dep,      doc["dep"]      | "", sizeof(f.dep));
+  strlcpy(f.arr,      doc["arr"]      | "", sizeof(f.arr));
+  const char* routeStr = doc["route"] | "";
+  strlcpy(f.route, routeStr, sizeof(f.route));
+  f.lat   = doc["lat"]      | 0.0f;
+  f.lon   = doc["lon"]      | 0.0f;
+  f.alt   = doc["alt_baro"] | 0;
+  f.speed = doc["gs"]       | 0;
+  f.vs    = doc["baro_rate"]| 0;
+  f.track = doc["track"]    | -1;
+  f.dist  = haversineKm(HOME_LAT, HOME_LON, f.lat, f.lon);
+  f.status = deriveStatus(f.alt, f.vs, f.dist);
+  toUpperStr(f.callsign);
+  toUpperStr(f.reg);
+  toUpperStr(f.type);
+
+  flightCount = 1;
+  flightIndex = 0;
+
+  trackProgress = doc["progress"].isNull() ? -1.0f : (float)doc["progress"];
+  const char* terr = doc["territory"] | "";
+  strlcpy(trackTerritory, terr, sizeof(trackTerritory));
+
+  renderTrackFlight(flights[0]);
+
+  Serial.printf("[TRACK] %s prog=%.2f terr=%s (%lu ms)\n",
+    trackCallsign, trackProgress, trackTerritory, millis() - t0);
+}
+
 // ─── Send heartbeat to proxy ─────────────────────────
 void sendHeartbeat() {
   if (!wifiOk()) return;

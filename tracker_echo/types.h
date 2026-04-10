@@ -32,7 +32,7 @@ struct Flight {
 };
 
 // ─── Screen mode ──────────────────────────────────────
-enum ScreenMode { SCREEN_NONE, SCREEN_FLIGHT, SCREEN_WEATHER };
+enum ScreenMode { SCREEN_NONE, SCREEN_FLIGHT, SCREEN_WEATHER, SCREEN_TRACK };
 
 // ─── Weather data ─────────────────────────────────────
 struct WeatherData {

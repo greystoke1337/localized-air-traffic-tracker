@@ -120,6 +120,76 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// ── Airport coordinates (OpenFlights airports.dat) ──────────────────
+const airportCoords = new Map(); // IATA/ICAO → { lat, lon }
+(function loadAirportsDat() {
+  try {
+    const lines = fs.readFileSync(path.join(__dirname, 'airports.dat'), 'utf8').split('\n');
+    for (const line of lines) {
+      const fields = line.match(/("(?:[^"]|"")*"|[^,]*)/g);
+      if (!fields || fields.length < 8) continue;
+      const strip = s => s.replace(/^"|"$/g, '').trim();
+      const iata = strip(fields[4]);
+      const icao = strip(fields[5]);
+      const lat  = parseFloat(fields[6]);
+      const lon  = parseFloat(fields[7]);
+      if (isNaN(lat) || isNaN(lon)) continue;
+      const entry = { lat, lon };
+      if (iata && iata !== '\\N' && iata.length === 3) airportCoords.set(iata, entry);
+      if (icao && icao !== '\\N' && icao.length === 4) airportCoords.set(icao, entry);
+    }
+    console.log(`[AIRPORTS] Loaded ${airportCoords.size} entries from airports.dat`);
+  } catch (e) {
+    console.warn('[AIRPORTS] airports.dat not found — progress unavailable:', e.message);
+  }
+})();
+
+function calcProgress(dep, arr, curLat, curLon) {
+  const d = dep ? airportCoords.get(dep.trim().toUpperCase()) : null;
+  const a = arr ? airportCoords.get(arr.trim().toUpperCase()) : null;
+  if (!d || !a) return null;
+  const total = haversine(d.lat, d.lon, a.lat, a.lon);
+  if (total < 1) return null;
+  return Math.min(1, Math.max(0, haversine(d.lat, d.lon, curLat, curLon) / total));
+}
+
+// ── Territory lookup (Nominatim + fallback ocean zones) ──────────────
+const GEO_GRID_CACHE = new Map(); // "lat0.5,lon0.5" → { territory, timestamp }
+const GEO_GRID_TTL   = 7 * 24 * 3600 * 1000; // 7 days
+let nominatimLastMs  = 0;
+
+function fallbackOceanZone(lat, lon) {
+  if (lat > 66.5)  return 'Arctic Ocean';
+  if (lat < -60)   return 'Southern Ocean';
+  if (lon >= -6  && lon <= 36  && lat >= 30  && lat <= 46) return 'Mediterranean Sea';
+  if (lon >= -80 && lon <= 42  && lat >= -40 && lat <= 65) return 'Atlantic Ocean';
+  if (lon >= 20  && lon <= 147 && lat >= -40 && lat <= 30) return 'Indian Ocean';
+  return 'Pacific Ocean';
+}
+
+async function resolveTerritory(lat, lon) {
+  const key = `${Math.round(lat * 2) / 2},${Math.round(lon * 2) / 2}`;
+  const hit = GEO_GRID_CACHE.get(key);
+  if (hit && Date.now() - hit.timestamp < GEO_GRID_TTL) return hit.territory;
+
+  const gap = Date.now() - nominatimLastMs;
+  if (gap < 1100) await new Promise(r => setTimeout(r, 1100 - gap));
+  nominatimLastMs = Date.now();
+
+  const r = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=3`,
+    { signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'OverheadTracker/1.0 (overheadtracker.com)' } }
+  );
+  if (!r.ok) throw new Error(`Nominatim ${r.status}`);
+  const d = await r.json();
+  const territory = d.address?.country || d.name || fallbackOceanZone(lat, lon);
+  GEO_GRID_CACHE.set(key, { territory, timestamp: Date.now() });
+  return territory;
+}
+
+// ── Tracking session ─────────────────────────────────────────────────
+let trackSession = null; // { callsign: 'QF9' }
+
 // ── Airline ICAO prefix → name ───────────────────────────────────────
 const AIRLINE_NAMES = {
   QFA:'Qantas',QLK:'QantasLink',VOZ:'Virgin Australia',JST:'Jetstar',
@@ -930,7 +1000,7 @@ app.use((req, res, next) => {
   const origin = req.get('origin');
   if (ALLOWED_ORIGINS.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type');
     res.header('Access-Control-Max-Age', '86400');
   }
@@ -1357,6 +1427,82 @@ app.get('/device/:name/status', (req, res) => {
   if (!hb) return res.json({ online: false, message: 'no heartbeat received' });
   const ageSec = Math.round((Date.now() - hb.ts) / 1000);
   res.json({ online: ageSec < 600, ageSec, ...hb });
+});
+
+// ── Single-flight tracking session ───────────────────────────────────
+app.post('/track', express.json(), (req, res) => {
+  const cs = (req.body?.callsign || '').trim().toUpperCase();
+  if (!cs || !/^[A-Z0-9]{2,8}$/.test(cs))
+    return res.status(400).json({ error: 'invalid callsign' });
+  trackSession = { callsign: cs };
+  console.log(`[TRACK] Session started: ${cs}`);
+  res.json({ ok: true, callsign: cs });
+});
+
+app.delete('/track', (req, res) => {
+  console.log(`[TRACK] Session cleared: ${trackSession?.callsign}`);
+  trackSession = null;
+  res.json({ ok: true });
+});
+
+app.get('/track', async (req, res) => {
+  if (!trackSession) return res.json({ callsign: null });
+  const cs = trackSession.callsign;
+
+  let ac = null;
+  for (const url of [
+    `https://api.adsb.lol/v2/callsign/${encodeURIComponent(cs)}`,
+    `https://api.airplanes.live/v2/callsign/${encodeURIComponent(cs)}`,
+  ]) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const a = d?.ac?.[0] || d?.aircraft?.[0];
+      if (a) { ac = a; break; }
+    } catch { continue; }
+  }
+
+  if (!ac || ac.lat == null)
+    return res.json({ callsign: cs, lat: null, progress: null, territory: null, error: 'not_found' });
+
+  if (!ac.dep && !ac.arr) {
+    const cached = routeCache.get(cs);
+    if (cached) { ac.dep = cached.dep; ac.arr = cached.arr; }
+    else {
+      try {
+        const rt = await lookupRoute(cs);
+        if (rt) { ac.dep = rt.dep; ac.arr = rt.arr; }
+      } catch { /* non-fatal */ }
+    }
+  }
+
+  const progress = calcProgress(ac.dep, ac.arr, ac.lat, ac.lon);
+  let territory = null;
+  try {
+    territory = await Promise.race([
+      resolveTerritory(ac.lat, ac.lon),
+      new Promise(r => setTimeout(() => r(fallbackOceanZone(ac.lat, ac.lon)), 4500)),
+    ]);
+  } catch { territory = fallbackOceanZone(ac.lat, ac.lon); }
+
+  res.json({
+    callsign:  cs,
+    reg:       ac.r       || null,
+    type:      ac.t       || null,
+    lat:       ac.lat,
+    lon:       ac.lon,
+    alt_baro:  ac.alt_baro  ?? null,
+    gs:        ac.gs != null ? Math.round(ac.gs) : null,
+    baro_rate: ac.baro_rate ?? null,
+    track:     ac.track != null ? Math.round(ac.track) : null,
+    squawk:    ac.squawk   || null,
+    dep:       ac.dep      || null,
+    arr:       ac.arr      || null,
+    route:     formatRouteString(ac.dep, ac.arr),
+    progress,
+    territory,
+  });
 });
 
 // ── Weather endpoint (used by ESP32 + web app) ────────────────────────

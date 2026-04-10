@@ -130,6 +130,13 @@ unsigned long lastDiagMs   = 0;
 unsigned long lastHeartbeatMs = 0;
 const unsigned long HEARTBEAT_INTERVAL_MS = 60000;
 
+// ─── Tracking mode ────────────────────────────────────
+bool  trackingMode    = false;
+char  trackCallsign[12] = "";
+float trackProgress   = -1.0f;
+char  trackTerritory[48] = "";
+int   trackCountdown  = REFRESH_SECS;
+
 // ─── Auto-cycle (no-touch boards) ─────────────────────
 #if !HAS_TOUCH
 int  cyclesSinceWx = 0;
@@ -515,7 +522,6 @@ void loop() {
 
   if (now - lastTick >= 1000) {
     lastTick = now;
-    countdown--;
     wxCountdown--;
 
     if (WiFi.status() != WL_CONNECTED) {
@@ -526,7 +532,8 @@ void loop() {
       }
     }
 
-    if (currentScreen == SCREEN_FLIGHT && flightCount > 0 && !isFetching) drawStatusBar();
+    if ((currentScreen == SCREEN_FLIGHT || currentScreen == SCREEN_TRACK) &&
+        flightCount > 0 && !isFetching) drawStatusBar();
 
     if (currentScreen == SCREEN_WEATHER) {
       time_t utcNow   = time(NULL);
@@ -540,10 +547,19 @@ void loop() {
       }
     }
 
-    if (countdown <= 0) {
-      fetchFlights();
-      countdown = REFRESH_SECS;
-      lastCycle = millis();
+    if (trackingMode) {
+      trackCountdown--;
+      if (trackCountdown <= 0) {
+        fetchTrackStatus();
+        trackCountdown = REFRESH_SECS;
+      }
+    } else {
+      countdown--;
+      if (countdown <= 0) {
+        fetchFlights();
+        countdown = REFRESH_SECS;
+        lastCycle = millis();
+      }
     }
 
     if (wxCountdown <= 0) {
@@ -555,8 +571,8 @@ void loop() {
 
   // ── Flight cycling ──
 #if HAS_TOUCH
-  // Touch boards: auto-cycle only when multiple flights
-  if (flightCount > 1 && currentScreen == SCREEN_FLIGHT &&
+  // Touch boards: auto-cycle only when multiple flights (suppressed in tracking mode)
+  if (!trackingMode && flightCount > 1 && currentScreen == SCREEN_FLIGHT &&
       !isFetching && now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
     lastCycle = now;
     int fc = flightCount;
@@ -566,8 +582,8 @@ void loop() {
     }
   }
 #else
-  // No-touch boards: auto-cycle flights + weather interlude
-  if (currentScreen == SCREEN_FLIGHT && flightCount > 0 &&
+  // No-touch boards: auto-cycle flights + weather interlude (suppressed in tracking mode)
+  if (!trackingMode && currentScreen == SCREEN_FLIGHT && flightCount > 0 &&
       !isFetching && now - lastCycle >= (unsigned long)CYCLE_SECS * 1000) {
     lastCycle = now;
     int fc = flightCount;

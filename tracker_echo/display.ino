@@ -26,7 +26,16 @@ void drawNavBar() {
   tft.fillRect(0, NAV_Y, W, NAV_H, C_BG);
   tft.drawFastHLine(0, NAV_Y, W, C_DIMMER);
 
-  if (currentScreen == SCREEN_FLIGHT && flightCount > 1) {
+  if (currentScreen == SCREEN_TRACK) {
+    tft.setTextSize(1);
+    tft.setTextColor(C_AMBER, C_BG);
+    tft.setCursor(8, NAV_Y + 7);
+    tft.print("TRACKING:");
+    tft.setTextSize(2);
+    tft.setTextColor(C_GREEN, C_BG);
+    tft.setCursor(8, NAV_Y + 16);
+    tft.print(trackCallsign);
+  } else if (currentScreen == SCREEN_FLIGHT && flightCount > 1) {
     char navBuf[16];
     snprintf(navBuf, sizeof(navBuf), "< %d/%d >", flightIndex + 1, flightCount);
     tft.setTextSize(2);
@@ -72,7 +81,10 @@ void drawStatusBar() {
   tft.setTextColor(C_DIM, C_BG);
   tft.setTextSize(1);
   char buf[80];
-  if (isFetching) {
+  if (trackingMode && !isFetching) {
+    snprintf(buf, sizeof(buf), "  TRACKING: %s   NEXT:%ds   H:%d",
+             trackCallsign, trackCountdown, ESP.getFreeHeap());
+  } else if (isFetching) {
     snprintf(buf, sizeof(buf), "  SCANNING AIRSPACE...");
   } else if (flightCount == 0) {
     const char* src = dataSource==2 ? "CACHE" : dataSource==1 ? "DIRECT" : "PROXY";
@@ -140,7 +152,7 @@ void renderMessage(const char* line1, const char* line2) {
 }
 
 void renderFlight(const Flight& f) {
-  if (previousScreen != SCREEN_FLIGHT) drawHeader();
+  if (previousScreen != SCREEN_FLIGHT && previousScreen != SCREEN_TRACK) drawHeader();
   previousScreen = SCREEN_FLIGHT;
 
   drawNavBar();
@@ -728,4 +740,87 @@ void drawOtaProgress(int pct) {
 #endif
   tft.drawRect(BX, BY, BW, BH, C_AMBER);
   tft.fillRect(BX + 1, BY + 1, (BW - 2) * pct / 100, BH - 2, C_GREEN);
+}
+
+// ─── Tracking mode: flight progress bar ─────────────
+// Only compiled for 4.0" board (480x320). Sits at y=196..204, between
+// route text (bottom y=192) and dashboard (y=225).
+void drawProgressBar(float progress, const char* dep, const char* arr) {
+#ifndef BOARD_2P8
+  const int BAR_X = 47;
+  const int BAR_Y = 196;
+  const int BAR_W = 380;
+  const int BAR_H = 8;
+
+  // Clear the strip (includes IATA label area)
+  tft.fillRect(0, BAR_Y - 2, W, BAR_H + 6, C_BG);
+
+  // Dep IATA on left (textSize=1 = 6px/char × 8px tall)
+  tft.setTextSize(1);
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setCursor(15, BAR_Y);
+  tft.print((dep && dep[0]) ? dep : "?");
+
+  // Arr IATA on right
+  const char* arrStr = (arr && arr[0]) ? arr : "?";
+  int arrW = strlen(arrStr) * 6;
+  tft.setCursor(W - 15 - arrW, BAR_Y);
+  tft.print(arrStr);
+
+  // Outer bar outline
+  tft.drawRect(BAR_X, BAR_Y, BAR_W, BAR_H, C_DIMMER);
+
+  if (progress >= 0.0f) {
+    int fillW = (int)(progress * (float)(BAR_W - 2));
+    if (fillW < 1) fillW = 1;
+    if (fillW > BAR_W - 2) fillW = BAR_W - 2;
+
+    // Lerp green → amber: r=0→248, g=252→160 as progress 0→1
+    float t = progress;
+    uint8_t r8 = (uint8_t)(248.0f * t);
+    uint8_t g8 = (uint8_t)(252.0f - 92.0f * t);
+    uint16_t barColor = ((r8 >> 3) << 11) | ((g8 >> 2) << 5);
+    tft.fillRect(BAR_X + 1, BAR_Y + 1, fillW, BAR_H - 2, barColor);
+    if (fillW < BAR_W - 2)
+      tft.fillRect(BAR_X + 1 + fillW, BAR_Y + 1, BAR_W - 2 - fillW, BAR_H - 2, C_DIMMER);
+  } else {
+    // Unknown progress — dimmer fill
+    tft.fillRect(BAR_X + 1, BAR_Y + 1, BAR_W - 2, BAR_H - 2, C_DIMMER);
+  }
+#endif
+}
+
+// ─── Tracking mode: territory line ──────────────────
+// Sits at y=207..223, above dashboard (y=225).
+void drawTerritoryLine(const char* territory) {
+#ifndef BOARD_2P8
+  const int TERR_Y = 207;
+  tft.fillRect(0, TERR_Y, W, 18, C_BG);
+  if (!territory || !territory[0]) return;
+
+  char buf[64];
+  snprintf(buf, sizeof(buf), "OVER %s", territory);
+  for (int i = 0; buf[i]; i++) buf[i] = toupper((unsigned char)buf[i]);
+
+  int charW = 12; // textSize=2
+  int txtW  = strlen(buf) * charW;
+  if (txtW > W - 10) {
+    charW = 6; // textSize=1 fallback
+    txtW  = strlen(buf) * charW;
+  }
+  tft.setTextSize(charW == 12 ? 2 : 1);
+  tft.setTextColor(C_DIM, C_BG);
+  tft.setCursor((W - txtW) / 2, TERR_Y);
+  tft.print(buf);
+#endif
+}
+
+// ─── Tracking mode: full flight + overlays ──────────
+void renderTrackFlight(const Flight& f) {
+  previousScreen = SCREEN_FLIGHT; // so renderFlight() skips header redraw
+  renderFlight(f);
+  currentScreen = SCREEN_TRACK;   // restore after renderFlight() sets SCREEN_FLIGHT
+  drawNavBar();                    // redraw nav bar with TRACKING label
+  drawProgressBar(trackProgress, f.dep, f.arr);
+  drawTerritoryLine(trackTerritory);
 }

@@ -85,6 +85,13 @@ extern int  loggedUnknownCount;
 // ─── Diagnostics ──────────────────────────────────────
 extern unsigned long lastDiagMs;
 
+// ─── Tracking mode ────────────────────────────────────
+extern bool  trackingMode;
+extern char  trackCallsign[12];
+extern float trackProgress;
+extern char  trackTerritory[48];
+extern int   trackCountdown;
+
 // ─── Forward declarations ─────────────────────────────
 // helpers.ino
 bool wifiOk();
@@ -114,6 +121,9 @@ void renderWeather();
 void renderMessage(const char* line1, const char* line2 = nullptr);
 void bootSequence();
 void drawOtaProgress(int pct);
+void drawProgressBar(float progress, const char* dep, const char* arr);
+void drawTerritoryLine(const char* territory);
+void renderTrackFlight(const Flight& f);
 
 // network.ino
 String fetchFromProxy();
@@ -121,6 +131,7 @@ int fetchAndParseDirectAPI();
 int parsePayload(String& payload);
 int extractFlights(DynamicJsonDocument& doc);
 void fetchFlights();
+void fetchTrackStatus();
 bool fetchWeather();
 void sendHeartbeat();
 

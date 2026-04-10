@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Track — Overhead Tracker</title>
+  <style>
+    :root {
+      --c-bg:   #0a0e12;
+      --c-main: #ffb300;
+      --c-dim:  #556070;
+      --c-green:#00e676;
+      --c-red:  #ff3d3d;
+      --c-card: #121920;
+      --font:   'Courier New', Courier, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: var(--c-bg);
+      color: var(--c-main);
+      font-family: var(--font);
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: 24px 16px;
+      gap: 0;
+    }
+
+    header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: var(--c-main);
+      color: var(--c-bg);
+      font-size: 0.8rem;
+      font-weight: bold;
+      letter-spacing: 0.06em;
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header a {
+      color: var(--c-bg);
+      text-decoration: none;
+      opacity: 0.7;
+      font-size: 0.75rem;
+    }
+
+    .card {
+      background: var(--c-card);
+      border: 1px solid #1e2c38;
+      border-radius: 4px;
+      padding: 28px 24px 24px;
+      width: 100%;
+      max-width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      margin-top: 52px;
+    }
+
+    .card-title {
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+      color: var(--c-dim);
+      text-transform: uppercase;
+    }
+
+    label {
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      color: var(--c-dim);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      background: var(--c-bg);
+      border: 1px solid var(--c-dim);
+      color: var(--c-main);
+      font-family: var(--font);
+      font-size: 1.6rem;
+      letter-spacing: 0.1em;
+      padding: 10px 12px;
+      text-transform: uppercase;
+      outline: none;
+      -webkit-appearance: none;
+      border-radius: 2px;
+    }
+    input[type="text"]::placeholder { color: #2a3a4a; }
+    input[type="text"]:focus { border-color: var(--c-main); }
+
+    button {
+      width: 100%;
+      background: var(--c-main);
+      color: var(--c-bg);
+      border: none;
+      font-family: var(--font);
+      font-size: 1rem;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      padding: 13px;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: opacity 0.15s;
+    }
+    button:disabled { opacity: 0.4; cursor: default; }
+    button.stop {
+      background: transparent;
+      color: var(--c-red);
+      border: 1px solid var(--c-red);
+    }
+    button.stop:hover:not(:disabled) { background: #1a0808; }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 20px;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--c-dim);
+      flex-shrink: 0;
+      animation: none;
+    }
+    .dot.active { background: var(--c-green); animation: pulse 1.6s infinite; }
+    .dot.error  { background: var(--c-red); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+    .status-text {
+      font-size: 0.75rem;
+      color: var(--c-dim);
+      letter-spacing: 0.06em;
+    }
+    .status-text.active { color: var(--c-green); }
+    .status-text.error  { color: var(--c-red); }
+
+    .callsign-display {
+      font-size: 2.2rem;
+      letter-spacing: 0.12em;
+      color: var(--c-main);
+      text-align: center;
+      min-height: 2.8rem;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #1e2c38;
+    }
+
+    .hint {
+      font-size: 0.65rem;
+      color: var(--c-dim);
+      letter-spacing: 0.04em;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    footer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      text-align: center;
+      padding: 6px;
+      font-size: 0.6rem;
+      color: #2a3a4a;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    OVERHEAD TRACKER — TRACK
+    <a href="index.html">← LIVE MAP</a>
+  </header>
+
+  <div class="card">
+    <div class="card-title">Pin Echo to a flight</div>
+
+    <div>
+      <label for="cs-input">CALLSIGN</label>
+      <input id="cs-input" type="text" inputmode="text"
+             placeholder="QF9" maxlength="8" autocomplete="off"
+             autocorrect="off" autocapitalize="characters" spellcheck="false"
+             autofocus>
+    </div>
+
+    <div id="callsign-display" class="callsign-display" style="display:none"></div>
+
+    <button id="main-btn" onclick="handleBtn()">TRACK ECHO</button>
+
+    <hr class="divider">
+
+    <div class="status-row">
+      <div class="dot" id="status-dot"></div>
+      <span class="status-text" id="status-text">STANDBY</span>
+    </div>
+
+    <p class="hint">
+      Echo will display this flight until you press STOP.<br>
+      Works over WiFi — no direct connection needed.
+    </p>
+  </div>
+
+  <footer>overheadtracker.com</footer>
+
+  <script>
+    const PROXY = 'https://api.overheadtracker.com';
+    const LS_KEY = 'ot_tracked_callsign';
+    let active = false;
+
+    const csInput   = document.getElementById('cs-input');
+    const mainBtn   = document.getElementById('main-btn');
+    const dot       = document.getElementById('status-dot');
+    const statusTxt = document.getElementById('status-text');
+    const csDisplay = document.getElementById('callsign-display');
+
+    function setStatus(state, text) {
+      dot.className = 'dot' + (state ? ' ' + state : '');
+      statusTxt.className = 'status-text' + (state ? ' ' + state : '');
+      statusTxt.textContent = text;
+    }
+
+    function showTracking(cs) {
+      active = true;
+      csInput.style.display = 'none';
+      csDisplay.style.display = 'block';
+      csDisplay.textContent = cs;
+      mainBtn.textContent = 'STOP TRACKING';
+      mainBtn.classList.add('stop');
+      document.querySelector('label').style.display = 'none';
+      setStatus('active', 'ECHO → ' + cs);
+      localStorage.setItem(LS_KEY, cs);
+    }
+
+    function showIdle() {
+      active = false;
+      csInput.style.display = 'block';
+      csInput.value = '';
+      csDisplay.style.display = 'none';
+      mainBtn.textContent = 'TRACK ECHO';
+      mainBtn.classList.remove('stop');
+      document.querySelector('label').style.display = 'block';
+      setStatus('', 'STANDBY');
+      localStorage.removeItem(LS_KEY);
+      mainBtn.disabled = false;
+      csInput.focus();
+    }
+
+    async function startTracking(cs) {
+      mainBtn.disabled = true;
+      setStatus('', 'SENDING...');
+      try {
+        const r = await fetch(PROXY + '/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ callsign: cs }),
+        });
+        const d = await r.json();
+        if (r.ok && d.ok) {
+          showTracking(cs);
+        } else {
+          setStatus('error', d.error || 'SERVER ERROR');
+          mainBtn.disabled = false;
+        }
+      } catch {
+        setStatus('error', 'NETWORK ERROR');
+        mainBtn.disabled = false;
+      }
+    }
+
+    async function stopTracking() {
+      mainBtn.disabled = true;
+      setStatus('', 'STOPPING...');
+      try { await fetch(PROXY + '/track', { method: 'DELETE' }); } catch { /* ignore */ }
+      showIdle();
+    }
+
+    function handleBtn() {
+      if (active) {
+        stopTracking();
+      } else {
+        const cs = csInput.value.trim().toUpperCase();
+        if (!cs || !/^[A-Z0-9]{2,8}$/.test(cs)) {
+          setStatus('error', 'ENTER A VALID CALLSIGN');
+          csInput.focus();
+          return;
+        }
+        startTracking(cs);
+      }
+    }
+
+    csInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleBtn();
+    });
+
+    // Restore state if tracking was active before page refresh
+    const saved = localStorage.getItem(LS_KEY);
+    if (saved) {
+      // Verify with server that session is still active
+      fetch(PROXY + '/track')
+        .then(r => r.json())
+        .then(d => {
+          if (d.callsign && d.callsign === saved) {
+            showTracking(saved);
+          } else {
+            localStorage.removeItem(LS_KEY);
+          }
+        })
+        .catch(() => localStorage.removeItem(LS_KEY));
+    }
+  </script>
+</body>
+</html>

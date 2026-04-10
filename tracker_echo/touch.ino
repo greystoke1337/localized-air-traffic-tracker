@@ -73,8 +73,9 @@ void handleTouch(uint16_t tx, uint16_t ty) {
       return;
     }
 
-    // GEO button
+    // GEO button (disabled in tracking mode)
     if (tx >= GEO_BTN_X1 && tx < GEO_BTN_X1 + NAV_BTN_W) {
+      if (trackingMode) return;
       tft.fillRect(GEO_BTN_X1, NAV_Y + 2, NAV_BTN_W, NAV_BTN_H, C_AMBER);
       tft.setTextColor(C_BG, C_AMBER);
       tft.setTextSize(2);
@@ -130,8 +131,8 @@ void handleTouch(uint16_t tx, uint16_t ty) {
     return;
   }
 
-  // ── Content area: tap left/right to cycle flights ──
-  if (ty >= CONTENT_Y && ty < (H - FOOT_H) &&
+  // ── Content area: tap left/right to cycle flights (suppressed in tracking mode) ──
+  if (ty >= CONTENT_Y && ty < (H - FOOT_H) && !trackingMode &&
       currentScreen == SCREEN_FLIGHT && flightCount > 1) {
     if (tx < W / 2) {
       flightIndex = (flightIndex - 1 + flightCount) % flightCount;
