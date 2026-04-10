@@ -4,8 +4,8 @@
 
 ![Echo display showing a Qantas flight on final approach into Sydney](https://raw.githubusercontent.com/greystoke1337/blog/main/assets/images/overhead-tracker-1.jpg)
 
-I live under a flight path and I wanted to know what's up there. No commercial API would let me find out for free, so I built the whole thing from scratch. Single HTML file web app, a Railway-hosted caching proxy, three ESP32 displays, a Pi feeding ADS-B data to FlightAware and FlightRadar24, and a 64×32 LED matrix in the living room. Zero API keys, zero build step, MIT licensed.
-
+I live under a flight path, so I'm always curious to know what aircraft is flying overhead. I first built a web page, then thought that it'd be neat to have it on a little screen, so I built a little 4 inch TFT screen with an ESP32. Then another one on a slightly bigger and nicer one, then I started to work on a 64x32 LED matrix... It's getting out of hand!
+I also have an ADSB feeder that sends data to a few online services. To not overwhelm these services, I built a little server too on Railway. I have been having a ton of fun with these projects!
 Live: [overheadtracker.com](https://www.overheadtracker.com/)
 
 ---
