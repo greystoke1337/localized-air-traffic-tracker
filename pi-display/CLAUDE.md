@@ -3,10 +3,10 @@
 ## Deploy
 
 ```bash
-scp pi-display/display.py piproxy:/home/pi/proxy/display.py && ssh piproxy "pm2 restart display"
+scp pi-display/display.py pi@airplanes.local:/home/pi/proxy/display.py && ssh pi@airplanes.local "pm2 restart display"
 ```
 
-SSH alias: `piproxy` (host `piproxy.local`, user `pi`, key `~/.ssh/pi_proxy`)
+SSH: `pi@airplanes.local`
 PM2 processes: `display` (id 0), `tunnel` (id 1)
 
 Or use the `/deploy-display` skill.

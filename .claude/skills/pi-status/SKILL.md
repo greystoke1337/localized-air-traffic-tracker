@@ -13,7 +13,7 @@ SSH into the Raspberry Pi and check the TFT display service, system resources, a
 ### 1. PM2 process status
 
 ```bash
-ssh piproxy "pm2 list"
+ssh pi@airplanes.local "pm2 list"
 ```
 
 Expected process: `display` (id 0). The proxy no longer runs on the Pi (it's on Railway).
@@ -23,7 +23,7 @@ Expected process: `display` (id 0). The proxy no longer runs on the Pi (it's on 
 Run these in a single SSH session:
 
 ```bash
-ssh piproxy "echo '--- CPU TEMP ---' && vcgencmd measure_temp && echo '--- MEMORY ---' && free -h && echo '--- UPTIME ---' && uptime && echo '--- DISK ---' && df -h /"
+ssh pi@airplanes.local "echo '--- CPU TEMP ---' && vcgencmd measure_temp && echo '--- MEMORY ---' && free -h && echo '--- UPTIME ---' && uptime && echo '--- DISK ---' && df -h /"
 ```
 
 ### 3. Recent logs (errors only)
@@ -31,7 +31,7 @@ ssh piproxy "echo '--- CPU TEMP ---' && vcgencmd measure_temp && echo '--- MEMOR
 Check the last 20 lines of the display service for errors:
 
 ```bash
-ssh piproxy "pm2 logs display --nostream --lines 20 2>&1 | grep -i -E 'error|fail|crash|Traceback' | tail -5"
+ssh pi@airplanes.local "pm2 logs display --nostream --lines 20 2>&1 | grep -i -E 'error|fail|crash|Traceback' | tail -5"
 ```
 
 ### 4. Report summary

@@ -20,17 +20,17 @@ If this fails, stop and report the syntax error. Do NOT deploy broken code.
 ### 2. Deploy via SCP + PM2 restart
 
 ```bash
-scp /c/Users/maxim/localized-air-traffic-tracker/pi-display/display.py piproxy:/home/pi/proxy/display.py && ssh piproxy "pm2 restart display"
+scp /c/Users/maxim/localized-air-traffic-tracker/pi-display/display.py pi@airplanes.local:/home/pi/proxy/display.py && ssh pi@airplanes.local "pm2 restart display"
 ```
 
-Use a 15-second timeout. The SSH alias `piproxy` resolves to `piproxy.local` with user `pi` and key `~/.ssh/pi_proxy`.
+Use a 15-second timeout. Connect to `pi@airplanes.local`.
 
 ### 3. Verify process is healthy
 
 Wait 5 seconds for the process to stabilize, then check logs:
 
 ```bash
-ssh piproxy "pm2 logs display --nostream --lines 10"
+ssh pi@airplanes.local "pm2 logs display --nostream --lines 10"
 ```
 
 ### 4. Report summary

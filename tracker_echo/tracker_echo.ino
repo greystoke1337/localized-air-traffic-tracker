@@ -135,7 +135,7 @@ bool  trackingMode    = false;
 char  trackCallsign[12] = "";
 float trackProgress   = -1.0f;
 char  trackTerritory[48] = "";
-int   trackCountdown  = REFRESH_SECS;
+int   trackCountdown  = TRACK_REFRESH_SECS;
 
 // ─── Auto-cycle (no-touch boards) ─────────────────────
 #if !HAS_TOUCH
@@ -551,12 +551,15 @@ void loop() {
       trackCountdown--;
       if (trackCountdown <= 0) {
         fetchTrackStatus();
-        trackCountdown = REFRESH_SECS;
+        trackCountdown = TRACK_REFRESH_SECS;
       }
     } else {
       countdown--;
       if (countdown <= 0) {
-        fetchFlights();
+        fetchTrackStatus();
+        if (!trackingMode) {
+          fetchFlights();
+        }
         countdown = REFRESH_SECS;
         lastCycle = millis();
       }

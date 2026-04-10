@@ -2,7 +2,9 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/R6R61VRQHC)
 
-Shows which aircraft are flying directly above any location in the world. Single HTML file, no dependencies, no build step.
+![Echo display showing a Qantas flight on final approach into Sydney](https://raw.githubusercontent.com/greystoke1337/blog/main/assets/images/overhead-tracker-1.jpg)
+
+I live under a flight path and I wanted to know what's up there. No commercial API would let me find out for free, so I built the whole thing from scratch. Single HTML file web app, a Railway-hosted caching proxy, three ESP32 displays, a Pi feeding ADS-B data to FlightAware and FlightRadar24, and a 64×32 LED matrix in the living room. Zero API keys, zero build step, MIT licensed.
 
 Live: [overheadtracker.com](https://www.overheadtracker.com/)
 
@@ -10,50 +12,21 @@ Live: [overheadtracker.com](https://www.overheadtracker.com/)
 
 ## Features
 
-- Worldwide location search with adjustable geofence radius (2–20 km) and altitude floor (200–5,000 ft)
-- Settings persist across sessions; share any location via `?location=` URL param
-- Live ADS-B data from 3 sources raced in parallel (adsb.lol, adsb.fi, airplanes.live), routed through a caching proxy at `api.overheadtracker.com`
-- 15-second auto-refresh with manual override
-- Flight phase detection: LANDING, TAKING OFF, APPROACH, DESCENDING, CLIMBING, CRUISING, OVERHEAD
-- Intercept prediction: INBOUND (overhead in ~X min), CROSSING (closest in ~X min), DIRECTLY OVERHEAD NOW, RECEDING
-- Interesting flight detection with badges: military (callsign prefix or type), private/charter, bizjet, high speed (>520 kt), very high altitude (>43,000 ft), anonymous (no callsign)
-- Session flight log recording all flights seen with callsign, type, phase, airline, altitude, speed, distance, timestamp
-- Statistics panel: total seen, currently in range, busiest airline, most common type, highest altitude, fastest speed, closest approach, interesting count
-- Route display with departure/arrival airports and city names via adsbdb.com (non-blocking lookup, cached)
-- Weather strip showing temperature, conditions, wind, humidity, UV index (Open-Meteo via proxy, refreshed every 15 min)
-- Airline name from ICAO callsign prefix (colour-coded by brand); full aircraft type names (B789 → B787-9, A20N → A320neo, etc.)
-- Emergency squawk highlighting: 7700 / 7600 / 7500 shown in red with a warning
-- Leaflet map with geofence circle, aircraft dot, and speed-scaled heading vector
-- Aircraft photo from [Planespotters.net](https://planespotters.net) by registration
-- Altitude bar alongside the info block
-- Phase colour bleed: flight phase colour tints the info block border and glow
-- Unit toggle (KM/MI) for distances; altitude, speed, and vertical rate use standard aviation units (FT, KT, FPM)
-- CRT scanline aesthetic
-- Keyboard navigation, NEAREST button, optional radar ping sound
-- Mobile-responsive
-- Demo mode: `?demo=true&scenario=...` with 7 scenarios (busy, quiet, crowded, emergency, approach_rush, single, mixed)
+- **Live ADS-B data** from 3 community sources raced in parallel — fastest response wins, automatic fallback if one goes down
+- **Flight phase detection** — LANDING, TAKING OFF, APPROACH, DESCENDING, CLIMBING, OVERHEAD — derived from altitude and vertical rate; phase colour bleeds into the UI border
+- **Intercept prediction** — tells you if a flight is INBOUND (overhead in ~X min), CROSSING (closest in ~X min), DIRECTLY OVERHEAD NOW, or RECEDING
+- **Emergency squawk alerts** — 7700 / 7600 / 7500 trigger a flashing red banner (MAYDAY / NORDO / HIJACK)
+- **Route + airline lookup** — departure/arrival city names, airline decoded from ICAO prefix and colour-coded by brand, aircraft photo from Planespotters.net
+- **Adjustable geofence** (2–20 km) and altitude floor (200–5,000 ft); settings persist across sessions
+- **Demo mode** — `?demo=true&scenario=emergency` and 6 other scenarios for testing without live data
 
 ---
 
 ## How it works
 
-Geocodes the entered location via Nominatim, then queries the proxy for aircraft within a radius 4x the geofence size. The proxy races three ADS-B APIs in parallel and returns the fastest response, caching results for 45 seconds with coordinate bucketing. The web app filters down to aircraft inside the geofence and above the altitude floor, sorts by distance, and renders. Repeats every 15 seconds; any in-flight request is aborted before starting the next.
+Geocodes the entered location via Nominatim, then queries the proxy for aircraft within a radius 4× the geofence size. The proxy races three ADS-B APIs in parallel and returns the fastest response, caching results for 45 seconds with coordinate bucketing (nearby clients share cache entries). The web app filters down to aircraft inside the geofence and above the altitude floor, sorts by distance, and renders. Repeats every 15 seconds; any in-flight request is aborted before starting the next.
 
 Route lookups (departure/arrival airports) fire asynchronously via adsbdb.com and update the display when they resolve. Results are cached for 30 minutes. Weather data comes from Open-Meteo, refreshed every 15 minutes.
-
----
-
-## Usage
-
-The web app is a single HTML file with no build step and no API keys. It relies on the public proxy at `api.overheadtracker.com` for flight and weather data, so you don't need to host any backend yourself.
-
-```bash
-git clone https://github.com/greystoke1337/localized-air-traffic-tracker.git
-cd localized-air-traffic-tracker
-open index.html
-```
-
-The app calls `api.overheadtracker.com` (flight + weather data), `nominatim.openstreetmap.org` (geocoding), and `api.planespotters.net` (photos). All HTTPS, all CORS-enabled.
 
 ---
 
@@ -62,7 +35,7 @@ The app calls `api.overheadtracker.com` (flight + weather data), `nominatim.open
 The Railway-hosted proxy at `api.overheadtracker.com` sits between the web app and upstream APIs.
 
 - Races 3 ADS-B APIs in parallel (adsb.lol, adsb.fi, airplanes.live), uses the fastest response
-- 45-second flight cache with coordinate bucketing (nearby clients share cache entries)
+- 45-second flight cache with coordinate bucketing
 - 30-minute route cache for adsbdb.com lookups
 - Weather passthrough from Open-Meteo
 - Rate limiting: 100 requests/min per IP
@@ -75,49 +48,41 @@ Source: [`server/`](server/)
 
 ## ESP32 hardware displays
 
-Two standalone physical trackers that poll the proxy — no browser needed.
+Standalone physical trackers that poll the proxy — no browser needed.
 
 ### Echo — Freenove FNK0103S (4.0", 480×320)
 
 **Hardware:** Freenove FNK0103S (ESP32 + 4" ST7796 SPI touchscreen), optional 3D-printed enclosure (STL/STEP in [`tracker_echo/enclosure/`](tracker_echo/enclosure/))
 
-**What it shows:** Header bar, nav bar with touch buttons (WX / GEO / CFG), flight card (callsign, airline name colour-coded by brand, aircraft type, route), and a 4-column dashboard: PHASE | ALT (with vertical rate) | SPEED | DIST. Cycles through overhead flights every 8 seconds. Each of the 8 flight phases (TAKEOFF, CLIMBING, CRUISING, DESCEND, APPROACH, LANDING, OVERHEAD, UNKNOWN) has its own colour in the dashboard.
+**What it shows:** Callsign (colour-coded by airline), aircraft type and registration, route with city names, and a 4-column dashboard — PHASE | ALT | SPEED | DIST. Cycles through overhead flights every 8 seconds.
 
-**Nav bar controls:**
-
-- **WX** — weather screen showing temperature, humidity, wind, and conditions
+**Nav bar:**
+- **WX** — weather screen (temperature, humidity, wind, conditions)
 - **GEO** — cycles geofence radius: 5 km / 10 km / 20 km
-- **CFG** — launches the captive portal for Wi-Fi and location configuration
+- **CFG** — captive portal for Wi-Fi and location configuration
 
-**Route display:** departure and arrival with airport city names from a built-in lookup table.
+![Echo weather screen showing 20.4°C, partly cloudy, Monday 9 March](https://raw.githubusercontent.com/greystoke1337/blog/main/assets/images/overhead-tracker-2.jpg)
 
-**Emergency squawk handling:** 7700 / 7600 / 7500 triggers a flashing red banner (MAYDAY, NORDO, or HIJACK). The layout compacts automatically to prevent overlap.
+**Emergency squawk handling:** 7700 / 7600 / 7500 triggers a flashing red banner. Layout compacts automatically to prevent overlap.
 
 **Libraries** (Arduino Library Manager): `LovyanGFX`, `ArduinoJson`, `ArduinoOTA`, `SD`
 
 **Before flashing:** Copy `secrets.h.example` to `secrets.h` and set your default WiFi credentials. On first boot, the captive portal lets you configure WiFi and location (stored in NVS). `PROXY_HOST` in `tracker_echo.ino` defaults to `api.overheadtracker.com`.
 
 ```bash
-./build.sh                  # compile + auto-detect port + upload via USB
-./build.sh compile          # compile only
-./build.sh upload           # upload last build via USB
-./build.sh ota              # compile + upload over Wi-Fi (OTA)
-./build.sh monitor          # serial monitor
-./build.sh send <cmd>       # send debug command, print JSON response
-./build.sh validate         # compile with all warnings + safety checks
-./build.sh test             # run desktop logic tests (no hardware needed)
-./build.sh safe             # test + validate (full pre-push check)
+./build.sh          # compile + auto-detect port + upload via USB
+./build.sh ota      # compile + upload over Wi-Fi (OTA)
+./build.sh monitor  # serial monitor
+./build.sh test     # run desktop logic tests (no hardware needed)
 ```
 
-**Over-the-air updates:** after the first USB flash, the device advertises itself as `overhead-tracker.local` on the local network via mDNS. Run `./build.sh ota` (or press **Ctrl+Shift+B** in VS Code) to compile and upload wirelessly. The TFT displays a green progress bar during the update.
+**Over-the-air updates:** after the first USB flash, the device advertises itself as `overhead-tracker.local` via mDNS. Run `./build.sh ota` to compile and upload wirelessly. The TFT displays a green progress bar during the update.
 
 ### Foxtrot — Waveshare ESP32-S3-Touch-LCD-4.3 (4.3", 800×480)
 
-**Hardware:** Waveshare ESP32-S3-Touch-LCD-4.3 (ESP32-S3 + 4.3" ST7262 IPS parallel RGB display, GT911 capacitive touch, 16 MB flash, 8 MB PSRAM)
+**Hardware:** Waveshare ESP32-S3-Touch-LCD-4.3 (ESP32-S3 + 4.3" IPS parallel RGB display, GT911 capacitive touch, 16 MB flash, 8 MB PSRAM)
 
-Same feature set as Echo, scaled proportionally for the larger 800×480 display. Key hardware differences: capacitive touch (no calibration needed), CH422G I/O expander for backlight control, PSRAM for larger buffers.
-
-**Libraries** (Arduino Library Manager): `LovyanGFX`, `ArduinoJson`, `ArduinoOTA`
+Same feature set as Echo, scaled proportionally for the larger 800×480 display. Capacitive touch (no calibration needed), CH422G I/O expander for backlight control, PSRAM for larger buffers.
 
 ```bash
 arduino-cli compile --fqbn "esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB" tracker_foxtrot/tracker_foxtrot.ino
@@ -127,11 +92,9 @@ arduino-cli monitor --port COM7 --config "baudrate=115200"
 
 ### Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix)
 
-**Hardware:** Adafruit Matrix Portal M4 (SAMD51 + ESP32 WiFi co-processor) driving a 64×32 HUB75 RGB LED matrix panel
+**Hardware:** Adafruit Matrix Portal M4 driving a 64×32 HUB75 RGB LED matrix panel.
 
-**What it shows:** Public-facing flight display designed for a wider audience. Top row shows the callsign in pseudo-bold (colour-coded by airline) for the first 15 seconds of each cycle, then switches to the aircraft type name (colour-coded by category). Route area shows origin and destination city in the TomThumb font. Side bars show relative altitude (left, deep blue) and speed (right, light blue). A distance bar on the bottom row indicates how far the aircraft is from the geofence centre.
-
-**30-second refresh cycle:** Progress advances pixel-by-pixel across the top row — callsign phase (pixels 0–31) then type phase (pixels 32–63). Long type names scroll with a bounce animation. At pixel 64 the display fetches new data and resets.
+Public-facing display designed to be read from across a room. Callsign in pseudo-bold (colour-coded by airline) for the first half of each 30-second cycle, then switches to the aircraft type name. Route shows origin and destination city. Side bars indicate relative altitude (left) and speed (right). A distance bar runs along the bottom row.
 
 **Libraries** (Arduino Library Manager): `Adafruit Protomatter`, `Adafruit GFX Library`, `ArduinoJson`
 
@@ -147,88 +110,30 @@ arduino-cli monitor --port COM7 --config "baudrate=115200"
 ```
 
 ```bash
-./build.sh golf           # compile + upload to COM9
-./build.sh golf-compile   # compile only
+./build.sh golf         # compile + upload to COM9
+./build.sh golf-compile # compile only
 ```
 
 ### Web firmware flasher
 
-`flash.html` is a browser-based firmware update tool. End users can flash new Foxtrot firmware with **zero development tools installed** — just Chrome/Edge and a USB cable.
-
-Open [overheadtracker.com/flash](https://overheadtracker.com/flash), plug in the device, click Connect, click Flash. Uses the Web Serial API and [esptool-js](https://github.com/nicknisi/esptool-js) to write firmware directly from the browser.
-
-**Developer workflow** (after making firmware changes):
-
-```bash
-./tools/package-firmware.sh    # compile + copy binaries to firmware/
-git push                       # auto-deploys to GitHub Pages
-```
-
-The packaging script compiles Foxtrot, copies the 4 binary files (bootloader, partitions, boot_app0, app) to `firmware/`, and updates `firmware/manifest.json` with the version from `config.h`.
-
-**Driver notes:** Windows 10/11 auto-installs the CH343 USB driver. macOS requires a one-time driver install from WCH (instructions on the flash page). Linux works out of the box.
+`flash.html` — browser-based firmware update tool (Chrome/Edge + USB cable, no dev tools needed). Open [overheadtracker.com/flash](https://overheadtracker.com/flash), plug in the device, click Flash.
 
 ### Resilience
 
-The firmware uses a 3-tier fallback cascade: Railway proxy → direct airplanes.live API (HTTPS) → SD card cache. Proxy calls use a 3-second TCP connect timeout so the device boots cleanly even when the proxy is unreachable — no watchdog crash loop. The 16 KB JSON document is allocated once at startup and reused every cycle to prevent heap fragmentation on long-running sessions.
+3-tier fallback cascade: Railway proxy → direct airplanes.live API (HTTPS) → SD card cache. Proxy calls use a 3-second TCP connect timeout so the device boots cleanly even when the proxy is unreachable. Direct API failures use exponential backoff (15s → 30s → 60s → 120s).
 
-### Mock proxy tool
+### Preview tools
 
-`tools/mock-proxy.js` is a zero-dependency Node.js server for testing firmware resilience without the real proxy.
-
-```bash
-node tools/mock-proxy.js [mode] [port]
-```
-
-| Mode | Behavior |
-|------|----------|
-| `normal` | Valid flight + weather JSON (default) |
-| `timeout` | Accepts TCP, never responds |
-| `error503` | Returns 503 Service Unavailable |
-| `error502` | Returns 502 Bad Gateway |
-| `corrupt` | Returns 200 with broken JSON |
-| `partial` | Returns 200, drops connection mid-body |
-| `slow` | Waits 4 seconds before valid response |
-
-### TFT preview tool
-
-`tft-preview.html` is a browser-based simulator of the ESP32 display. Open it to preview layout changes before flashing.
-
-It mirrors the firmware's rendering logic: same pixel coordinates, same RGB565 colour palette, same lookup tables (airlines, aircraft types, airports). Interactive controls let you test every combination of flight phase, squawk code, route length, and altitude.
-
-```bash
-open tft-preview.html   # or just double-click
-```
-
-### LED matrix preview tool
-
-`golf-preview.html` is the equivalent simulator for the Golf M4 64×32 LED matrix. Renders every visual element — pseudo-bold callsign with airline colour, TomThumb route text, altitude/speed side bars, distance bar, and the showType flip — using an embedded canvas at 10× scale with LED glow effects.
-
-Controls match the firmware's live behaviour: callsign/type/route/alt/speed/distance inputs, a progress pixel slider to step through the 30-second cycle, and an auto-animate toggle that advances at the same 468 ms/pixel rate as the hardware.
-
-```bash
-open golf-preview.html   # or just double-click
-```
+- `tft-preview.html` — browser simulator of the Echo/Foxtrot display (same pixel coordinates, colours, lookup tables). Interactive controls for every flight phase, squawk code, route length, and altitude.
+- `golf-preview.html` — browser simulator of the Golf M4 LED matrix at 10× scale with LED glow effects.
 
 ---
 
-## Pi display — Raspberry Pi 3B+ (3.5" TFT, 480×320)
+## Pi — Raspberry Pi 3B+ (ADS-B feeder + 3.5" TFT display)
 
-A headless Raspberry Pi display that renders to a 3.5" TFT via framebuffer.
+A headless Raspberry Pi (`airplanes.local`) with an RTL-SDR dongle receiving raw ADS-B signals and feeding them live to FlightAware and FlightRadar24 (`piaware` + `fr24feed`, both systemd services). It also renders a dashboard to a 3.5" TFT via framebuffer.
 
-**Hardware:** Raspberry Pi 3B+ with 3.5" TFT on `/dev/fb1`
-
-**What it shows:** Two auto-rotating pages (15-second cycle):
-- **Flights page** — up to 2 closest flights with callsign, altitude, distance, route, and phase (colour-coded). Daily flight count shown in the header.
-- **Stats page** — Railway proxy health (uptime, requests, cache hit rate, errors, clients), API status for all 3 ADS-B sources, and a 24-hour traffic histogram with peak-hour highlighting.
-
-**Weather strip** on the flights page: temperature, conditions, wind speed and direction.
-
-**Timing:** 10-second flight refresh, 5-minute weather refresh.
-
-**CRT-style colour scheme** with phase colour-coding matching the web app and ESP32 displays.
-
-**Configuration:** set `PROXY_URL` environment variable to point at a different proxy instance. Edit `HOME_LAT`, `HOME_LON`, and `RADIUS_KM` at the top of `display.py` for your location.
+Two auto-rotating pages (15-second cycle): **Flights** — up to 2 closest aircraft with callsign, altitude, distance, route, phase, colour-coded. **Stats** — Railway proxy health, API status for all 3 ADS-B sources, 24-hour traffic histogram.
 
 Source: [`pi-display/`](pi-display/)
 

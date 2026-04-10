@@ -1,8 +1,9 @@
 // ─── Display rendering: all TFT drawing functions ──────
 
 void drawHeader() {
-  tft.fillRect(0, 0, W, HDR_H, C_AMBER);
-  tft.setTextColor(C_BG, C_AMBER);
+  uint16_t hdrColor = trackingMode ? C_GREEN : C_AMBER;
+  tft.fillRect(0, 0, W, HDR_H, hdrColor);
+  tft.setTextColor(C_BG, hdrColor);
 #ifdef BOARD_2P8
   tft.setTextSize(1);
   tft.setCursor(4, 7);
@@ -28,13 +29,9 @@ void drawNavBar() {
 
   if (currentScreen == SCREEN_TRACK) {
     tft.setTextSize(1);
-    tft.setTextColor(C_AMBER, C_BG);
-    tft.setCursor(8, NAV_Y + 7);
-    tft.print("TRACKING:");
-    tft.setTextSize(2);
     tft.setTextColor(C_GREEN, C_BG);
-    tft.setCursor(8, NAV_Y + 16);
-    tft.print(trackCallsign);
+    tft.setCursor(8, NAV_Y + 14);
+    tft.print("SINGLE FLIGHT TRACKING MODE");
   } else if (currentScreen == SCREEN_FLIGHT && flightCount > 1) {
     char navBuf[16];
     snprintf(navBuf, sizeof(navBuf), "< %d/%d >", flightIndex + 1, flightCount);

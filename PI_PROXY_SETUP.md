@@ -1,7 +1,7 @@
 # Proxy Setup — Overhead Tracker
 
 Complete record of how the proxy server is configured.
-Written: February 2026 — Updated: March 2026
+Written: February 2026 — Updated: April 2026
 
 ---
 
@@ -78,13 +78,12 @@ railway variables set KEY=VALUE                           # set env var
 
 ---
 
-## Raspberry Pi (display only)
+## Raspberry Pi (display + ADS-B feeder)
 
 - **Device:** Raspberry Pi 3B+
 - **OS:** Raspberry Pi OS Lite 64-bit (headless)
-- **Local IP:** 192.168.86.24
-- **Hostname:** piproxy
-- **Role:** Runs `display.py` only (3.5" TFT dashboard)
+- **Hostname:** airplanes (`airplanes.local`)
+- **Role:** Runs `display.py` (3.5" TFT dashboard) **and** feeds live ADS-B data to FlightAware and FlightRadar24 via an RTL-SDR dongle
 
 ---
 
@@ -94,7 +93,7 @@ Flashed via **Raspberry Pi Imager** on Windows with these settings:
 
 - **Device:** Raspberry Pi 3
 - **OS:** Raspberry Pi OS Lite (64-bit)
-- **Hostname:** `piproxy`
+- **Hostname:** `airplanes`
 - **SSH:** enabled, password authentication
 - **Username:** `pi`
 - **WiFi SSID:** REDACTED
@@ -107,13 +106,11 @@ Flashed via **Raspberry Pi Imager** on Windows with these settings:
 From any machine on the local network:
 
 ```bash
-ssh pi@piproxy.local
-# or
-ssh pi@192.168.86.24
+ssh pi@airplanes.local
 ```
 
 **Recommended:** Use **VS Code with the Remote SSH extension** for editing files.
-Connect to `pi@piproxy.local`, then open `/home/pi/proxy` as the workspace.
+Connect to `pi@airplanes.local`, then open `/home/pi/proxy` as the workspace.
 Much easier than nano or scp.
 
 ---
@@ -280,9 +277,30 @@ dtoverlay=tft35a:rotate=270
 
 ---
 
-## PM2 Services (Pi)
+## ADS-B Feeding
 
-The Pi now only runs the TFT display. The proxy runs on Railway.
+The Pi has an RTL-SDR dongle and feeds live ADS-B data to two networks:
+
+| Service | Software | Dashboard |
+|---------|----------|-----------|
+| FlightAware | `piaware` (dump1090 + feeder daemon) | flightaware.com/adsb/stats |
+| FlightRadar24 | `fr24feed` | flightradar24.com/account/feed-stats |
+
+Both services run as system daemons (systemd), not PM2, and start automatically on boot.
+
+```bash
+# Check feeder status
+sudo systemctl status piaware
+sudo systemctl status fr24feed
+
+# Restart feeders
+sudo systemctl restart piaware
+sudo systemctl restart fr24feed
+```
+
+---
+
+## PM2 Services (Pi)
 
 | Name    | Command                                        | Purpose               |
 |---------|------------------------------------------------|-----------------------|
@@ -381,7 +399,7 @@ The display process starts automatically via PM2.
 The proxy runs on Railway and is unaffected by Pi reboots.
 
 ```bash
-ssh piproxy "pm2 status"  # verify display is online after reboot
+ssh pi@airplanes.local "pm2 status"  # verify display is online after reboot
 ```
 
 ---
