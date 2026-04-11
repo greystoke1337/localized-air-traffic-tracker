@@ -33,19 +33,20 @@ void loadConfig() {
   Serial.println("Config loaded.");
 }
 
-void writeCache(const String& payload) {
+void writeCache(const char* payload) {
   if (!sdAvailable) return;
   File f = SD.open("/cache.json", FILE_WRITE);
   if (!f) { Serial.println("Cache write failed"); return; }
-  f.print(payload);
+  size_t written = f.print(payload);
   f.close();
+  if (written == 0) { Serial.println("[SD] Cache write returned 0 bytes"); }
   time_t now = time(NULL);
   if (now > 1000000000) {
     File tf = SD.open("/cache_ts.txt", FILE_WRITE);
     if (tf) { tf.print((unsigned long)now); tf.close(); }
     cacheTimestamp = now;
   }
-  Serial.printf("Cache written (%d bytes)\n", payload.length());
+  Serial.printf("Cache written (%zu bytes)\n", strlen(payload));
 }
 
 String readCache() {
@@ -85,8 +86,9 @@ void logFlight(const Flight& f) {
     statusLabel(f.status),
     f.dist
   );
-  file.println(row);
+  size_t rowWritten = file.println(row);
   file.close();
+  if (rowWritten == 0) { Serial.printf("[SD] logFlight write returned 0 bytes for %s\n", f.callsign); }
 
   if (loggedCount < MAX_LOGGED) {
     strlcpy(loggedCallsigns[loggedCount++], f.callsign, 12);
@@ -124,7 +126,7 @@ void logUnknown(const char* type, const char* code, const char* context) {
 #else // !HAS_SD — no-op stubs
 
 void loadConfig() {}
-void writeCache(const String&) {}
+void writeCache(const char*) {}
 String readCache() { return ""; }
 void logFlight(const Flight&) {}
 void logUnknown(const char*, const char*, const char*) {}

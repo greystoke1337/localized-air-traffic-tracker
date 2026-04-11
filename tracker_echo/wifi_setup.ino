@@ -221,5 +221,6 @@ void startCaptivePortal() {
   while (true) {
     dnsServer.processNextRequest();
     setupServer.handleClient();
+    esp_task_wdt_reset();
   }
 }

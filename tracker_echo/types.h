@@ -51,6 +51,14 @@ struct WeatherData {
   bool    tide_is_high;    // true = next tide is HIGH
 };
 
+// ─── Per-aircraft accumulator (used by direct API stream scanner) ─
+struct AircraftState {
+  char  callsign[12], reg[12], type[8];
+  char  dep[6], arr[6], squawk[6];
+  float lat, lon;
+  int   alt, speed, vs, track;
+};
+
 // ─── Airline lookup ───────────────────────────────────
 struct Airline { const char* prefix; const char* name; uint16_t color; };
 

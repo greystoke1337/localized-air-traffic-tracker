@@ -2,16 +2,16 @@
 
 ## Auto-Flash Policy
 
-**Always compile AND flash** after any file change. Do not stop at compile-only. Use `./build.sh compile` then `./build.sh upload COM5`.
+**Always compile AND flash** after any file change. Do not stop at compile-only. Use `./build.sh compile` then `./build.sh upload COM4`.
 
 ## Build Commands
 
 ```bash
 ./build.sh                          # compile + auto-detect port + upload
 ./build.sh compile                  # compile only
-./build.sh upload COM5              # upload last build
-./build.sh monitor COM5             # serial monitor
-./build.sh send <cmd> COM5          # send debug command, print JSON response
+./build.sh upload COM4              # upload last build
+./build.sh monitor COM4             # serial monitor
+./build.sh send <cmd> COM4          # send debug command, print JSON response
 ./build.sh ota                      # compile + OTA upload over WiFi
 ./build.sh validate                 # compile with all warnings + safety checks
 ./build.sh test                     # run desktop logic tests (no hardware)
@@ -30,9 +30,9 @@ Pre-push: `./build.sh safe`. Preview layout changes with `tft-preview.html` befo
 `tools/serial-stress.js` — serial log analyzer. Detects reboots, WDT resets, backtraces, heap tracking. Prints PASS/FAIL.
 
 ```bash
-./build.sh proxy-host 192.168.86.23 COM5   # point to dev machine
-./build.sh stress 10 COM5                   # 10-min chaos test
-./build.sh proxy-host api.overheadtracker.com COM5   # restore Railway proxy
+./build.sh proxy-host 192.168.86.23 COM4   # point to dev machine
+./build.sh stress 10 COM4                   # 10-min chaos test
+./build.sh proxy-host api.overheadtracker.com COM4   # restore Railway proxy
 ```
 
 Desktop tests: 95 total (37 flight logic + 58 parsing). MSYS2 gcc required (`/c/msys64/ucrt64/bin`).

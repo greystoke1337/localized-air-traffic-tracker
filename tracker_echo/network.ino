@@ -35,8 +35,11 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 -----END CERTIFICATE-----
 )EOF";
 
-// ─── Parse a String payload (proxy or cache) ──────────
-int parsePayload(String& payload) {
+// ─── Static buffer for proxy payload (avoids heap alloc) ─
+static char s_proxyBuf[PROXY_BUF_SIZE];
+
+// ─── Parse a char-array payload (proxy or cache) ─────────
+static int parsePayload(const char* payload, int len) {
   StaticJsonDocument<512> filter;
   JsonObject af = filter["ac"].createNestedObject();
   af["flight"] = af["r"] = af["t"] = af["lat"] = af["lon"] =
@@ -45,22 +48,19 @@ int parsePayload(String& payload) {
   g_jsonDoc.clear();
   esp_task_wdt_reset();
   Serial.printf("[MEM] Before JSON parse: %d free\n", ESP.getFreeHeap());
-  DeserializationError err = deserializeJson(g_jsonDoc, &payload[0], payload.length(), DeserializationOption::Filter(filter));
+  DeserializationError err = deserializeJson(g_jsonDoc, payload, len,
+                                             DeserializationOption::Filter(filter));
   Serial.printf("[MEM] After JSON parse: %d free\n", ESP.getFreeHeap());
   esp_task_wdt_reset();
-  if (err) {
-    Serial.printf("JSON parse error: %s\n", err.c_str());
-    return -1;
-  }
+  if (err) { Serial.printf("JSON parse error: %s\n", err.c_str()); return -1; }
   int result = extractFlights(g_jsonDoc);
   g_jsonDoc.clear();
-  payload = String();
   return result;
 }
 
-// ─── Fetch: proxy (returns small String) ──────────────
-String fetchFromProxy() {
-  if (!wifiOk()) { Serial.println("[PROXY] WiFi not connected"); return ""; }
+// ─── Fetch: fill buf from proxy, return true on success ──
+static bool fetchFromProxy(char* buf, int maxLen) {
+  if (!wifiOk()) { Serial.println("[PROXY] WiFi not connected"); return false; }
   unsigned long t0 = millis();
   WiFiClientSecure tcp;
   tcp.setInsecure();
@@ -68,41 +68,37 @@ String fetchFromProxy() {
   esp_task_wdt_reset();
   if (!tcp.connect(PROXY_HOST, PROXY_PORT, 5000)) {
     Serial.printf("[PROXY] Connect failed (%lu ms)\n", millis() - t0);
-    return "";
+    return false;
   }
   esp_task_wdt_reset();
   char url[160];
-  snprintf(url, sizeof(url),
-    "https://%s/flights?lat=%.4f&lon=%.4f&radius=%d",
-    PROXY_HOST, HOME_LAT, HOME_LON, apiRadiusNm());
+  snprintf(url, sizeof(url), "https://%s/flights?lat=%.4f&lon=%.4f&radius=%d",
+           PROXY_HOST, HOME_LAT, HOME_LON, apiRadiusNm());
   HTTPClient http;
   http.begin(tcp, url);
   http.setTimeout(12000);
   int code = http.GET();
   esp_task_wdt_reset();
+  int pos = 0;
   if (code == 200) {
-    int len = http.getSize();
     WiFiClient* stream = http.getStreamPtr();
-    String p;
-    if (len > 0) p.reserve(len);
-    uint8_t buf[512];
     unsigned long deadline = millis() + 20000;
-    while (millis() < deadline && (http.connected() || stream->available())) {
+    while (millis() < deadline && (http.connected() || stream->available())
+           && pos < maxLen - 1) {
       int avail = stream->available();
       if (avail > 0) {
-        int n = stream->readBytes(buf, min(avail, (int)sizeof(buf)));
-        if (n > 0) { p += String((const char*)buf, n); deadline = millis() + 20000; }
+        int n = stream->readBytes((uint8_t*)(buf + pos), min(avail, maxLen - pos - 1));
+        if (n > 0) { pos += n; deadline = millis() + 20000; }
       } else { delay(5); }
       esp_task_wdt_reset();
     }
-    http.end();
-    esp_task_wdt_reset();
-    Serial.printf("[PROXY] OK %d bytes (%lu ms)\n", p.length(), millis() - t0);
-    return p;
+    buf[pos] = 0;
   }
   http.end();
+  esp_task_wdt_reset();
+  if (pos > 0) { Serial.printf("[PROXY] OK %d bytes (%lu ms)\n", pos, millis() - t0); return true; }
   Serial.printf("[PROXY] HTTP %d (%lu ms)\n", code, millis() - t0);
-  return "";
+  return false;
 }
 
 // ─── Stream helpers for direct API ─────────────────────
@@ -131,16 +127,79 @@ static int readNumber(WiFiClient* s, char* buf, int maxLen) {
   return i;
 }
 
+// ─── Apply one key-value pair to aircraft accumulator ────
+static void applyKV(AircraftState& ac, const char* key, const char* val) {
+  if      (strcmp(key,"flight")==0)               strlcpy(ac.callsign, val, sizeof(ac.callsign));
+  else if (strcmp(key,"r")==0)                    strlcpy(ac.reg,      val, sizeof(ac.reg));
+  else if (strcmp(key,"t")==0)                    strlcpy(ac.type,     val, sizeof(ac.type));
+  else if (strcmp(key,"squawk")==0)               strlcpy(ac.squawk,   val, sizeof(ac.squawk));
+  else if (strcmp(key,"dep")==0)                  strlcpy(ac.dep,      val, sizeof(ac.dep));
+  else if (strcmp(key,"arr")==0)                  strlcpy(ac.arr,      val, sizeof(ac.arr));
+  else if (strcmp(key,"orig_iata")==0 && !ac.dep[0]) strlcpy(ac.dep,  val, sizeof(ac.dep));
+  else if (strcmp(key,"dest_iata")==0 && !ac.arr[0]) strlcpy(ac.arr,  val, sizeof(ac.arr));
+  else if (strcmp(key,"lat")==0)       ac.lat   = atof(val);
+  else if (strcmp(key,"lon")==0)       ac.lon   = atof(val);
+  else if (strcmp(key,"alt_baro")==0)  ac.alt   = atoi(val);
+  else if (strcmp(key,"gs")==0)        ac.speed = (int)atof(val);
+  else if (strcmp(key,"baro_rate")==0) ac.vs    = atoi(val);
+  else if (strcmp(key,"track")==0)     ac.track = (int)atof(val);
+}
+
+// ─── Validate accumulator and push to newFlights[] ───────
+static void commitAircraft(AircraftState& ac, int& newCount) {
+  if (newCount >= 20) return;
+  if (ac.alt < ALT_FLOOR_FT || ac.lat == 0.0f) return;
+  float dist = haversineKm(HOME_LAT, HOME_LON, ac.lat, ac.lon);
+  if (dist > GEOFENCE_KM) return;
+  Flight& f = newFlights[newCount];
+  memset(&f, 0, sizeof(Flight));
+  strlcpy(f.callsign, ac.callsign, sizeof(f.callsign));
+  for (int i = strlen(f.callsign)-1; i >= 0 && f.callsign[i] == ' '; i--) f.callsign[i] = 0;
+  strlcpy(f.reg,    ac.reg,    sizeof(f.reg));
+  strlcpy(f.type,   ac.type,   sizeof(f.type));
+  strlcpy(f.squawk, ac.squawk[0] ? ac.squawk : "----", sizeof(f.squawk));
+  strlcpy(f.dep, ac.dep, sizeof(f.dep));
+  strlcpy(f.arr, ac.arr, sizeof(f.arr));
+  if (ac.dep[0] || ac.arr[0]) {
+    snprintf(f.route, sizeof(f.route), "%s > %s",
+             ac.dep[0] ? ac.dep : "?", ac.arr[0] ? ac.arr : "?");
+  }
+  f.lat=ac.lat; f.lon=ac.lon; f.alt=ac.alt;
+  f.speed=ac.speed; f.vs=ac.vs; f.track=ac.track; f.dist=dist;
+  f.status = deriveStatus(ac.alt, ac.vs, dist);
+  toUpperStr(f.callsign);
+  toUpperStr(f.reg);
+  toUpperStr(f.type);
+  newCount++;
+}
+
+// ─── Try each direct API endpoint; return true on 200 ────
+static bool connectDirectAPI(HTTPClient& http, WiFiClientSecure& tlsClient) {
+  int radius = apiRadiusNm();
+  const char* apiNames[] = { "adsb.lol", "airplanes.live" };
+  char urls[2][160];
+  snprintf(urls[0], sizeof(urls[0]),
+           "https://api.adsb.lol/v2/point/%.4f/%.4f/%d", HOME_LAT, HOME_LON, radius);
+  snprintf(urls[1], sizeof(urls[1]),
+           "https://api.airplanes.live/v2/point/%.4f/%.4f/%d", HOME_LAT, HOME_LON, radius);
+  for (int i = 0; i < 2; i++) {
+    Serial.printf("[DIRECT] Trying %s...\n", apiNames[i]);
+    http.begin(tlsClient, urls[i]);
+    http.setTimeout(DIRECT_API_TIMEOUT);
+    int code = http.GET();
+    if (code == 200) { Serial.printf("[DIRECT] %s OK\n", apiNames[i]); return true; }
+    http.end();
+    Serial.printf("[DIRECT] %s failed (%d)\n", apiNames[i], code);
+  }
+  return false;
+}
+
 // ─── Fetch: direct API — zero-allocation stream scanner ──
 int fetchAndParseDirectAPI() {
-  if (!wifiOk()) {
-    Serial.println("[DIRECT] WiFi not connected, skipping");
-    return -1;
-  }
+  if (!wifiOk()) { Serial.println("[DIRECT] WiFi not connected"); return -1; }
   int freeHeap = ESP.getFreeHeap();
-  Serial.printf("[DIRECT] Free heap: %d\n", freeHeap);
   if (freeHeap < DIRECT_API_MIN_HEAP) {
-    Serial.println("[DIRECT] Insufficient heap for TLS, skipping");
+    Serial.printf("[DIRECT] Insufficient heap (%d), skipping\n", freeHeap);
     return -1;
   }
   if (directApiFailCount > 0 && millis() < directApiNextRetryMs) {
@@ -148,115 +207,35 @@ int fetchAndParseDirectAPI() {
                   directApiNextRetryMs - millis());
     return -1;
   }
-
-  int radius = apiRadiusNm();
-  const char* apiNames[] = { "adsb.lol", "airplanes.live" };
-  char urls[2][160];
-  snprintf(urls[0], sizeof(urls[0]),
-    "https://api.adsb.lol/v2/point/%.4f/%.4f/%d",
-    HOME_LAT, HOME_LON, radius);
-  snprintf(urls[1], sizeof(urls[1]),
-    "https://api.airplanes.live/v2/point/%.4f/%.4f/%d",
-    HOME_LAT, HOME_LON, radius);
-
   HTTPClient http;
   WiFiClientSecure tlsClient;
   tlsClient.setCACert(LETSENCRYPT_ROOT_CA);
   tlsClient.setTimeout(DIRECT_API_TIMEOUT / 1000);
-  bool connected = false;
-  for (int i = 0; i < 2; i++) {
-    Serial.printf("[DIRECT] Trying %s...\n", apiNames[i]);
-    http.begin(tlsClient, urls[i]);
-    http.setTimeout(DIRECT_API_TIMEOUT);
-    int code = http.GET();
-    if (code == 200) {
-      Serial.printf("[DIRECT] %s OK\n", apiNames[i]);
-      connected = true;
-      break;
-    }
-    http.end();
-    Serial.printf("[DIRECT] %s failed (%d)\n", apiNames[i], code);
-  }
-  if (!connected) {
+  if (!connectDirectAPI(http, tlsClient)) {
     directApiFailCount++;
     unsigned long backoffMs = min(120000UL, 15000UL * (1UL << min(directApiFailCount - 1, 3)));
     directApiNextRetryMs = millis() + backoffMs;
-    Serial.printf("[DIRECT] All APIs failed, backoff %lu ms (fail #%d)\n", backoffMs, directApiFailCount);
+    Serial.printf("[DIRECT] All APIs failed, backoff %lu ms (fail #%d)\n",
+                  backoffMs, directApiFailCount);
     return -1;
   }
   directApiFailCount = 0;
-
   Serial.printf("[MEM] Direct stream scan start: %d free\n", ESP.getFreeHeap());
 
   WiFiClient* s = http.getStreamPtr();
   if (!s) { Serial.println("[DIRECT] Null stream"); http.end(); return -1; }
+
   int newCount = 0;
   int depth = 0;
-  bool inString = false;
-  char key[16] = "";
-  char val[32] = "";
-  bool readingKey = false;
-  bool readingVal = false;
-  char ac_callsign[12]={}, ac_reg[12]={}, ac_type[8]={};
-  char ac_dep[6]={},       ac_arr[6]={},  ac_squawk[6]={};
-  char ac_route[40]={};
-  float ac_lat=0, ac_lon=0;
-  int   ac_alt=0, ac_speed=0, ac_vs=0, ac_track=-1;
-
-  auto commitAircraft = [&]() {
-    if (newCount >= 20) return;
-    if (ac_alt < ALT_FLOOR_FT || ac_lat == 0.0f) return;
-    float dist = haversineKm(HOME_LAT, HOME_LON, ac_lat, ac_lon);
-    if (dist > GEOFENCE_KM) return;
-    Flight& f = newFlights[newCount];
-    memset(&f, 0, sizeof(Flight));
-    strlcpy(f.callsign, ac_callsign, sizeof(f.callsign));
-    for (int i = strlen(f.callsign)-1; i >= 0 && f.callsign[i] == ' '; i--) f.callsign[i] = 0;
-    strlcpy(f.reg,    ac_reg,    sizeof(f.reg));
-    strlcpy(f.type,   ac_type,   sizeof(f.type));
-    strlcpy(f.squawk, ac_squawk[0] ? ac_squawk : "----", sizeof(f.squawk));
-    strlcpy(f.dep, ac_dep, sizeof(f.dep));
-    strlcpy(f.arr, ac_arr, sizeof(f.arr));
-    if (ac_dep[0] || ac_arr[0]) {
-      snprintf(f.route, sizeof(f.route), "%s > %s",
-               ac_dep[0] ? ac_dep : "?", ac_arr[0] ? ac_arr : "?");
-    } else {
-      f.route[0] = 0;
-    }
-    f.lat=ac_lat; f.lon=ac_lon; f.alt=ac_alt;
-    f.speed=ac_speed; f.vs=ac_vs; f.track=ac_track; f.dist=dist;
-    f.status = deriveStatus(ac_alt, ac_vs, dist);
-    toUpperStr(f.callsign);
-    toUpperStr(f.reg);
-    toUpperStr(f.type);
-    newCount++;
-  };
-  auto applyKV = [&]() {
-    if      (strcmp(key,"flight")==0)    strlcpy(ac_callsign, val, sizeof(ac_callsign));
-    else if (strcmp(key,"r")==0)         strlcpy(ac_reg,      val, sizeof(ac_reg));
-    else if (strcmp(key,"t")==0)         strlcpy(ac_type,     val, sizeof(ac_type));
-    else if (strcmp(key,"squawk")==0)    strlcpy(ac_squawk,   val, sizeof(ac_squawk));
-    else if (strcmp(key,"dep")==0)       strlcpy(ac_dep,      val, sizeof(ac_dep));
-    else if (strcmp(key,"arr")==0)       strlcpy(ac_arr,      val, sizeof(ac_arr));
-    else if (strcmp(key,"orig_iata")==0 && !ac_dep[0])  strlcpy(ac_dep, val, sizeof(ac_dep));
-    else if (strcmp(key,"dest_iata")==0 && !ac_arr[0])  strlcpy(ac_arr, val, sizeof(ac_arr));
-    else if (strcmp(key,"lat")==0)       ac_lat   = atof(val);
-    else if (strcmp(key,"lon")==0)       ac_lon   = atof(val);
-    else if (strcmp(key,"alt_baro")==0)  ac_alt   = atoi(val);
-    else if (strcmp(key,"gs")==0)        ac_speed = (int)atof(val);
-    else if (strcmp(key,"baro_rate")==0) ac_vs    = atoi(val);
-    else if (strcmp(key,"track")==0)     ac_track = (int)atof(val);
-    key[0] = 0; val[0] = 0;
-  };
-
+  AircraftState ac = {};
+  char key[16] = "", val[32] = "";
   unsigned long deadline = millis() + DIRECT_API_TIMEOUT;
-  unsigned long lastWdt = millis();
-  int c;
+  unsigned long lastWdt  = millis();
   while (millis() < deadline) {
     if (millis() - lastWdt > 5000) { esp_task_wdt_reset(); lastWdt = millis(); }
     if (!wifiOk()) { Serial.println("[DIRECT] WiFi lost during stream"); break; }
     if (!s->available()) { delay(5); continue; }
-    c = s->read();
+    int c = s->read();
     if (c == -1) break;
     if (c == '"' && depth == 2) {
       readQuotedString(s, key, sizeof(key), deadline);
@@ -265,70 +244,29 @@ int fetchAndParseDirectAPI() {
       while (s->available() && (s->peek()==' '||s->peek()=='\t')) s->read();
       int nxt = s->peek();
       if (nxt == '"') {
-        s->read();
-        readQuotedString(s, val, sizeof(val), deadline);
-        applyKV();
+        s->read(); readQuotedString(s, val, sizeof(val), deadline); applyKV(ac, key, val);
       } else if (nxt == '-' || (nxt >= '0' && nxt <= '9')) {
-        readNumber(s, val, sizeof(val));
-        applyKV();
+        readNumber(s, val, sizeof(val)); applyKV(ac, key, val);
       }
       key[0] = 0;
       continue;
     }
-
     if (c == '{') {
       depth++;
-      if (depth == 2) {
-        ac_callsign[0]=ac_reg[0]=ac_type[0]=0;
-        ac_dep[0]=ac_arr[0]=ac_squawk[0]=ac_route[0]=0;
-        ac_lat=ac_lon=0; ac_alt=ac_speed=ac_vs=0; ac_track=-1;
-      }
+      if (depth == 2) { ac = {}; }
     } else if (c == '}') {
-       if (depth == 2) commitAircraft();
+      if (depth == 2) commitAircraft(ac, newCount);
       if (depth > 0) depth--;
     }
   }
-
   http.end();
   Serial.printf("[MEM] Direct scan done: %d free, found %d\n", ESP.getFreeHeap(), newCount);
   sortFlightsByDist(newFlights, newCount);
   return newCount;
 }
 
-// ─── Fetch tracking mode status from proxy ──────────
-void fetchTrackStatus() {
-  if (!wifiOk()) return;
-  unsigned long t0 = millis();
-  WiFiClientSecure tcp;
-  tcp.setInsecure();
-  tcp.setTimeout(8000);
-  esp_task_wdt_reset();
-
-  char url[80];
-  snprintf(url, sizeof(url), "https://%s/track", PROXY_HOST);
-  HTTPClient http;
-  http.begin(tcp, url);
-  http.setTimeout(8000);
-  int code = http.GET();
-  esp_task_wdt_reset();
-
-  if (code != 200) {
-    Serial.printf("[TRACK] HTTP %d\n", code);
-    http.end();
-    return;
-  }
-
-  String body = http.getString();
-  http.end();
-  esp_task_wdt_reset();
-
-  StaticJsonDocument<512> doc;
-  if (deserializeJson(doc, body) != DeserializationError::Ok) {
-    Serial.println("[TRACK] JSON parse error");
-    return;
-  }
-
-  // Server says no active session — revert to geofence mode
+// ─── Parse track JSON doc into flight state ───────────────
+static void parseTrackResponse(StaticJsonDocument<512>& doc) {
   if (doc["callsign"].isNull()) {
     if (trackingMode) {
       trackingMode = false;
@@ -339,20 +277,13 @@ void fetchTrackStatus() {
     }
     return;
   }
-
-  const char* cs = doc["callsign"] | "";
-  strlcpy(trackCallsign, cs, sizeof(trackCallsign));
+  strlcpy(trackCallsign, doc["callsign"] | "", sizeof(trackCallsign));
   trackingMode = true;
-
-  // Flight not currently visible in ADS-B — keep last display
   if (doc.containsKey("error")) {
-    const char* terr = doc["territory"] | "";
-    strlcpy(trackTerritory, terr, sizeof(trackTerritory));
+    strlcpy(trackTerritory, doc["territory"] | "", sizeof(trackTerritory));
     Serial.printf("[TRACK] %s not found\n", trackCallsign);
     return;
   }
-
-  // Build Flight struct from response
   Flight& f = flights[0];
   memset(&f, 0, sizeof(Flight));
   strlcpy(f.callsign, doc["callsign"] | "", sizeof(f.callsign));
@@ -361,34 +292,68 @@ void fetchTrackStatus() {
   strlcpy(f.squawk,   doc["squawk"]   | "----", sizeof(f.squawk));
   strlcpy(f.dep,      doc["dep"]      | "", sizeof(f.dep));
   strlcpy(f.arr,      doc["arr"]      | "", sizeof(f.arr));
-  const char* routeStr = doc["route"] | "";
-  strlcpy(f.route, routeStr, sizeof(f.route));
-  f.lat   = doc["lat"]      | 0.0f;
-  f.lon   = doc["lon"]      | 0.0f;
-  f.alt   = doc["alt_baro"] | 0;
-  f.speed = doc["gs"]       | 0;
-  f.vs    = doc["baro_rate"]| 0;
-  f.track = doc["track"]    | -1;
+  strlcpy(f.route,    doc["route"]    | "", sizeof(f.route));
+  f.lat   = doc["lat"]       | 0.0f;
+  f.lon   = doc["lon"]       | 0.0f;
+  f.alt   = doc["alt_baro"]  | 0;
+  f.speed = doc["gs"]        | 0;
+  f.vs    = doc["baro_rate"] | 0;
+  f.track = doc["track"]     | -1;
   f.dist  = haversineKm(HOME_LAT, HOME_LON, f.lat, f.lon);
   f.status = deriveStatus(f.alt, f.vs, f.dist);
-  toUpperStr(f.callsign);
-  toUpperStr(f.reg);
-  toUpperStr(f.type);
-
-  flightCount = 1;
-  flightIndex = 0;
-
+  toUpperStr(f.callsign); toUpperStr(f.reg); toUpperStr(f.type);
+  flightCount = 1; flightIndex = 0;
   trackProgress = doc["progress"].isNull() ? -1.0f : (float)doc["progress"];
-  const char* terr = doc["territory"] | "";
-  strlcpy(trackTerritory, terr, sizeof(trackTerritory));
-
+  strlcpy(trackTerritory, doc["territory"] | "", sizeof(trackTerritory));
   renderTrackFlight(flights[0]);
-
-  Serial.printf("[TRACK] %s prog=%.2f terr=%s (%lu ms)\n",
-    trackCallsign, trackProgress, trackTerritory, millis() - t0);
 }
 
-// ─── Send heartbeat to proxy ─────────────────────────
+// ─── Fetch tracking mode status from proxy ───────────────
+void fetchTrackStatus() {
+  if (!wifiOk()) return;
+  unsigned long t0 = millis();
+  WiFiClientSecure tcp;
+  tcp.setInsecure();
+  tcp.setTimeout(8000);
+  esp_task_wdt_reset();
+  char url[80];
+  snprintf(url, sizeof(url), "https://%s/track", PROXY_HOST);
+  HTTPClient http;
+  http.begin(tcp, url);
+  http.setTimeout(8000);
+  int code = http.GET();
+  esp_task_wdt_reset();
+  if (code != 200) {
+    Serial.printf("[TRACK] HTTP %d\n", code);
+    http.end();
+    return;
+  }
+  char body[512] = {0};
+  int bpos = 0;
+  WiFiClient* stream = http.getStreamPtr();
+  unsigned long dl = millis() + 8000;
+  while (millis() < dl && (http.connected() || stream->available())
+         && bpos < (int)sizeof(body) - 1) {
+    int avail = stream->available();
+    if (avail > 0) {
+      int n = stream->readBytes((uint8_t*)(body + bpos),
+                                min(avail, (int)sizeof(body) - bpos - 1));
+      bpos += n;
+    } else { delay(5); }
+    esp_task_wdt_reset();
+  }
+  http.end();
+  esp_task_wdt_reset();
+  StaticJsonDocument<512> doc;
+  if (deserializeJson(doc, body) != DeserializationError::Ok) {
+    Serial.println("[TRACK] JSON parse error");
+    return;
+  }
+  parseTrackResponse(doc);
+  Serial.printf("[TRACK] Done (%lu ms)\n", millis() - t0);
+}
+
+// ─── Send heartbeat to proxy ─────────────────────────────
 void sendHeartbeat() {
   if (!wifiOk()) return;
   WiFiClientSecure tcp;
@@ -415,6 +380,7 @@ void sendHeartbeat() {
   int code = http.POST(body);
   http.end();
   esp_task_wdt_reset();
+  if (code != 200) { Serial.printf("[HB] Unexpected response: %d\n", code); }
   Serial.printf("[HB] Heartbeat sent (%d)\n", code);
 }
 
@@ -430,7 +396,6 @@ int extractFlights(DynamicJsonDocument& doc) {
     if (alt < ALT_FLOOR_FT || lat == 0.0f) continue;
     float dist = haversineKm(HOME_LAT, HOME_LON, lat, lon);
     if (dist > GEOFENCE_KM) continue;
-
     Flight& f = newFlights[newCount];
     memset(&f, 0, sizeof(Flight));
     const char* cs = a["flight"] | "";
@@ -442,20 +407,15 @@ int extractFlights(DynamicJsonDocument& doc) {
     strlcpy(f.route,  a["route"]  | "",     sizeof(f.route));
     strlcpy(f.dep,    a["dep"]    | "",     sizeof(f.dep));
     strlcpy(f.arr,    a["arr"]    | "",     sizeof(f.arr));
-    f.lat   = lat;
-    f.lon = lon; f.alt = alt;
-    f.speed = (int)(a["gs"]      | 0.0f);
-    f.vs    = a["baro_rate"]     | 0;
-    f.track = (int)(a["track"]   | -1.0f);
+    f.lat   = lat; f.lon = lon; f.alt = alt;
+    f.speed = (int)(a["gs"]       | 0.0f);
+    f.vs    = a["baro_rate"]      | 0;
+    f.track = (int)(a["track"]    | -1.0f);
     f.dist  = dist;
     f.status = deriveStatus(alt, f.vs, dist);
-
-    toUpperStr(f.callsign);
-    toUpperStr(f.reg);
-    toUpperStr(f.type);
+    toUpperStr(f.callsign); toUpperStr(f.reg); toUpperStr(f.type);
     newCount++;
   }
-
   sortFlightsByDist(newFlights, newCount);
   return newCount;
 }
@@ -472,12 +432,10 @@ void fetchFlights() {
   if (wifiOk()) {
     int maxBlock = ESP.getMaxAllocHeap();
     if (maxBlock >= 8000) {
-      String payload = fetchFromProxy();
-      if (!payload.isEmpty()) {
-        writeCache(payload);
+      if (fetchFromProxy(s_proxyBuf, PROXY_BUF_SIZE)) {
+        writeCache(s_proxyBuf);
         esp_task_wdt_reset();
-        newCount = parsePayload(payload);
-        payload = String();
+        newCount = parsePayload(s_proxyBuf, strlen(s_proxyBuf));
         dataSource = 0;
       }
     } else {
@@ -495,10 +453,9 @@ void fetchFlights() {
 
   if (newCount < 0) {
     logTs("FETCH", "Network failed, trying SD cache...");
-    String payload = readCache();
-    if (!payload.isEmpty()) {
-      newCount = parsePayload(payload);
-      payload = String();
+    String cached = readCache();
+    if (!cached.isEmpty()) {
+      newCount = parsePayload(cached.c_str(), cached.length());
       fromCache = true;
       dataSource = 2;
       Serial.println("Using cached data.");
@@ -534,21 +491,39 @@ void fetchFlights() {
   logTs("HEAP", "Free:%d MaxBlock:%d", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 }
 
-// ─── Fetch weather from Pi proxy (Open-Meteo) ─────────
+// ─── Parse weather JSON body into wxData ─────────────────
+static bool parseWeatherBody(const char* body) {
+  StaticJsonDocument<640> doc;
+  if (deserializeJson(doc, body) != DeserializationError::Ok) return false;
+  wxData.temp            = doc["temp"]            | 0.0f;
+  wxData.feels_like      = doc["feels_like"]      | 0.0f;
+  wxData.humidity        = doc["humidity"]        | 0;
+  wxData.wind_speed      = doc["wind_speed"]      | 0.0f;
+  wxData.wind_dir        = doc["wind_dir"]        | 0;
+  wxData.uv_index        = doc["uv_index"]        | 0.0f;
+  wxData.utc_offset_secs = doc["utc_offset_secs"] | 0;
+  strlcpy(wxData.condition,     doc["condition"]     | "---", sizeof(wxData.condition));
+  strlcpy(wxData.wind_cardinal, doc["wind_cardinal"] | "?",   sizeof(wxData.wind_cardinal));
+  strlcpy(wxData.tide_dir,      doc["tide_dir"]      | "",    sizeof(wxData.tide_dir));
+  strlcpy(wxData.tide_time,     doc["tide_time"]     | "",    sizeof(wxData.tide_time));
+  wxData.tide_height  = doc["tide_height"] | 0.0f;
+  wxData.tide_is_high = (strcmp(doc["tide_type"] | "LOW", "HIGH") == 0);
+  wxReady = true;
+  Serial.printf("[WX] %.1f C  %s  UV %.1f  TIDE %s %s\n",
+    wxData.temp, wxData.condition, wxData.uv_index, wxData.tide_dir, wxData.tide_time);
+  return true;
+}
+
+// ─── Fetch weather from proxy (Open-Meteo) ───────────────
 bool fetchWeather() {
   esp_task_wdt_reset();
   if (!wifiOk()) { Serial.println("[WX] WiFi not connected"); return false; }
   char url[160];
-  snprintf(url, sizeof(url),
-    "https://%s/weather?lat=%.4f&lon=%.4f",
-    PROXY_HOST, HOME_LAT, HOME_LON);
+  snprintf(url, sizeof(url), "https://%s/weather?lat=%.4f&lon=%.4f",
+           PROXY_HOST, HOME_LAT, HOME_LON);
 
   for (int attempt = 1; attempt <= 2; attempt++) {
-    if (attempt > 1) {
-      Serial.println("[WX] Retrying...");
-      delay(2000);
-      esp_task_wdt_reset();
-    }
+    if (attempt > 1) { Serial.println("[WX] Retrying..."); delay(2000); esp_task_wdt_reset(); }
     WiFiClientSecure tcp;
     tcp.setInsecure();
     tcp.setTimeout(8000);
@@ -568,47 +543,24 @@ bool fetchWeather() {
       http.end();
       continue;
     }
-    int wlen = http.getSize();
-    WiFiClient* wstream = http.getStreamPtr();
-    String body;
-    if (wlen > 0) body.reserve(wlen);
-    { uint8_t wbuf[256]; unsigned long wdl = millis() + 10000;
-      while (millis() < wdl && (http.connected() || wstream->available())) {
-        int wa = wstream->available();
-        if (wa > 0) { int wn = wstream->readBytes(wbuf, min(wa, (int)sizeof(wbuf)));
-          if (wn > 0) { body += String((const char*)wbuf, wn); wdl = millis() + 10000; }
-        } else { delay(5); }
-        esp_task_wdt_reset();
-      }
+    char body[768] = {0};
+    int bpos = 0;
+    WiFiClient* stream = http.getStreamPtr();
+    unsigned long dl = millis() + 10000;
+    while (millis() < dl && (http.connected() || stream->available())
+           && bpos < (int)sizeof(body) - 1) {
+      int avail = stream->available();
+      if (avail > 0) {
+        int n = stream->readBytes((uint8_t*)(body + bpos),
+                                  min(avail, (int)sizeof(body) - bpos - 1));
+        if (n > 0) { bpos += n; dl = millis() + 10000; }
+      } else { delay(5); }
+      esp_task_wdt_reset();
     }
     http.end();
     esp_task_wdt_reset();
-    StaticJsonDocument<640> doc;
-    if (deserializeJson(doc, body) != DeserializationError::Ok) {
-      Serial.printf("[WX] JSON parse error (attempt %d/2)\n", attempt);
-      continue;
-    }
-    wxData.temp            = doc["temp"]            | 0.0f;
-    wxData.feels_like      = doc["feels_like"]      | 0.0f;
-    wxData.humidity        = doc["humidity"]        | 0;
-    wxData.wind_speed      = doc["wind_speed"]      | 0.0f;
-    wxData.wind_dir        = doc["wind_dir"]        | 0;
-    wxData.uv_index        = doc["uv_index"]        | 0.0f;
-    wxData.utc_offset_secs = doc["utc_offset_secs"] | 0;
-    const char* cond = doc["condition"] | "---";
-    strlcpy(wxData.condition, cond, sizeof(wxData.condition));
-    const char* wc = doc["wind_cardinal"] | "?";
-    strlcpy(wxData.wind_cardinal, wc, sizeof(wxData.wind_cardinal));
-    const char* td = doc["tide_dir"] | "";
-    strlcpy(wxData.tide_dir, td, sizeof(wxData.tide_dir));
-    const char* tt = doc["tide_time"] | "";
-    strlcpy(wxData.tide_time, tt, sizeof(wxData.tide_time));
-    wxData.tide_height  = doc["tide_height"] | 0.0f;
-    wxData.tide_is_high = (strcmp(doc["tide_type"] | "LOW", "HIGH") == 0);
-    wxReady = true;
-    Serial.printf("[WX] %.1f C  %s  UV %.1f  TIDE %s %s\n",
-      wxData.temp, wxData.condition, wxData.uv_index, wxData.tide_dir, wxData.tide_time);
-    return true;
+    if (parseWeatherBody(body)) return true;
+    Serial.printf("[WX] JSON parse error (attempt %d/2)\n", attempt);
   }
   Serial.println("[WX] All attempts failed");
   return false;

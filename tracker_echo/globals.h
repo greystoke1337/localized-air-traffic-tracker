@@ -126,9 +126,7 @@ void drawTerritoryLine(const char* territory);
 void renderTrackFlight(const Flight& f);
 
 // network.ino
-String fetchFromProxy();
 int fetchAndParseDirectAPI();
-int parsePayload(String& payload);
 int extractFlights(DynamicJsonDocument& doc);
 void fetchFlights();
 void fetchTrackStatus();
@@ -153,7 +151,7 @@ void checkSerialCmd();
 
 // sd_config.ino
 void loadConfig();
-void writeCache(const String& payload);
+void writeCache(const char* payload);
 String readCache();
 void logFlight(const Flight& f);
 void logUnknown(const char* type, const char* code, const char* context);
