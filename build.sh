@@ -662,6 +662,7 @@ run_golf() {
     $(config_flag) \
     --fqbn        "$GOLF_FQBN" \
     --build-path  "$GOLF_BUILD_DIR" \
+    --warnings    all \
     "$GOLF_SKETCH"
 
   # Touch the running port at 1200 baud — triggers SAMD bootloader reset
@@ -675,12 +676,12 @@ except Exception as e:
     print('Touch failed:', e, file=sys.stderr)
 "
 
-  # Poll for the bootloader port (COM10) to enumerate — up to 5 seconds
+  # Snapshot existing ports, then poll for any new one after the 1200-baud touch
   local boot_port
   boot_port=$(python -c "
 import serial.tools.list_ports, time, sys
+seen = {p.device for p in serial.tools.list_ports.comports()}
 deadline = time.time() + 5
-seen = {'$run_port', 'COM1'}
 while time.time() < deadline:
     ports = {p.device for p in serial.tools.list_ports.comports()}
     new = ports - seen
@@ -713,6 +714,7 @@ run_golf_compile() {
     $(config_flag) \
     --fqbn        "$GOLF_FQBN" \
     --build-path  "$GOLF_BUILD_DIR" \
+    --warnings    all \
     "$GOLF_SKETCH"
   info "Golf compile complete."
 }

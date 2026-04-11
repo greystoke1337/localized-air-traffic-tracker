@@ -10,6 +10,74 @@ static float haversine(float lat1, float lon1, float lat2, float lon2) {
   return R * 2.0f * atan2f(sqrtf(a), sqrtf(1.0f - a));
 }
 
+// Skip HTTP response headers until a blank line or deadline expires.
+static bool skipNetHeaders(WiFiSSLClient &client, unsigned long deadline) {
+  while (client.connected() && millis() < deadline) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r" || line == "") return true;
+  }
+  return false;
+}
+
+// Populate out with the closest valid aircraft from the JSON array.
+// Returns true if a candidate was found, false if all were below the floor.
+static bool selectBestAircraft(JsonArray ac, Flight &out) {
+  Flight best;
+  best.valid = false;
+  float bestDist = 1e9f;
+
+  for (JsonObject aircraft : ac) {
+    int alt = aircraft["alt_baro"] | 0;
+    if (alt < ALT_FLOOR_FT) continue;
+
+    float lat = aircraft["lat"] | 0.0f;
+    float lon = aircraft["lon"] | 0.0f;
+    float d   = haversine(HOME_LAT, HOME_LON, lat, lon);
+    if (d >= bestDist) continue;
+
+    const char *cs   = aircraft["flight"] | "------";
+    const char *dep  = aircraft["dep"]    | "";
+    const char *arr  = aircraft["arr"]    | "";
+    const char *type = aircraft["t"]      | "";
+    int speed        = (int)roundf(aircraft["gs"] | 0.0f);
+
+    strncpy(best.callsign, cs, sizeof(best.callsign) - 1);
+    best.callsign[sizeof(best.callsign) - 1] = '\0';
+    int len = strlen(best.callsign);
+    while (len > 0 && best.callsign[len - 1] == ' ') best.callsign[--len] = '\0';
+
+    icaoToIata(dep, best.depCode, sizeof(best.depCode));
+    icaoToIata(arr, best.arrCode, sizeof(best.arrCode));
+
+    resolveTypeName(type, best.type, sizeof(best.type));
+    best.callsignColor = getAirlineColor(cs);
+    best.typeColor     = getTypeColor(type);
+    best.alt   = alt;
+    best.speed = speed;
+    best.dist  = d;
+    best.valid = true;
+    bestDist   = d;
+  }
+
+  if (!best.valid) return false;
+  out = best;
+  Serial.printf("[NET] %s  %s>%s  alt=%d spd=%d dist=%.1fkm\n",
+    out.callsign, out.depCode, out.arrCode, out.alt, out.speed, bestDist);
+  return true;
+}
+
+// Set out to the empty/no-flight state.
+static void clearFlight(Flight &out) {
+  out.valid = false;
+  strncpy(out.callsign, "------", sizeof(out.callsign));
+  out.depCode[0] = '\0';
+  out.arrCode[0] = '\0';
+  out.type[0]    = '\0';
+  out.alt = 0; out.speed = 0; out.dist = (float)GEOFENCE_KM;
+  out.callsignColor = C_AMBER;
+  out.typeColor     = C_AMBER;
+}
+
 bool fetchFlight(Flight &out) {
   WiFiSSLClient client;
   client.setTimeout(10000);
@@ -19,7 +87,6 @@ bool fetchFlight(Flight &out) {
     return false;
   }
 
-  // Build request
   char req[256];
   snprintf(req, sizeof(req),
     "GET /flights?lat=%.4f&lon=%.4f&radius=%d&min_altitude=%d HTTP/1.1\r\n"
@@ -27,22 +94,18 @@ bool fetchFlight(Flight &out) {
     "Connection: close\r\n"
     "\r\n",
     (float)HOME_LAT, (float)HOME_LON, GEOFENCE_KM, ALT_FLOOR_FT);
-  client.print(req);
-
-  // Skip HTTP headers (read until blank line)
-  unsigned long deadline = millis() + 10000UL;
-  while (client.connected() && millis() < deadline) {
-    String line = client.readStringUntil('\n');
-    if (line == "\r" || line == "") break;
+  if (!client.print(req)) {
+    client.stop();
+    Serial.println("[NET] Write failed");
+    return false;
   }
 
-  if (millis() >= deadline) {
+  if (!skipNetHeaders(client, millis() + 10000UL)) {
     client.stop();
     Serial.println("[NET] Timeout reading headers");
     return false;
   }
 
-  // Stream-parse JSON with a filter to minimise RAM usage
   JsonDocument filter;
   JsonObject acf = filter["ac"].add<JsonObject>();
   acf["flight"]   = true;
@@ -65,75 +128,10 @@ bool fetchFlight(Flight &out) {
   }
 
   JsonArray ac = doc["ac"];
-  if (ac.isNull()) {
-    out.valid = false;
-    strncpy(out.callsign, "------", sizeof(out.callsign));
-    out.depCode[0] = '\0';
-    out.arrCode[0] = '\0';
-    out.type[0]    = '\0';
-    out.alt = 0; out.speed = 0; out.dist = (float)GEOFENCE_KM;
-    out.callsignColor = C_AMBER;
-    out.typeColor     = C_AMBER;
-    return true;
+  if (ac.isNull() || !selectBestAircraft(ac, out)) {
+    if (!ac.isNull()) Serial.println("[NET] No aircraft above floor");
+    clearFlight(out);
   }
-
-  // Find the closest aircraft above the altitude floor
-  Flight best;
-  best.valid = false;
-  float bestDist = 1e9f;
-
-  for (JsonObject aircraft : ac) {
-    int alt = aircraft["alt_baro"] | 0;
-    if (alt < ALT_FLOOR_FT) continue;
-
-    float lat = aircraft["lat"] | 0.0f;
-    float lon = aircraft["lon"] | 0.0f;
-    float d   = haversine(HOME_LAT, HOME_LON, lat, lon);
-    if (d >= bestDist) continue;
-
-    const char *cs   = aircraft["flight"] | "------";
-    const char *dep  = aircraft["dep"]    | "";
-    const char *arr  = aircraft["arr"]    | "";
-    const char *type = aircraft["t"]      | "";
-    int speed        = (int)roundf(aircraft["gs"] | 0.0f);
-
-    // Callsign — copy and trim trailing spaces
-    strncpy(best.callsign, cs, sizeof(best.callsign) - 1);
-    best.callsign[sizeof(best.callsign) - 1] = '\0';
-    int len = strlen(best.callsign);
-    while (len > 0 && best.callsign[len - 1] == ' ') best.callsign[--len] = '\0';
-
-    // Convert ICAO airport codes to IATA for display
-    icaoToIata(dep, best.depCode, sizeof(best.depCode));
-    icaoToIata(arr, best.arrCode, sizeof(best.arrCode));
-
-    resolveTypeName(type, best.type, sizeof(best.type));
-    best.callsignColor = getAirlineColor(cs);
-    best.typeColor     = getTypeColor(type);
-    best.alt   = alt;
-    best.speed = speed;
-    best.dist  = d;
-    best.valid = true;
-    bestDist   = d;
-  }
-
-  if (best.valid) {
-    out = best;
-    Serial.printf("[NET] %s  %s>%s  alt=%d spd=%d dist=%.1fkm\n",
-      out.callsign, out.depCode, out.arrCode, out.alt, out.speed, bestDist);
-    return true;
-  }
-
-  // No aircraft above altitude floor
-  out.valid = false;
-  strncpy(out.callsign, "------", sizeof(out.callsign));
-  out.depCode[0] = '\0';
-  out.arrCode[0] = '\0';
-  out.type[0]    = '\0';
-  out.alt = 0; out.speed = 0; out.dist = (float)GEOFENCE_KM;
-  out.callsignColor = C_AMBER;
-  out.typeColor     = C_AMBER;
-  Serial.println("[NET] No aircraft above floor");
   return true;
 }
 
@@ -153,15 +151,13 @@ bool fetchWeather(Weather &out) {
     "Connection: close\r\n"
     "\r\n",
     (float)HOME_LAT, (float)HOME_LON);
-  client.print(req);
-
-  unsigned long deadline = millis() + 10000UL;
-  while (client.connected() && millis() < deadline) {
-    String line = client.readStringUntil('\n');
-    if (line == "\r" || line == "") break;
+  if (!client.print(req)) {
+    client.stop();
+    Serial.println("[WEATHER] Write failed");
+    return false;
   }
 
-  if (millis() >= deadline) {
+  if (!skipNetHeaders(client, millis() + 10000UL)) {
     client.stop();
     Serial.println("[WEATHER] Timeout reading headers");
     return false;

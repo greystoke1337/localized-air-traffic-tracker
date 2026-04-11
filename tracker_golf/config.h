@@ -74,6 +74,17 @@
 #define FIRMWARE_VERSION      1          // increment on each golf-publish
 #define OTA_CHECK_INTERVAL_MS 21600000UL // check for updates every 6 hours
 
+// OTA local dev server defaults — override in secrets.h if needed
+#ifndef OTA_LOCAL_HOST
+#define OTA_LOCAL_HOST ""
+#endif
+#ifndef OTA_LOCAL_PORT
+#define OTA_LOCAL_PORT 8080
+#endif
+
+// WiFi: hard-reset if the AP cannot be reached within this window
+#define WIFI_CONNECT_TIMEOUT_MS 300000UL  // 5 minutes
+
 // Weather page
 #define UTC_OFFSET_HOURS    11          // AEDT (UTC+11); change to 10 for AEST
 #define WEATHER_REFRESH_MS  600000UL   // re-fetch weather every 10 minutes

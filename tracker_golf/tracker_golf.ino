@@ -101,6 +101,51 @@ void setup() {
   drawAll(currentFlight, progressPixel);
 }
 
+// Run one flight-refresh cycle: fetch, update fail count, auto page-switch, redraw.
+static void refreshFlight() {
+  lastFetchMs   = millis();
+  lastPixelMs   = lastFetchMs;
+  progressPixel = 0;
+
+  if (currentPage == PAGE_FLIGHT) {
+    drawAll(currentFlight, progressPixel);  // snap back to callsign view before blocking fetch
+  }
+
+  bool ok = fetchFlight(currentFlight);
+  if (!ok) {
+    failCount++;
+    Serial.print("[MAIN] Fetch fail #");
+    Serial.println(failCount);
+  } else {
+    failCount = 0;
+  }
+
+  if (failCount >= MAX_FAIL_COUNT) {
+    Serial.println("[MAIN] Too many failures — reconnecting WiFi");
+    failCount = 0;
+    WiFi.end();
+    connectWiFi();
+  }
+
+  // Auto page-switch: no flights → weather; flight reappears → flight
+  if (!currentFlight.valid && currentPage == PAGE_FLIGHT) {
+    Serial.println("[MAIN] No flights — switching to weather page");
+    currentPage  = PAGE_WEATHER;
+    autoSwitched = true;
+  } else if (currentFlight.valid && currentPage == PAGE_WEATHER && autoSwitched) {
+    Serial.println("[MAIN] Flight detected — returning to flight page");
+    currentPage  = PAGE_FLIGHT;
+    autoSwitched = false;
+  }
+
+  if (currentPage == PAGE_WEATHER) {
+    int h, m; currentTime(h, m);
+    drawWeatherPage(currentWeather, h, m);
+  } else {
+    drawAll(currentFlight, progressPixel);
+  }
+}
+
 void loop() {
   unsigned long now = millis();
 
@@ -142,46 +187,6 @@ void loop() {
 
   // Flight refresh cycle (every 30 seconds)
   if (now - lastFetchMs >= REFRESH_MS) {
-    lastFetchMs   = now;
-    lastPixelMs   = now;
-    progressPixel = 0;
-
-    if (currentPage == PAGE_FLIGHT) {
-      drawAll(currentFlight, progressPixel);  // snap back to callsign view before blocking fetch
-    }
-
-    bool ok = fetchFlight(currentFlight);
-    if (!ok) {
-      failCount++;
-      Serial.print("[MAIN] Fetch fail #");
-      Serial.println(failCount);
-    } else {
-      failCount = 0;
-    }
-
-    if (failCount >= MAX_FAIL_COUNT) {
-      Serial.println("[MAIN] Too many failures — reconnecting WiFi");
-      failCount = 0;
-      WiFi.end();
-      connectWiFi();
-    }
-
-    // Auto page-switch logic: no flights → weather page; flight reappears → flight page
-    if (!currentFlight.valid && currentPage == PAGE_FLIGHT) {
-      Serial.println("[MAIN] No flights — switching to weather page");
-      currentPage  = PAGE_WEATHER;
-      autoSwitched = true;
-    } else if (currentFlight.valid && currentPage == PAGE_WEATHER && autoSwitched) {
-      Serial.println("[MAIN] Flight detected — returning to flight page");
-      currentPage  = PAGE_FLIGHT;
-      autoSwitched = false;
-    }
-
-    if (currentPage == PAGE_WEATHER) {
-      int h, m; currentTime(h, m);
-      drawWeatherPage(currentWeather, h, m);
-    } else {
-      drawAll(currentFlight, progressPixel);
-    }
+    refreshFlight();
   }
 }

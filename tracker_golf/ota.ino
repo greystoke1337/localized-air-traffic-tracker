@@ -1,25 +1,43 @@
 // ota.ino — WiFi OTA firmware update (HTTPS download + NVMCTRL flash write from SRAM)
-// Local OTA: define OTA_LOCAL_HOST in secrets.h (HTTP, no SSL). Falls back to remote if unreachable.
+// Local OTA: set OTA_LOCAL_HOST to your machine's LAN IP in secrets.h (HTTP, no SSL).
+//            Falls back to remote if host is empty or unreachable.
 // Remote OTA: api.overheadtracker.com (HTTPS). Checked every OTA_CHECK_INTERVAL_MS.
 
 // Download buffer (BSS — zero-initialised, no flash cost). 110 KB covers any foreseeable build.
 static uint8_t otaBuf[110000];
 
-#ifdef OTA_LOCAL_HOST
-#ifndef OTA_LOCAL_PORT
-#define OTA_LOCAL_PORT 8080
-#endif
-#endif
-
 // Forward declaration (defined below checkOTA so it can be placed in .data section)
 static void __attribute__((section(".data"), noinline, used))
 applyOTA(const uint8_t *buf, uint32_t len);
 
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+// Skip HTTP response headers until a blank line or deadline expires.
+static bool skipOtaHeaders(WiFiClient &client, unsigned long deadline) {
+  while (client.connected() && millis() < deadline) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r" || line == "") return true;
+  }
+  return false;
+}
+
+// Read HTTP body into otaBuf. Returns true if at least 4 KB was received.
+static bool readOtaBinary(WiFiClient &client, uint32_t &received) {
+  received = 0;
+  unsigned long deadline = millis() + 30000UL;
+  while (client.connected() && received < sizeof(otaBuf) && millis() < deadline) {
+    int n = client.read(otaBuf + received, sizeof(otaBuf) - received);
+    if (n > 0) { received += n; deadline = millis() + 5000UL; }
+  }
+  return received >= 4096;
+}
+
 // ── Local OTA (HTTP) ──────────────────────────────────────────────────────────
 // Tries OTA_LOCAL_HOST:OTA_LOCAL_PORT over plain HTTP.
-// Returns true if handled (up-to-date or flashed), false if server unreachable.
-#ifdef OTA_LOCAL_HOST
+// Returns true if handled (up-to-date or flashed), false if host is empty or unreachable.
 static bool checkLocalOTA() {
+  if (!OTA_LOCAL_HOST[0]) return false;
+
   WiFiClient client;
   client.setTimeout(5000);
   if (!client.connect(OTA_LOCAL_HOST, OTA_LOCAL_PORT)) {
@@ -27,19 +45,15 @@ static bool checkLocalOTA() {
     return false;
   }
 
-  client.print(
+  if (!client.print(
     "GET /firmware/golf/version HTTP/1.1\r\n"
     "Host: " OTA_LOCAL_HOST "\r\n"
     "Connection: close\r\n"
-    "\r\n"
-  );
-
-  unsigned long deadline = millis() + 5000UL;
-  while (client.connected() && millis() < deadline) {
-    String line = client.readStringUntil('\n');
-    if (line == "\r" || line == "") break;
+    "\r\n")) {
+    client.stop(); return false;
   }
-  if (millis() >= deadline) { client.stop(); return false; }
+
+  if (!skipOtaHeaders(client, millis() + 5000UL)) { client.stop(); return false; }
 
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, client);
@@ -54,32 +68,23 @@ static bool checkLocalOTA() {
   drawOTAStatus("OTA...");
 
   if (!client.connect(OTA_LOCAL_HOST, OTA_LOCAL_PORT)) return false;
-  client.print(
+  if (!client.print(
     "GET /firmware/golf/binary HTTP/1.1\r\n"
     "Host: " OTA_LOCAL_HOST "\r\n"
     "Connection: close\r\n"
-    "\r\n"
-  );
-
-  deadline = millis() + 15000UL;
-  while (client.connected() && millis() < deadline) {
-    String line = client.readStringUntil('\n');
-    if (line == "\r" || line == "") break;
+    "\r\n")) {
+    client.stop(); return false;
   }
-  if (millis() >= deadline) { client.stop(); return false; }
+
+  if (!skipOtaHeaders(client, millis() + 15000UL)) { client.stop(); return false; }
 
   uint32_t received = 0;
-  deadline = millis() + 30000UL;
-  while (client.connected() && received < sizeof(otaBuf) && millis() < deadline) {
-    int n = client.read(otaBuf + received, sizeof(otaBuf) - received);
-    if (n > 0) { received += n; deadline = millis() + 5000UL; }
-  }
-  client.stop();
-
-  if (received < 4096) {
+  if (!readOtaBinary(client, received)) {
+    client.stop();
     Serial.printf("[OTA] Local download too small (%u bytes) — trying remote\n", received);
     return false;
   }
+  client.stop();
 
   Serial.printf("[OTA] Local: downloaded %u bytes — flashing\n", received);
   drawOTAStatus("FLASH");
@@ -88,15 +93,13 @@ static bool checkLocalOTA() {
   applyOTA(otaBuf, received);  // never returns
   return true;
 }
-#endif
 
 // ── Remote OTA (HTTPS) ────────────────────────────────────────────────────────
 // Check proxy for a newer firmware version; download and self-flash if one is found.
 // Safe to call from setup() and periodically from loop(). Returns immediately if up-to-date.
 void checkOTA() {
-#ifdef OTA_LOCAL_HOST
-  if (checkLocalOTA()) return;
-#endif
+  if (OTA_LOCAL_HOST[0] && checkLocalOTA()) return;
+
   WiFiSSLClient client;
   client.setTimeout(10000);
 
@@ -106,26 +109,22 @@ void checkOTA() {
     return;
   }
 
-  client.print(
+  if (!client.print(
     "GET /firmware/golf/version HTTP/1.1\r\n"
     "Host: api.overheadtracker.com\r\n"
     "Connection: close\r\n"
-    "\r\n"
-  );
-
-  // Skip HTTP headers
-  unsigned long deadline = millis() + 10000UL;
-  while (client.connected() && millis() < deadline) {
-    String line = client.readStringUntil('\n');
-    if (line == "\r" || line == "") break;
+    "\r\n")) {
+    client.stop();
+    Serial.println("[OTA] Write failed (version check)");
+    return;
   }
-  if (millis() >= deadline) {
+
+  if (!skipOtaHeaders(client, millis() + 10000UL)) {
     client.stop();
     Serial.println("[OTA] Timeout reading version headers");
     return;
   }
 
-  // Parse { "version": N } — read before stop
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, client);
   client.stop();
@@ -138,10 +137,10 @@ void checkOTA() {
 
   int remoteVer = doc["version"] | 0;
   Serial.printf("[OTA] Remote version %d, local %d\n", remoteVer, FIRMWARE_VERSION);
-  if (remoteVer <= FIRMWARE_VERSION) return;  // already up-to-date
+  if (remoteVer <= FIRMWARE_VERSION) return;
 
   // ── Step 2: download binary ────────────────────────────────────────────────
-  Serial.printf("[OTA] Update available — downloading\n");
+  Serial.println("[OTA] Update available — downloading");
   drawOTAStatus("OTA...");
 
   if (!client.connect("api.overheadtracker.com", 443)) {
@@ -149,39 +148,29 @@ void checkOTA() {
     return;
   }
 
-  client.print(
+  if (!client.print(
     "GET /firmware/golf/binary HTTP/1.1\r\n"
     "Host: api.overheadtracker.com\r\n"
     "Connection: close\r\n"
-    "\r\n"
-  );
-
-  deadline = millis() + 15000UL;
-  while (client.connected() && millis() < deadline) {
-    String line = client.readStringUntil('\n');
-    if (line == "\r" || line == "") break;
+    "\r\n")) {
+    client.stop();
+    Serial.println("[OTA] Write failed (binary download)");
+    return;
   }
-  if (millis() >= deadline) {
+
+  if (!skipOtaHeaders(client, millis() + 15000UL)) {
     client.stop();
     Serial.println("[OTA] Timeout reading binary headers");
     return;
   }
 
   uint32_t received = 0;
-  deadline = millis() + 30000UL;
-  while (client.connected() && received < sizeof(otaBuf) && millis() < deadline) {
-    int n = client.read(otaBuf + received, sizeof(otaBuf) - received);
-    if (n > 0) {
-      received += n;
-      deadline = millis() + 5000UL;  // extend deadline while data flowing
-    }
-  }
-  client.stop();
-
-  if (received < 4096) {
+  if (!readOtaBinary(client, received)) {
+    client.stop();
     Serial.printf("[OTA] Download too small (%u bytes) — aborting\n", received);
     return;
   }
+  client.stop();
 
   Serial.printf("[OTA] Downloaded %u bytes — flashing\n", received);
   drawOTAStatus("FLASH");
@@ -196,33 +185,38 @@ void checkOTA() {
 // SAMD51 NVMCTRL: block erase = 8 KB, quad-word write = 16 bytes.
 static void __attribute__((section(".data"), noinline, used))
 applyOTA(const uint8_t *buf, uint32_t len) {
+  if (!buf || len < 4096) { NVIC_SystemReset(); return; }
+
   const uint32_t SKETCH_START = 0x4000UL;
   const uint32_t BLOCK_SIZE   = 8192UL;
+  const uint32_t SPIN_MAX     = 100000UL;
 
   __disable_irq();
 
-  // Wait for any in-progress NVM operation
-  while (!NVMCTRL->INTFLAG.bit.DONE) {} NVMCTRL->INTFLAG.bit.DONE = 1;
+  uint32_t spin = 0;
+  while (!NVMCTRL->INTFLAG.bit.DONE && ++spin < SPIN_MAX) {}
+  NVMCTRL->INTFLAG.bit.DONE = 1;
 
   // Erase all 8 KB blocks covering the new binary
   uint32_t eraseLen = (len + BLOCK_SIZE - 1) & ~(BLOCK_SIZE - 1);
   for (uint32_t off = 0; off < eraseLen; off += BLOCK_SIZE) {
     NVMCTRL->ADDR.reg  = SKETCH_START + off;
     NVMCTRL->CTRLA.reg = NVMCTRL_CTRLB_CMD_EB | NVMCTRL_CTRLB_CMDEX_KEY;
-    while (!NVMCTRL->INTFLAG.bit.DONE) {} NVMCTRL->INTFLAG.bit.DONE = 1;
+    spin = 0;
+    while (!NVMCTRL->INTFLAG.bit.DONE && ++spin < SPIN_MAX) {}
+    NVMCTRL->INTFLAG.bit.DONE = 1;
   }
 
   // Write quad-words (16 bytes, 4 × uint32_t each)
-  uint32_t writeLen = (len + 15) & ~15UL;  // round up to 16-byte boundary
+  uint32_t writeLen = (len + 15) & ~15UL;
   for (uint32_t off = 0; off < writeLen; off += 16) {
     volatile uint32_t *dst = (volatile uint32_t *)(SKETCH_START + off);
     const uint32_t    *src = (const uint32_t *)(buf + off);
-    dst[0] = src[0];
-    dst[1] = src[1];
-    dst[2] = src[2];
-    dst[3] = src[3];
+    dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2]; dst[3] = src[3];
     NVMCTRL->CTRLA.reg = NVMCTRL_CTRLB_CMD_WQW | NVMCTRL_CTRLB_CMDEX_KEY;
-    while (!NVMCTRL->INTFLAG.bit.DONE) {} NVMCTRL->INTFLAG.bit.DONE = 1;
+    spin = 0;
+    while (!NVMCTRL->INTFLAG.bit.DONE && ++spin < SPIN_MAX) {}
+    NVMCTRL->INTFLAG.bit.DONE = 1;
   }
 
   NVIC_SystemReset();

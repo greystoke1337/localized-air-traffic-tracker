@@ -4,13 +4,13 @@ void connectWiFi() {
   Serial.print("[WIFI] Connecting to ");
   Serial.println(WIFI_SSID);
 
-  int attempts = 0;
+  unsigned long deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
   while (WiFi.begin(WIFI_SSID, WIFI_PASSWORD) != WL_CONNECTED) {
     delay(1000);
     Serial.print(".");
-    if (++attempts >= 30) {
-      Serial.println("\n[WIFI] Retrying...");
-      attempts = 0;
+    if (millis() >= deadline) {
+      Serial.println("\n[WIFI] Timeout — rebooting");
+      NVIC_SystemReset();
     }
   }
   Serial.print("\n[WIFI] Connected, IP: ");

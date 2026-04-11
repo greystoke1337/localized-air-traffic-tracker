@@ -72,7 +72,7 @@ static void drawAltSpeed(int alt, int speed) {
   matrix.setTextWrap(false);
 
   {
-    char numBuf[8];
+    char numBuf[12];
     if (alt > 0) snprintf(numBuf, sizeof(numBuf), "%d", alt);
     else         snprintf(numBuf, sizeof(numBuf), "---");
     matrix.setTextColor(dim(C_DEEP_BLUE));
@@ -82,11 +82,11 @@ static void drawAltSpeed(int alt, int speed) {
   }
 
   {
-    char numBuf[8];
+    char numBuf[12];
     if (speed > 0) snprintf(numBuf, sizeof(numBuf), "%d", speed);
     else           snprintf(numBuf, sizeof(numBuf), "---");
     // Measure full string width for right-alignment
-    char fullBuf[10];
+    char fullBuf[14];
     snprintf(fullBuf, sizeof(fullBuf), "%sKT", numBuf);
     int16_t x1, y1; uint16_t w, h;
     matrix.getTextBounds(fullBuf, 0, ALTITUDE_Y, &x1, &y1, &w, &h);
@@ -107,7 +107,7 @@ static void drawRoute(const char *depCode, const char *arrCode, const char *type
   if (isGA) {
     printCenteredTT(type && type[0] ? type : "GA", ROUTE_Y, C_AMBER);
   } else if (depCode && depCode[0] && arrCode && arrCode[0]) {
-    char buf[12];
+    char buf[14];
     snprintf(buf, sizeof(buf), "%s > %s", depCode, arrCode);
     printCenteredTT(buf, ROUTE_Y, C_WHITE);
   } else if (depCode && depCode[0]) {
