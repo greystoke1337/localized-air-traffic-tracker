@@ -1,38 +1,80 @@
-#include <lvgl.h>
+#include "user_config.h"
+#include "config.h"
 #include "lvgl_port.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "esp_err.h"
+#include "i2c_bsp.h"
+#include "src/lcd_bl_bsp/lcd_bl_pwm_bsp.h"
+#include <WiFi.h>
+#include <Preferences.h>
+#include <WebServer.h>
+#include <DNSServer.h>
 
-static SemaphoreHandle_t lvgl_mux = NULL;
+char      WIFI_SSID[64]    = "";
+char      WIFI_PASS[64]    = "";
+char      boot_status[64]  = "INITIALISING...";
+WebServer setupServer(80);
+DNSServer dnsServer;
 
-static void lvgl_task(void *arg) {
-  while (1) {
-    xSemaphoreTake(lvgl_mux, portMAX_DELAY);
-    lv_timer_handler();
-    xSemaphoreGive(lvgl_mux);
-    vTaskDelay(pdMS_TO_TICKS(5));
-  }
+void setup()
+{
+    i2c_master_Init();
+    Serial.begin(115200);
+    lvgl_port_init();                   /* spawns LVGL task → shows boot screen */
+    lcd_bl_pwm_bsp_init(LCD_PWM_MODE_255);
+
+    if (!loadWiFiConfig()) {
+        strlcpy(boot_status, "SETUP MODE  Connect to DELTA-SETUP", sizeof(boot_status));
+        startCaptivePortal();           /* blocks until form saved + restart */
+    }
+
+    if (!connectWiFi()) {
+        strlcpy(boot_status, "WIFI FAILED  CHECK CREDENTIALS", sizeof(boot_status));
+        delay(3000);
+    } else {
+        strlcpy(boot_status, "WIFI CONNECTED", sizeof(boot_status));
+        delay(600);
+    }
+
+    lvgl_switch_to_dashboard();
+    fetchWeather();
+    fetchReceiver();
+    fetchServer();
+    fetchNearest();
 }
 
-void setup() {
-  lvgl_port_init();
+static unsigned long last_weather_ms  = 0;
+static unsigned long last_recv_ms     = 0;
+static unsigned long last_server_ms   = 0;
+static unsigned long last_nearest_ms  = 0;
 
-  // Backlight: GPIO 8, full brightness
-  ledcAttach(8, 5000, 8);
-  ledcWrite(8, 255);
+void loop()
+{
+    unsigned long now = millis();
+    if (now - last_weather_ms >= WEATHER_REFRESH_MS) {
+        last_weather_ms = now;
+        fetchWeather();
+    }
+    if (now - last_recv_ms >= RECEIVER_REFRESH_MS) {
+        last_recv_ms = now;
+        fetchReceiver();
+    }
+    if (now - last_server_ms >= SERVER_REFRESH_MS) {
+        last_server_ms = now;
+        fetchServer();
+    }
+    if (now - last_nearest_ms >= NEAREST_REFRESH_MS) {
+        last_nearest_ms = now;
+        fetchNearest();
+    }
 
-  lvgl_mux = xSemaphoreCreateMutex();
-
-  // Hello World label, centered on the 640×172 display
-  xSemaphoreTake(lvgl_mux, portMAX_DELAY);
-  lv_obj_t *label = lv_label_create(lv_scr_act());
-  lv_label_set_text(label, "Hello World");
-  lv_obj_center(label);
-  xSemaphoreGive(lvgl_mux);
-
-  xTaskCreate(lvgl_task, "lvgl", 8192, NULL, 2, NULL);
-}
-
-void loop() {
-  vTaskDelay(pdMS_TO_TICKS(1000));
+#if (Backlight_Testing == 1)
+    setUpduty(LCD_PWM_MODE_255);
+    delay(1500);
+    setUpduty(LCD_PWM_MODE_175);
+    delay(1500);
+    setUpduty(LCD_PWM_MODE_125);
+    delay(1500);
+    setUpduty(LCD_PWM_MODE_0);
+    delay(1500);
+#endif
 }

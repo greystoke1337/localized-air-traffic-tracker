@@ -46,6 +46,7 @@ DELTA_SKETCH="tracker_delta/tracker_delta.ino"
 DELTA_FQBN="esp32:esp32:esp32s3:PSRAM=opi,USBMode=hwcdc,PartitionScheme=app3M_fat9M_16MB,FlashSize=16M"
 DELTA_BUILD_DIR="/tmp/overhead-tracker-delta-build"
 DELTA_PORT="${DELTA_PORT:-COM8}"
+LVGL_LIB_ROOT="C:\\Users\\maxim\\OneDrive\\Documents\\Arduino\\libraries\\lvgl"
 GOLF_SKETCH="tracker_golf/tracker_golf.ino"
 GOLF_FQBN="adafruit:samd:adafruit_matrixportal_m4"
 GOLF_BUILD_DIR="/tmp/overhead-tracker-golf-build"
@@ -653,6 +654,11 @@ run_delta_compile() {
   info "Delta compile complete."
 }
 
+# ── Delta compile + upload (alias: delta-test) ───────────────────────────────
+run_delta_test() {
+  run_delta "$@"
+}
+
 # ── Golf compile + upload ─────────────────────────────────────────────────────
 run_golf() {
   local run_port="${2:-$GOLF_PORT}"
@@ -820,6 +826,7 @@ case "$CMD" in
   foxtrot-proxy-host) run_foxtrot_proxy_host "$@" ;;
   delta)            run_delta "$@" ;;
   delta-compile)    run_delta_compile ;;
+  delta-test)       run_delta_test "$@" ;;
   golf)             run_golf "$@" ;;
   golf-compile)     run_golf_compile ;;
   golf-publish)     run_golf_publish ;;
