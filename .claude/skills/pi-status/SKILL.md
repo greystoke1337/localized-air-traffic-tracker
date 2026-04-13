@@ -10,20 +10,20 @@ SSH into the Raspberry Pi and check the TFT display service, system resources, a
 
 ## Steps
 
-### 1. PM2 process status
+### 1. systemd service status
 
 ```bash
-ssh pi@airplanes.local "pm2 list"
+ssh -i ~/.ssh/pi_proxy pi@airplanes.local "sudo systemctl status tft-display --no-pager"
 ```
 
-Expected process: `display` (id 0). The proxy no longer runs on the Pi (it's on Railway).
+Expected: `Active: active (running)`. Process manager is **systemd** (not PM2).
 
 ### 2. System resources
 
 Run these in a single SSH session:
 
 ```bash
-ssh pi@airplanes.local "echo '--- CPU TEMP ---' && vcgencmd measure_temp && echo '--- MEMORY ---' && free -h && echo '--- UPTIME ---' && uptime && echo '--- DISK ---' && df -h /"
+ssh -i ~/.ssh/pi_proxy pi@airplanes.local "echo '--- CPU TEMP ---' && vcgencmd measure_temp && echo '--- MEMORY ---' && free -h && echo '--- UPTIME ---' && uptime && echo '--- DISK ---' && df -h /"
 ```
 
 ### 3. Recent logs (errors only)
@@ -31,14 +31,14 @@ ssh pi@airplanes.local "echo '--- CPU TEMP ---' && vcgencmd measure_temp && echo
 Check the last 20 lines of the display service for errors:
 
 ```bash
-ssh pi@airplanes.local "pm2 logs display --nostream --lines 20 2>&1 | grep -i -E 'error|fail|crash|Traceback' | tail -5"
+ssh -i ~/.ssh/pi_proxy pi@airplanes.local "sudo journalctl -u tft-display -n 20 --no-pager 2>&1 | grep -i -E 'error|fail|crash|Traceback' | tail -5"
 ```
 
 ### 4. Report summary
 
 Tell the user:
-- Service status: whether display is online, restart count
-- CPU temperature (flag if >= 75C)
+- Service status: active/failed, how long it's been running
+- CPU temperature (flag if >= 75°C)
 - RAM usage percentage
 - Disk usage percentage
 - Any errors found in recent logs

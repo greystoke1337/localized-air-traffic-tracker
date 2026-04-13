@@ -3,26 +3,39 @@
 ## Deploy
 
 ```bash
-scp pi-display/display.py pi@airplanes.local:/home/pi/proxy/display.py && ssh pi@airplanes.local "pm2 restart display"
+scp pi-display/display.py pi@airplanes.local:/home/pi/tft_display.py && ssh -i ~/.ssh/pi_proxy pi@airplanes.local "sudo systemctl restart tft-display"
 ```
 
-SSH: `pi@airplanes.local`
-PM2 processes: `display` (id 0), `tunnel` (id 1)
+SSH: `pi@airplanes.local` (key: `~/.ssh/pi_proxy`)
 
-Or use the `/deploy-display` skill.
+Process manager: **systemd** (`tft-display.service`), runs as root.
+Depends on `readsb.service`. Logs via `journalctl -u tft-display`.
 
 ## Display Layout
 
-`display.py` renders to `/dev/fb1` via Pygame. Three-page rotation, 15 s cycle:
+Single static page, refreshes every 2 s. Renders to `/dev/fb0` via Pygame → RGB565.
+Reads local readsb files directly — **no network calls**.
 
-- **Page 0**: Live flights (nearest 2) + weather strip + flights-today counter + histogram
-- **Page 1**: Proxy stats grid (uptime, requests, cache hit, errors, clients, cached, routes, upstream) + API status dots (adsb.lol, adsb.fi, airplanes.live) + histogram + data age
-- **Page 2**: Server system stats (OS uptime, CPU temp, RAM%, load avg) + device health cards (Echo/Foxtrot: online dot, fw version, heap, RSSI, uptime, age)
+Header bar (36 px): `ADS-B RECEIVER` title, cyan underline.
 
-Title bar (24px): health dot left, page title center, page dots right.
-Phase colors: CLIMBING=green, OVERHEAD=blue, CRUISING=dim.
-Home location: Russell Lea, Sydney (-33.8530, 151.1410), 15 km radius.
+**Left column — HEALTH**
+- TEMP (°C, colour-coded cyan/amber/red)
+- CPU %
+- MEMORY (used / total MB)
+- UPTIME
 
-## Key Memory Files
+**Left column — RECEIVER** (from `/run/readsb/stats.json` → `last1min`)
+- MSGS/MIN — valid messages per minute
+- SIGNAL — dBFS (amber if > −10)
+- NOISE — dBFS
+- STRONG — strong signal count (red if > 0)
+- TRACKS — total aircraft tracked
 
-- `architecture.md` — display.py internals: polling intervals, rendering pipeline, error handling
+**Right column — AIRCRAFT** (from `/run/readsb/aircraft.json`)
+- TOTAL — all aircraft (how many have position)
+- FURTHEST — callsign + distance (nm)
+- HIGHEST — callsign + flight level
+- NEAREST — callsign + distance (nm)
+- EMRG — squawk 7500/7600/7700 or emergency flag (red if active, dash if clear)
+
+Touch on `/dev/input/event2` toggles backlight (GPIO 24) with 0.5 s debounce.

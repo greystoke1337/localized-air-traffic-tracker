@@ -8,12 +8,11 @@
 #include <Preferences.h>
 #include <WebServer.h>
 #include <DNSServer.h>
+#include <ArduinoJson.h>
 
 char      WIFI_SSID[64]    = "";
 char      WIFI_PASS[64]    = "";
 char      boot_status[64]  = "INITIALISING...";
-WebServer setupServer(80);
-DNSServer dnsServer;
 
 void setup()
 {
@@ -42,13 +41,12 @@ void setup()
     fetchNearest();
 }
 
-static unsigned long last_weather_ms  = 0;
-static unsigned long last_recv_ms     = 0;
-static unsigned long last_server_ms   = 0;
-static unsigned long last_nearest_ms  = 0;
-
 void loop()
 {
+    static unsigned long last_weather_ms  = 0;
+    static unsigned long last_recv_ms     = 0;
+    static unsigned long last_server_ms   = 0;
+    static unsigned long last_nearest_ms  = 0;
     unsigned long now = millis();
     if (now - last_weather_ms >= WEATHER_REFRESH_MS) {
         last_weather_ms = now;

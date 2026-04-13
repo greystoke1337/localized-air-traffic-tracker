@@ -14,7 +14,7 @@ Five components:
 | ESP32 firmware (4.0") | **Echo** | Arduino C++ on Freenove FNK0103S | Physical device (USB via `build.sh`, COM4) |
 | ESP32-S3 firmware (4.3") | **Foxtrot** | Arduino C++ on Waveshare ESP32-S3-Touch-LCD-4.3 | Physical device (USB via `arduino-cli`, COM7) |
 | ESP32-S3 firmware (3.49") | **Delta** | Arduino C++ on Waveshare ESP32-S3-Touch-LCD-3.49 | Physical device (USB via `build.sh delta`, COM8) |
-| Pi display | — | Python / Pygame on Raspberry Pi 3B+ | Physical device (3.5" TFT on `/dev/fb1`) |
+| Pi display | — | Python / Pygame on Raspberry Pi 3B+ | Physical device (3.5" TFT on `/dev/fb0`, systemd `tft-display.service`) |
 | 64×32 LED matrix | **Golf** | Arduino C++ on Adafruit Matrix Portal M4 | Physical device (USB via `build.sh golf`, COM9) |
 
 Live URL: https://greystoke1337.github.io/localized-air-traffic-tracker/
@@ -26,21 +26,23 @@ Custom domain: https://overheadtracker.com
 
 ```
 index.html                  # Entire web app (single file, ~120 KB)
-build.sh                    # Echo build/upload/test/debug helper (not for Foxtrot)
+build.sh                    # Echo/Delta/Golf build/upload/test/debug helper (not for Foxtrot)
 tft-preview.html            # TFT display simulator (preview Echo/Foxtrot/Delta firmware UI in browser)
 golf-preview.html           # LED matrix simulator (preview Golf M4 display in browser)
 flash.html                  # Web Serial firmware flasher (Chrome/Edge, esptool.js)
 firmware/                   # Compiled Foxtrot binaries + manifest.json for flash.html
 server/                     # Railway-hosted proxy (server.js, package.json)
 pi-display/                 # Raspberry Pi TFT display (display.py, watchdog.sh)
-tracker_echo/      # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
-tracker_foxtrot/            # Foxtrot — Waveshare 4.3 (ESP32-S3, RGB, 800×480, LovyanGFX immediate-mode)
-tracker_golf/            # Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix, Arduino)
+tracker_echo/               # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
+tracker_foxtrot/            # Foxtrot — Waveshare 4.3" (ESP32-S3, RGB, 800×480, LovyanGFX immediate-mode)
+tracker_delta/              # Delta — Waveshare 3.49" (ESP32-S3, RGB, 320×240, LVGL v8)
+tracker_golf/               # Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix, Arduino)
+tracker_golf/enclosure/     # 3D enclosure files for the Golf LED matrix panel (STL, DXF, DWG)
 tools/                      # synthetic-data.js, mock-proxy.js, serial_monitor.ps1
 tests/                      # Desktop logic tests (test_flight_logic.c, test_parsing.cpp)
 ```
 
-Both firmware dirs share the same file split: `.ino` (setup/loop), `config.h`, `types.h`, `globals.h`, `lookup_tables.h`, `helpers.ino`, `display.ino`, `network.ino`, `touch.ino`, `wifi_setup.ino`, `sd_config.ino`, `serial_cmd.ino`, `secrets.h` (gitignored). Foxtrot adds `lgfx_config.h` and `esp_panel_board_supported_conf.h`.
+Echo/Foxtrot/Delta share the same file split: `.ino` (setup/loop), `config.h`, `types.h`, `globals.h`, `lookup_tables.h`, `helpers.ino`, `display.ino`, `network.ino`, `touch.ino`, `wifi_setup.ino`, `sd_config.ino`, `serial_cmd.ino`, `secrets.h` (gitignored). Foxtrot adds `lgfx_config.h` and `esp_panel_board_supported_conf.h`. Delta uses LVGL v8 via `lvgl_port.c` instead of TFT_eSPI/LovyanGFX.
 
 ---
 

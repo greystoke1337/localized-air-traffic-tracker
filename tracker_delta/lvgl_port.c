@@ -347,7 +347,7 @@ static void create_boot_screen(void)
 /* ── Dashboard ───────────────────────────────────────────────────────────────  */
 static void build_dashboard(lv_obj_t *scr)
 {
-    lv_color_t c_bg    = lv_color_make(  8,  10,  20);
+    lv_color_t c_bg    = lv_color_black();
     lv_color_t c_panel = lv_color_make( 14,  18,  35);
     lv_color_t c_cyan  = lv_color_make(  0, 200, 255);
     lv_color_t c_green = lv_color_make(  0, 210,  80);

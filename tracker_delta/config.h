@@ -13,5 +13,7 @@
 #define RECEIVER_REFRESH_MS      30000UL  /* 30 seconds */
 #define SERVER_REFRESH_MS        60000UL  /* 60 seconds */
 #define NEAREST_REFRESH_MS       10000UL  /* 10 seconds */
+#define PORTAL_TIMEOUT_MS       300000UL  /* 5-minute captive portal timeout */
+#define MAX_AC_COUNT               100    /* max aircraft to scan in fetchNearest */
 
 #endif

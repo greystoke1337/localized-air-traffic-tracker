@@ -14,12 +14,13 @@ Compile, flash, and capture serial output in one workflow.
 |--------|-----------|----------|------|
 | **Echo** (default) | `tracker_echo/` | COM4 | `esp32:esp32:esp32:PartitionScheme=min_spiffs` |
 | **Foxtrot** | `tracker_foxtrot/` | COM7 | `esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB` |
+| **Delta** | `tracker_delta/` | COM8 | `./build.sh delta` (see build.sh for exact FQBN) |
 
-If `$ARGUMENTS[0]` is "echo" or "foxtrot" (case-insensitive), use that device and shift remaining args. Otherwise default to Echo.
+If `$ARGUMENTS[0]` is "echo", "foxtrot", or "delta" (case-insensitive), use that device and shift remaining args. Otherwise default to Echo.
 
 ## Arguments
 
-- `$ARGUMENTS[0]` — Device name ("echo" or "foxtrot") OR log duration in minutes (default: 5)
+- `$ARGUMENTS[0]` — Device name ("echo", "foxtrot", or "delta") OR log duration in minutes (default: 5)
 - `$ARGUMENTS[1]` — Log duration in minutes if device was specified, or label (default: 5)
 - `$ARGUMENTS[2]` — Descriptive label for the log file (default: "debug")
 
@@ -32,6 +33,11 @@ If `$ARGUMENTS[0]` is "echo" or "foxtrot" (case-insensitive), use that device an
 **Echo:**
 ```bash
 cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh compile
+```
+
+**Delta:**
+```bash
+cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh delta compile
 ```
 
 **Foxtrot:**
@@ -51,6 +57,11 @@ If compilation fails, stop and report errors. Do NOT proceed to flash.
 cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh upload COM4
 ```
 
+**Delta:**
+```bash
+cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh delta upload COM8
+```
+
 **Foxtrot:**
 ```bash
 "$CLI" --config-file "$CFG" upload --fqbn "$FQBN" --port COM7 --input-dir /tmp/tracker-foxtrot-build tracker_foxtrot/tracker_foxtrot.ino
@@ -62,7 +73,7 @@ If the port is busy, wait 3 seconds and retry once.
 
 Start capture immediately after flash completes. Use `run_in_background: true`. Filename: `logs/<label>-YYYY-MM-DD.log`
 
-Set PORT to COM4 (Echo) or COM7 (Foxtrot).
+Set PORT to COM4 (Echo), COM8 (Delta), or COM7 (Foxtrot).
 
 ```bash
 cd /c/Users/maxim/localized-air-traffic-tracker && mkdir -p logs && sleep 2 && /c/python314/python.exe -u -c "

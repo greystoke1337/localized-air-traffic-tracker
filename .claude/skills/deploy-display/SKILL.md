@@ -17,20 +17,20 @@ cd /c/Users/maxim/localized-air-traffic-tracker && python -c "import py_compile;
 
 If this fails, stop and report the syntax error. Do NOT deploy broken code.
 
-### 2. Deploy via SCP + PM2 restart
+### 2. Deploy via SCP + systemd restart
 
 ```bash
-scp /c/Users/maxim/localized-air-traffic-tracker/pi-display/display.py pi@airplanes.local:/home/pi/proxy/display.py && ssh pi@airplanes.local "pm2 restart display"
+scp /c/Users/maxim/localized-air-traffic-tracker/pi-display/display.py pi@airplanes.local:/home/pi/tft_display.py && ssh -i ~/.ssh/pi_proxy pi@airplanes.local "sudo systemctl restart tft-display"
 ```
 
-Use a 15-second timeout. Connect to `pi@airplanes.local`.
+Use a 15-second timeout. Connect to `pi@airplanes.local` with key `~/.ssh/pi_proxy`.
 
-### 3. Verify process is healthy
+### 3. Verify service is healthy
 
-Wait 5 seconds for the process to stabilize, then check logs:
+Wait 5 seconds for the service to stabilize, then check logs:
 
 ```bash
-ssh pi@airplanes.local "pm2 logs display --nostream --lines 10"
+ssh -i ~/.ssh/pi_proxy pi@airplanes.local "sudo journalctl -u tft-display -n 20 --no-pager"
 ```
 
 ### 4. Report summary
@@ -38,5 +38,5 @@ ssh pi@airplanes.local "pm2 logs display --nostream --lines 10"
 Tell the user:
 - Whether the syntax check passed
 - Whether the deploy and restart succeeded
-- The PM2 status (online/errored, restart count)
-- Any errors from the last 10 log lines (ignore ALSA warnings — they're harmless on headless Pi)
+- systemd service status (active/failed)
+- Any errors from the last 20 log lines (ignore ALSA warnings — they're harmless on headless Pi)

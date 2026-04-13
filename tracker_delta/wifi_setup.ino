@@ -1,8 +1,9 @@
 // ─── WiFi config, captive portal ─────────────────────────────────────────────
+#include <assert.h>
 
 bool loadWiFiConfig() {
     Preferences p;
-    p.begin(NVS_NAMESPACE, true);
+    if (!p.begin(NVS_NAMESPACE, true)) return false;
     if (!p.isKey("wifi_ssid")) { p.end(); return false; }
     strlcpy(WIFI_SSID, p.getString("wifi_ssid", "").c_str(), sizeof(WIFI_SSID));
     strlcpy(WIFI_PASS, p.getString("wifi_pass", "").c_str(), sizeof(WIFI_PASS));
@@ -11,14 +12,16 @@ bool loadWiFiConfig() {
 }
 
 void saveWiFiConfig(const char *ssid, const char *pass) {
+    assert(ssid != NULL && strlen(ssid) > 0);
     Preferences p;
-    p.begin(NVS_NAMESPACE, false);
+    if (!p.begin(NVS_NAMESPACE, false)) return;
     p.putString("wifi_ssid", ssid);
     p.putString("wifi_pass", pass);
     p.end();
 }
 
 bool connectWiFi() {
+    assert(strlen(WIFI_SSID) > 0);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     int attempts = WIFI_CONNECT_TIMEOUT_S * 2;
@@ -31,8 +34,13 @@ bool connectWiFi() {
 }
 
 void startCaptivePortal() {
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(WIFI_AP_NAME);
+    /* Static so constructors run once; lambdas below access these as
+       static-storage variables without needing an explicit capture. */
+    static WebServer setupServer(80);
+    static DNSServer dnsServer;
+
+    bool ap_ok = WiFi.softAP(WIFI_AP_NAME);
+    assert(ap_ok);
     dnsServer.start(53, "*", WiFi.softAPIP());
 
     setupServer.on("/", HTTP_GET, []() {
@@ -83,9 +91,12 @@ void startCaptivePortal() {
 
     setupServer.begin();
 
-    while (true) {
+    /* Bounded portal loop: restart after PORTAL_TIMEOUT_MS if no config saved */
+    unsigned long start = millis();
+    for (unsigned long elapsed = 0; elapsed < PORTAL_TIMEOUT_MS; elapsed = millis() - start) {
         dnsServer.processNextRequest();
         setupServer.handleClient();
         delay(5);
     }
+    ESP.restart();
 }
