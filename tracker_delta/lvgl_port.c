@@ -39,31 +39,29 @@ static lv_obj_t *g_near_val[NEAR_ROWS];   /* [0]=CALL [1]=TYPE [2]=REG [3]=ROUTE
 
 /* ── Placeholder data (replaced with live data once network is wired) ──────── */
 static const char *adsb_fields[][2] = {
-    {"MSGS/MIN", "1284"},        /* last1min.messages_valid       */
-    {"SIGNAL",   "-18.3 dBFS"},  /* last1min.local.signal         */
-    {"NOISE",    "-28.1 dBFS"},  /* last1min.local.noise          */
-    {"STRONG",   "3"},           /* last1min.local.strong_signals */
-    {"TRACKS",   "47"},          /* last1min.tracks.all           */
+    {"MSGS/MIN", "--"},          /* last1min.messages_valid       */
+    {"SIGNAL",   "--"},          /* last1min.local.signal         */
+    {"NOISE",    "--"},          /* last1min.local.noise          */
+    {"STRONG",   "--"},          /* last1min.local.strong_signals */
+    {"TRACKS",   "--"},          /* last1min.tracks.all           */
 };
 static const char *server_fields[][2] = {
-    {"STATUS", "OK"},            /* reachable = OK               */
-    {"UP",     "5d 3h"},         /* stats.uptime                 */
-    {"REQS",   "12453"},         /* stats.totalRequests          */
-    {"CACHE",  "87.3%"},         /* stats.cacheHitRate           */
-    {"ROUTES", "1247"},          /* stats.knownRoutes            */
-    {"ERRS",   "0"},             /* stats.errors                 */
+    {"STATUS", "--"},            /* reachable = OK               */
+    {"UP",     "--"},            /* stats.uptime                 */
+    {"REQS",   "--"},            /* stats.totalRequests          */
+    {"CACHE",  "--"},            /* stats.cacheHitRate           */
+    {"ROUTES", "--"},            /* stats.knownRoutes            */
+    {"ERRS",   "--"},            /* stats.errors                 */
 };
 static const char *nearest_fields[][2] = {
-    {"CALL",   "QFA123"},        /* ac.flight                    */
-    {"TYPE",   "B738"},          /* ac.t                         */
-    {"REG",    "VH-VZR"},        /* ac.r                         */
-    {"ROUTE",  "SYD-MEL"},       /* enriched route               */
-    {"DIST",   "4.2 km"},        /* haversine                    */
-    {"PHASE",  "CRUISING"},      /* derived                      */
+    {"CALL",   "--"},            /* ac.flight                    */
+    {"TYPE",   "--"},            /* ac.t                         */
+    {"REG",    "--"},            /* ac.r                         */
+    {"ROUTE",  "--"},            /* enriched route               */
+    {"DIST",   "--"},            /* haversine                    */
+    {"PHASE",  "--"},            /* derived                      */
 };
-static const char *weather_text =
-    "SYDNEY  22\xc2\xb0C  Partly Cloudy  |  Wind: 12 km/h NE  |"
-    "  Humidity: 68%  |  UV: 5 Moderate  |  Sunrise: 06:41  |  Sunset: 18:05";
+static const char *weather_text = "--";
 
 static uint16_t *trans_buf_1 = NULL;
 uint8_t *lvgl_dest = NULL;
@@ -348,7 +346,7 @@ static void create_boot_screen(void)
 static void build_dashboard(lv_obj_t *scr)
 {
     lv_color_t c_bg    = lv_color_black();
-    lv_color_t c_panel = lv_color_make( 14,  18,  35);
+    lv_color_t c_panel = lv_color_black();
     lv_color_t c_cyan  = lv_color_make(  0, 200, 255);
     lv_color_t c_green = lv_color_make(  0, 210,  80);
     lv_color_t c_white = lv_color_white();
@@ -398,7 +396,7 @@ static void build_dashboard(lv_obj_t *scr)
         lv_obj_set_pos(hdiv, 0, HDR_H);
         lv_obj_set_size(hdiv, COL_W, 1);
         lv_obj_set_style_bg_color(hdiv, c_hdiv, 0);
-        lv_obj_set_style_bg_opa(hdiv, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_opa(hdiv, LV_OPA_50, 0);
         lv_obj_set_style_border_width(hdiv, 0, 0);
         lv_obj_set_style_radius(hdiv, 0, 0);
         lv_obj_set_style_pad_all(hdiv, 0, 0);
@@ -427,7 +425,7 @@ static void build_dashboard(lv_obj_t *scr)
                 lv_obj_set_pos(sep, PAD_X, y + ROW_H - 2);
                 lv_obj_set_size(sep, COL_W - PAD_X * 2, 1);
                 lv_obj_set_style_bg_color(sep, c_div, 0);
-                lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+                lv_obj_set_style_bg_opa(sep, LV_OPA_50, 0);
                 lv_obj_set_style_border_width(sep, 0, 0);
                 lv_obj_set_style_radius(sep, 0, 0);
                 lv_obj_set_style_pad_all(sep, 0, 0);

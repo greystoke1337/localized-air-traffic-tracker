@@ -24,11 +24,12 @@ void fetchWeather(void) {
     if (!http.begin(client, url)) return;
     http.addHeader("User-Agent", "OverheadTracker-Delta/1.0");
     int code = http.GET();
-    if (code != 200) { http.end(); return; }
-    if (deserializeJson(s_weather_doc, http.getStream()) != DeserializationError::Ok) {
-        http.end(); return;
-    }
+    if (code != 200) { logTs("WX", "HTTP %d", code); http.end(); return; }
+    String wx_body = http.getString();
     http.end();
+    if (deserializeJson(s_weather_doc, wx_body) != DeserializationError::Ok) {
+        logTs("WX", "parse error"); return;
+    }
 
     float       temp  = s_weather_doc["temp"]          | 0.0f;
     const char *cond  = s_weather_doc["condition"]     | "Unknown";
@@ -43,6 +44,7 @@ void fetchWeather(void) {
     snprintf(wx, sizeof(wx),
         "%s  %.0f\xc2\xb0""C  %s  |  Wind: %.0f km/h %s  |  Humidity: %d%%  |  UV: %.0f  |  Sunrise: %s  |  Sunset: %s",
         LOCATION_NAME, temp, cond, wind, wdir, hum, uv, sr, ss);
+    logTs("WX", "ok temp=%.1f cond=%s", temp, cond);
     lvgl_update_weather(wx);
 }
 
@@ -75,6 +77,8 @@ static JsonObject findNearest(JsonArray ac, float *out_dist) {
     for (JsonObject a : ac) {
         if (++count > MAX_AC_COUNT) break;
         if (a["lat"].isNull() || a["lon"].isNull()) continue;
+        const char *fl = a["flight"] | "";
+        if (strncmp(fl, "SSM1", 4) == 0 || strncmp(fl, "SSM2", 4) == 0) continue;
         float d = haversine_km(HOME_LAT_DEFAULT, HOME_LON_DEFAULT,
                                a["lat"].as<float>(), a["lon"].as<float>());
         if (d < *out_dist) { *out_dist = d; best = a; }
@@ -94,7 +98,13 @@ void fetchNearest(void) {
     if (!http.begin(client, url)) return;
     http.addHeader("User-Agent", "OverheadTracker-Delta/1.0");
     int code = http.GET();
-    if (code != 200) { http.end(); return; }
+    if (code != 200) { logTs("NEAR", "HTTP %d", code); http.end(); return; }
+
+    /* WiFiClientSecure::available() returns 0 between SSL records (4KB boundaries),
+       which ArduinoJson misreads as EOF. Read the full body first, then parse. */
+    String body = http.getString();
+    http.end();
+    if (body.isEmpty()) { logTs("NEAR", "empty body"); return; }
 
     /* Build the field filter once and reuse it on every call */
     static JsonDocument s_filter_doc;
@@ -114,11 +124,11 @@ void fetchNearest(void) {
     }
     assert(s_filter_ready);
 
-    if (deserializeJson(s_nearest_doc, http.getStream(),
-            DeserializationOption::Filter(s_filter_doc)) != DeserializationError::Ok) {
-        http.end(); return;
+    DeserializationError near_err = deserializeJson(s_nearest_doc, body,
+            DeserializationOption::Filter(s_filter_doc));
+    if (near_err != DeserializationError::Ok) {
+        logTs("NEAR", "parse error: %s", near_err.c_str()); return;
     }
-    http.end();
 
     JsonArray ac = s_nearest_doc["ac"];
     const char *none[NEAR_ROWS] = { "--", "--", "--", "--", "--", "--" };
@@ -147,6 +157,7 @@ void fetchNearest(void) {
     snprintf(s_dist,  sizeof(s_dist),  "%.1f km", best_dist);
     strlcpy(s_phase, flightPhase(alt, gs, baro_rate), sizeof(s_phase));
 
+    logTs("NEAR", "ok call=%s dist=%s phase=%s", s_call, s_dist, s_phase);
     const char *vals[NEAR_ROWS] = { s_call, s_type, s_reg, s_route, s_dist, s_phase };
     lvgl_update_nearest(vals);
 }
@@ -160,11 +171,13 @@ void fetchServer(void) {
     snprintf(url, sizeof(url), "https://%s/stats", PROXY_HOST);
     if (!http.begin(client, url)) return;
     int code = http.GET();
-    if (code != 200) { http.end(); return; }
-    if (deserializeJson(s_server_doc, http.getStream()) != DeserializationError::Ok) {
-        http.end(); return;
-    }
+    if (code != 200) { logTs("SRV", "HTTP %d", code); http.end(); return; }
+    String srv_body = http.getString();
     http.end();
+    DeserializationError srv_err = deserializeJson(s_server_doc, srv_body);
+    if (srv_err != DeserializationError::Ok) {
+        logTs("SRV", "parse error: %s", srv_err.c_str()); return;
+    }
 
     char s_up[16], s_reqs[16], s_cache[16], s_routes[16], s_errs[16];
     strlcpy(s_up,      s_server_doc["uptime"]       | "--", sizeof(s_up));
@@ -173,6 +186,7 @@ void fetchServer(void) {
     snprintf(s_routes, sizeof(s_routes), "%d", (int)(s_server_doc["knownRoutes"]   | 0));
     snprintf(s_errs,   sizeof(s_errs),   "%d", (int)(s_server_doc["errors"]        | 0));
 
+    logTs("SRV", "ok up=%s reqs=%s routes=%s", s_up, s_reqs, s_routes);
     const char *vals[SERV_ROWS] = { "OK", s_up, s_reqs, s_cache, s_routes, s_errs };
     lvgl_update_server(vals);
 }
@@ -181,12 +195,14 @@ void fetchReceiver(void) {
     WiFiClient client;
     HTTPClient http;
     if (!http.begin(client, "http://airplanes.local/tar1090/data/stats.json")) return;
+    http.setConnectTimeout(3000);
     int code = http.GET();
-    if (code != 200) { http.end(); return; }
-    if (deserializeJson(s_recv_doc, http.getStream()) != DeserializationError::Ok) {
-        http.end(); return;
-    }
+    if (code != 200) { logTs("RECV", "HTTP %d", code); http.end(); return; }
+    String recv_body = http.getString();
     http.end();
+    if (deserializeJson(s_recv_doc, recv_body) != DeserializationError::Ok) {
+        logTs("RECV", "parse error"); return;
+    }
 
     JsonObject lm  = s_recv_doc["last1min"];
     JsonObject loc = lm["local"];
@@ -204,6 +220,7 @@ void fetchReceiver(void) {
     snprintf(s_strong, sizeof(s_strong), "%d",        strong);
     snprintf(s_tracks, sizeof(s_tracks), "%d",        tracks);
 
+    logTs("RECV", "ok msgs=%d tracks=%d", msgs, tracks);
     const char *vals[RECV_ROWS] = { s_msgs, s_sig, s_noise, s_strong, s_tracks };
     lvgl_update_receiver(vals);
 }

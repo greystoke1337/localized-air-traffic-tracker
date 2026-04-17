@@ -6,9 +6,9 @@
 #define WIFI_AP_NAME            "DELTA-SETUP"
 #define NVS_NAMESPACE           "tracker"
 #define WIFI_CONNECT_TIMEOUT_S  20
-#define HOME_LAT_DEFAULT        -33.8688f
-#define HOME_LON_DEFAULT        151.2093f
-#define LOCATION_NAME           "SYDNEY"
+#define HOME_LAT_DEFAULT        -33.8614f
+#define HOME_LON_DEFAULT        151.1397f
+#define LOCATION_NAME           "RUSSELL LEA"
 #define WEATHER_REFRESH_MS      300000UL  /* 5 minutes */
 #define RECEIVER_REFRESH_MS      30000UL  /* 30 seconds */
 #define SERVER_REFRESH_MS        60000UL  /* 60 seconds */

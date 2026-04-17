@@ -43,7 +43,7 @@ FOXTROT_SKETCH="tracker_foxtrot/tracker_foxtrot.ino"
 FOXTROT_FQBN="esp32:esp32:waveshare_esp32_s3_touch_lcd_43B:PSRAM=enabled,PartitionScheme=app3M_fat9M_16MB"
 FOXTROT_BUILD_DIR="/tmp/overhead-tracker-foxtrot-build"
 DELTA_SKETCH="tracker_delta/tracker_delta.ino"
-DELTA_FQBN="esp32:esp32:esp32s3:PSRAM=opi,USBMode=hwcdc,PartitionScheme=app3M_fat9M_16MB,FlashSize=16M"
+DELTA_FQBN="esp32:esp32:esp32s3:PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc,PartitionScheme=app3M_fat9M_16MB,FlashSize=16M"
 DELTA_BUILD_DIR="/tmp/overhead-tracker-delta-build"
 DELTA_PORT="${DELTA_PORT:-COM8}"
 LVGL_LIB_ROOT="C:\\Users\\maxim\\OneDrive\\Documents\\Arduino\\libraries\\lvgl"
@@ -625,22 +625,54 @@ run_foxtrot_proxy_host() {
 
 # ── Delta compile + upload ────────────────────────────────────────────────────
 run_delta() {
-  local com_port="${2:-$DELTA_PORT}"
-  info "COMPILE Delta ($DELTA_FQBN)"
-  mkdir -p "$DELTA_BUILD_DIR"
-  "$ARDUINO_CLI" compile \
-    $(config_flag) \
-    --fqbn        "$DELTA_FQBN" \
-    --build-path  "$DELTA_BUILD_DIR" \
-    "$DELTA_SKETCH"
-  info "UPLOAD Delta → $com_port"
-  "$ARDUINO_CLI" upload \
-    $(config_flag) \
-    --fqbn        "$DELTA_FQBN" \
-    --port        "$com_port" \
-    --input-dir   "$DELTA_BUILD_DIR" \
-    "$DELTA_SKETCH"
-  info "Delta upload complete."
+  case "${2:-}" in
+    monitor) run_monitor "monitor" "${3:-$DELTA_PORT}" ;;
+    log)     run_delta_log "${3:-20}" "${4:-$DELTA_PORT}" ;;
+    *)
+      local com_port="${2:-$DELTA_PORT}"
+      info "COMPILE Delta ($DELTA_FQBN)"
+      mkdir -p "$DELTA_BUILD_DIR"
+      "$ARDUINO_CLI" compile \
+        $(config_flag) \
+        --fqbn        "$DELTA_FQBN" \
+        --build-path  "$DELTA_BUILD_DIR" \
+        "$DELTA_SKETCH"
+      info "UPLOAD Delta → $com_port"
+      "$ARDUINO_CLI" upload \
+        $(config_flag) \
+        --fqbn        "$DELTA_FQBN" \
+        --port        "$com_port" \
+        --input-dir   "$DELTA_BUILD_DIR" \
+        "$DELTA_SKETCH"
+      info "Delta upload complete."
+      ;;
+  esac
+}
+
+# ── Delta log via arduino-cli (avoids PySerial ClearCommError on HWCDC) ─────
+run_delta_log() {
+  local minutes="${1:-20}"
+  local port="${2:-$DELTA_PORT}"
+  mkdir -p logs
+  local logfile="logs/delta-$(date +%Y-%m-%d-%H%M%S).log"
+  info "DELTA LOG → $port @ ${BAUD} baud  ($minutes min → $logfile)"
+  timeout "${minutes}m" \
+    "$ARDUINO_CLI" monitor $(config_flag) --port "$port" --config "baudrate=$BAUD" \
+  | /c/python314/python.exe -u -c "
+import sys, time
+start = time.time()
+logfile = sys.argv[1]
+line_count = 0
+with open(logfile, 'w', encoding='utf-8') as f:
+    for line in sys.stdin:
+        elapsed = time.time() - start
+        stamped = f'[{elapsed:8.3f}] {line.rstrip()}'
+        f.write(stamped + '\n')
+        f.flush()
+        print(stamped)
+        line_count += 1
+print(f'Done: {line_count} lines -> {logfile}')
+" "$logfile"
 }
 
 run_delta_compile() {

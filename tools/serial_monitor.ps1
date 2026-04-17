@@ -1,15 +1,19 @@
-$port = New-Object System.IO.Ports.SerialPort('COM7', 115200)
-$port.ReadTimeout = 2000
-$port.Open()
-$port.DtrEnable = $true
-$port.RtsEnable = $true
+param(
+    [string]$Port    = "COM8",
+    [int]   $Seconds = 60
+)
+$serial = New-Object System.IO.Ports.SerialPort($Port, 115200)
+$serial.ReadTimeout = 2000
+$serial.Open()
+$serial.DtrEnable = $true
+$serial.RtsEnable = $true
 Start-Sleep -Milliseconds 100
-$port.RtsEnable = $false
-$deadline = (Get-Date).AddSeconds(15)
+$serial.RtsEnable = $false
+$deadline = (Get-Date).AddSeconds($Seconds)
 while ((Get-Date) -lt $deadline) {
     try {
-        $line = $port.ReadLine()
+        $line = $serial.ReadLine()
         Write-Host $line
     } catch { }
 }
-$port.Close()
+$serial.Close()

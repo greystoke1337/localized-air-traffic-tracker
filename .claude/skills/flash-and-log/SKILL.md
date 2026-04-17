@@ -37,7 +37,7 @@ cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh compile
 
 **Delta:**
 ```bash
-cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh delta compile
+cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh delta-compile
 ```
 
 **Foxtrot:**
@@ -59,7 +59,7 @@ cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh upload COM4
 
 **Delta:**
 ```bash
-cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh delta upload COM8
+cd /c/Users/maxim/localized-air-traffic-tracker && ./build.sh delta
 ```
 
 **Foxtrot:**

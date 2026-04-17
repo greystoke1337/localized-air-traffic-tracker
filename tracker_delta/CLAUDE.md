@@ -7,9 +7,47 @@
 ./build.sh delta compile   # compile only
 ```
 
-- FQBN: `esp32:esp32:waveshare_esp32_s3_touch_lcd_3_49` (check `build.sh` for exact string)
+- FQBN: `esp32:esp32:esp32s3:PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc,...` (see `build.sh` for exact string)
 - COM8 (running)
 - Serial monitor: 115200 baud
+
+## Serial Debug Workflow
+
+**IMPORTANT:** `arduino-cli monitor` does NOT set DTR on Windows — HWCDC drops all output.
+Use PowerShell (`tools/serial_monitor.ps1`) or the Arduino IDE Serial Monitor instead.
+
+```powershell
+# Monitor (interactive, Ctrl-C to stop):
+.\tools\serial_monitor.ps1 -Port COM8 -Seconds 300
+
+# Capture log:
+.\tools\serial_monitor.ps1 -Port COM8 -Seconds 120 | Tee-Object logs/delta-debug.log
+```
+
+Serial commands (type in monitor):
+
+```
+heap      query heap stats (free, max block, fragmentation)
+wifi      SSID, RSSI, IP, MAC
+config    dump all config constants
+diag      heap + wifi + uptime combined
+fetch     trigger fetchNearest() immediately
+state     uptime + heap + wifi status
+restart   reboot device
+help      list all commands
+```
+
+Serial output format: `[uptime_s.ms][TAG] message`
+
+Tags: `BOOT`, `WIFI`, `WX`, `NEAR`, `SRV`, `RECV`, `SYS`
+
+### Why arduino-cli monitor fails
+
+Delta uses `USBMode=hwcdc` (ESP32-S3 internal USB JTAG/Serial controller) with `CDCOnBoot=cdc`.
+HWCDC only transmits when a USB host has the port open with DTR asserted.
+`arduino-cli monitor` on Windows opens the port but does not assert DTR → device sees no host → all
+`Serial.print()` calls are silently dropped. PowerShell's `[System.IO.Ports.SerialPort]` sets DTR
+by default and works correctly.
 
 ## Rendering Stack
 
@@ -27,9 +65,10 @@ Each fetch endpoint owns a **static `JsonDocument`** allocated once and reused:
 static JsonDocument s_weather_doc;  // reused every fetchWeather() call
 ```
 
-- **Do not** add per-call `JsonDocument` + `http.getString()` pairs — this pattern was removed to eliminate heap fragmentation
-- Parse directly from `http.getStream()` with `deserializeJson(doc, http.getStream())`
-- The ArduinoJson filter for `fetchNearest()` is also built once via a `static bool s_filter_ready` flag
+- All **HTTPS** fetches (`fetchWeather`, `fetchNearest`, `fetchServer`) use `http.getString()` then parse from the `String` — **not** `http.getStream()`. `WiFiClientSecure::available()` returns 0 at SSL record boundaries (every 4 KB), which ArduinoJson misreads as EOF, producing `IncompleteInput` errors.
+- `fetchReceiver` (plain HTTP) also uses `getString()` for consistency, plus `http.setConnectTimeout(3000)` so a missing Pi fails in 3 s instead of the default ~5 s.
+- The ArduinoJson filter for `fetchNearest()` is built once via a `static bool s_filter_ready` flag and reused on every call.
+- Do **not** switch HTTPS fetches back to `getStream()` — the SSL record boundary bug will return.
 
 ## Captive Portal
 
@@ -44,22 +83,38 @@ The portal loop is **bounded** — exits after `PORTAL_TIMEOUT_MS` (5 min) then 
 
 Do not remove asserts — they document invariants and catch misuse early.
 
+## Callsign Filtering
+
+Specific callsigns can be excluded from `findNearest()` in `network.ino`. Currently filtered:
+
+- `SSM1`, `SSM2` — calibration transponders, not real traffic
+
+To add more, extend the `strncmp` chain in the `findNearest` loop.
+
+## Dashboard Placeholder Behaviour
+
+All column values initialise to `"--"` until the first successful fetch. On fetch failure the display keeps the last known good value. There is no fake hardcoded data — if a column shows real-looking values, they are live.
+
 ## File Layout
 
 | File | Purpose |
 |------|---------|
 | `tracker_delta.ino` | `setup()` / `loop()`, refresh timers as static locals |
-| `config.h` | All timing constants (`WEATHER_REFRESH_MS`, `PORTAL_TIMEOUT_MS`, `MAX_AC_COUNT`, etc.) |
+| `config.h` | Location, proxy host, all timing constants, `MAX_AC_COUNT` |
+| `user_config.h` | GPIO pin assignments, LVGL/display hardware config |
 | `lvgl_port.c` / `lvgl_port.h` | LVGL initialisation, all widget handles, `lvgl_update_*()` API |
-| `network.ino` | `fetchWeather()`, `fetchNearest()`, `fetchReceiver()`, `fetchServer()`; static JsonDocs |
+| `network.ino` | `fetchWeather()`, `fetchNearest()`, `fetchReceiver()`, `fetchServer()`; static JsonDocs; callsign filter |
 | `wifi_setup.ino` | `loadWiFiConfig()`, `saveWiFiConfig()`, `connectWiFi()`, `startCaptivePortal()` |
-| `user_config.h` | `HOME_LAT_DEFAULT`, `HOME_LON_DEFAULT`, `LOCATION_NAME`, `PROXY_HOST` |
+| `serial_cmd.ino` | `logTs()`, JSON debug commands, `checkSerialCmd()` |
 
 ## Key Constants (config.h)
 
 | Constant | Default | Effect |
 |----------|---------|--------|
-| `WEATHER_REFRESH_MS` | 600000 | Weather re-fetch interval |
+| `HOME_LAT_DEFAULT` | -33.8614 | Home latitude for geofence centre |
+| `HOME_LON_DEFAULT` | 151.1397 | Home longitude for geofence centre |
+| `LOCATION_NAME` | "RUSSELL LEA" | Displayed in weather bar |
+| `WEATHER_REFRESH_MS` | 300000 | Weather re-fetch interval (5 min) |
 | `RECEIVER_REFRESH_MS` | 30000 | Local receiver stats interval |
 | `SERVER_REFRESH_MS` | 60000 | Proxy server stats interval |
 | `NEAREST_REFRESH_MS` | 10000 | Nearest aircraft interval |
