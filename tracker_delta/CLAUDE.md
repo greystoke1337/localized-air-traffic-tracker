@@ -1,4 +1,4 @@
-# Delta — Waveshare ESP32-S3-Touch-LCD-3.49 (320×240, LVGL v8)
+# Delta — Waveshare ESP32-S3-Touch-LCD-3.49 (320×240, LVGL v9)
 
 ## Build & Flash
 
@@ -51,7 +51,7 @@ by default and works correctly.
 
 ## Rendering Stack
 
-Delta uses **LVGL v8** via `lvgl_port.c` — not TFT_eSPI or LovyanGFX.
+Delta uses **LVGL v9** via `lvgl_port.c` — not TFT_eSPI or LovyanGFX.
 
 - All widget creation and LVGL object handles live in `lvgl_port.c`
 - UI updates go through `lvgl_update_*()` functions defined in `lvgl_port.h`
