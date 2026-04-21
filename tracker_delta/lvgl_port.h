@@ -1,6 +1,8 @@
 #ifndef LVGL_PORT_H
 #define LVGL_PORT_H
 
+#include "lvgl.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -14,7 +16,11 @@ void lvgl_switch_to_dashboard(void);
 void lvgl_update_receiver(const char *vals[RECV_ROWS]);
 void lvgl_update_server(const char *vals[SERV_ROWS]);
 void lvgl_update_nearest(const char *vals[NEAR_ROWS]);
-void lvgl_update_weather(const char *text);
+void lvgl_update_weather(const char *loc, float temp, const char *cond,
+                         float wind, const char *wdir, int hum, float uv,
+                         const char *sr, const char *ss);
+void lvgl_set_server_val_color(int row, lv_color_t c);
+void lvgl_set_nearest_val_color(int row, lv_color_t c);
 
 #ifdef __cplusplus
 }

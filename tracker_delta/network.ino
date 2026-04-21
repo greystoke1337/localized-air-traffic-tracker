@@ -40,12 +40,8 @@ void fetchWeather(void) {
     const char *sr    = s_weather_doc["sunrise"]       | "--:--";
     const char *ss    = s_weather_doc["sunset"]        | "--:--";
 
-    char wx[256];
-    snprintf(wx, sizeof(wx),
-        "%s  %.0f\xc2\xb0""C  %s  |  Wind: %.0f km/h %s  |  Humidity: %d%%  |  UV: %.0f  |  Sunrise: %s  |  Sunset: %s",
-        LOCATION_NAME, temp, cond, wind, wdir, hum, uv, sr, ss);
     logTs("WX", "ok temp=%.1f cond=%s", temp, cond);
-    lvgl_update_weather(wx);
+    lvgl_update_weather(LOCATION_NAME, temp, cond, wind, wdir, hum, uv, sr, ss);
 }
 
 static float haversine_km(float lat1, float lon1, float lat2, float lon2) {
@@ -160,6 +156,15 @@ void fetchNearest(void) {
     logTs("NEAR", "ok call=%s dist=%s phase=%s", s_call, s_dist, s_phase);
     const char *vals[NEAR_ROWS] = { s_call, s_type, s_reg, s_route, s_dist, s_phase };
     lvgl_update_nearest(vals);
+
+    lv_color_t phase_color;
+    if      (strcmp(s_phase, "TAKING OFF")  == 0) phase_color = lv_color_make(  0, 255,  80);
+    else if (strcmp(s_phase, "CLIMBING")    == 0) phase_color = lv_color_make(  0, 210,  80);
+    else if (strcmp(s_phase, "CRUISING")    == 0) phase_color = lv_color_make(  0, 200, 255);
+    else if (strcmp(s_phase, "DESCENDING")  == 0) phase_color = lv_color_make(255, 140,   0);
+    else if (strcmp(s_phase, "LANDING")     == 0) phase_color = lv_color_make(255, 220,   0);
+    else                                          phase_color = lv_color_make(120, 120, 120); /* GROUND */
+    lvgl_set_nearest_val_color(5, phase_color);
 }
 
 void fetchServer(void) {
@@ -179,16 +184,18 @@ void fetchServer(void) {
         logTs("SRV", "parse error: %s", srv_err.c_str()); return;
     }
 
-    char s_up[16], s_reqs[16], s_cache[16], s_routes[16], s_errs[16];
-    strlcpy(s_up,      s_server_doc["uptime"]       | "--", sizeof(s_up));
-    snprintf(s_reqs,   sizeof(s_reqs),   "%d", (int)(s_server_doc["totalRequests"] | 0));
-    strlcpy(s_cache,   s_server_doc["cacheHitRate"] | "--", sizeof(s_cache));
-    snprintf(s_routes, sizeof(s_routes), "%d", (int)(s_server_doc["knownRoutes"]   | 0));
-    snprintf(s_errs,   sizeof(s_errs),   "%d", (int)(s_server_doc["errors"]        | 0));
+    char s_up[16], s_reqs[16], s_cache[16], s_routes[16], s_clients[16];
+    strlcpy(s_up,        s_server_doc["uptime"]       | "--", sizeof(s_up));
+    snprintf(s_reqs,     sizeof(s_reqs),     "%d", (int)(s_server_doc["totalRequests"] | 0));
+    strlcpy(s_cache,     s_server_doc["cacheHitRate"] | "--", sizeof(s_cache));
+    snprintf(s_routes,   sizeof(s_routes),   "%d", (int)(s_server_doc["knownRoutes"]   | 0));
+    snprintf(s_clients,  sizeof(s_clients),  "%d", (int)(s_server_doc["uniqueClients"] | 0));
 
-    logTs("SRV", "ok up=%s reqs=%s routes=%s", s_up, s_reqs, s_routes);
-    const char *vals[SERV_ROWS] = { "OK", s_up, s_reqs, s_cache, s_routes, s_errs };
+    logTs("SRV", "ok up=%s reqs=%s routes=%s clients=%s", s_up, s_reqs, s_routes, s_clients);
+    const char *vals[SERV_ROWS] = { "OK", s_up, s_reqs, s_cache, s_routes, s_clients };
     lvgl_update_server(vals);
+    lvgl_set_server_val_color(0, lv_color_make(  0, 210,  80));  /* STATUS OK → green */
+    lvgl_set_server_val_color(5, lv_color_make(  0, 200, 255));  /* CLIENTS → cyan */
 }
 
 void fetchReceiver(void) {

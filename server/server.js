@@ -807,6 +807,14 @@ const stats = {
   uniqueClients: new Set(),
 };
 
+/* Rolling 60-minute error counter — one bucket per minute */
+const errorBuckets = new Array(60).fill(0);
+let errorBucketIdx = 0;
+setInterval(() => {
+  errorBucketIdx = (errorBucketIdx + 1) % 60;
+  errorBuckets[errorBucketIdx] = 0;
+}, 60_000);
+
 // ── Request log (last 100 entries) ──────────────────────────────────
 const requestLog = [];
 function addLog(entry) {
@@ -1347,7 +1355,7 @@ app.get('/flights', async (req, res) => {
     }
     return res.json(data);
   } catch (e) {
-    stats.errors++;
+    stats.errors++; errorBuckets[errorBucketIdx]++;
     if (hit) {
       addLog({ type: 'HIT', client, key: key + ' (stale fallback)' });
       const data = hit.data;
@@ -1372,6 +1380,7 @@ app.get('/stats', (req, res) => {
     cacheHits:     stats.cacheHits,
     cacheHitRate:  hitRate + '%',
     errors:        stats.errors,
+    errorsLastHour: errorBuckets.reduce((a, b) => a + b, 0),
     uniqueClients: stats.uniqueClients.size,
     cacheEntries:  cache.size,
     routeCacheEntries: routeCache.size,
@@ -1616,7 +1625,7 @@ app.get('/weather', async (req, res) => {
     const data = await inFlight.get(key);
     res.json(data);
   } catch (e) {
-    stats.errors++;
+    stats.errors++; errorBuckets[errorBucketIdx]++;
     if (hit) {
       addLog({ type: 'STALE', client, key });
       return res.json({ ...hit.data, stale: true });

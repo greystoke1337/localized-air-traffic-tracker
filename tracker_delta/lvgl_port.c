@@ -23,7 +23,8 @@ extern char boot_status[64];
 static lv_obj_t *g_boot_scr        = NULL;
 static lv_obj_t *g_dash_scr        = NULL;
 static lv_obj_t *g_boot_status_lbl = NULL;
-static lv_obj_t *g_wx_lbl          = NULL;
+static lv_obj_t *g_wx_span         = NULL;
+static lv_span_t *g_wx_spans[9];
 
 /* ── Live-update handles for RECEIVER column value labels ────────────────────  */
 #define RECV_ROWS 5
@@ -31,7 +32,7 @@ static lv_obj_t *g_recv_val[RECV_ROWS];   /* [0]=MSGS/MIN [1]=SIGNAL [2]=NOISE [
 
 /* ── Live-update handles for SERVER column value labels ──────────────────────  */
 #define SERV_ROWS 6
-static lv_obj_t *g_serv_val[SERV_ROWS];   /* [0]=STATUS [1]=UP [2]=REQS [3]=CACHE [4]=ROUTES [5]=ERRS */
+static lv_obj_t *g_serv_val[SERV_ROWS];   /* [0]=STATUS [1]=UP [2]=REQS [3]=CACHE [4]=ROUTES [5]=CLIENTS */
 
 /* ── Live-update handles for NEAREST column value labels ─────────────────────  */
 #define NEAR_ROWS 6
@@ -51,7 +52,7 @@ static const char *server_fields[][2] = {
     {"REQS",   "--"},            /* stats.totalRequests          */
     {"CACHE",  "--"},            /* stats.cacheHitRate           */
     {"ROUTES", "--"},            /* stats.knownRoutes            */
-    {"ERRS",   "--"},            /* stats.errors                 */
+    {"CLIENTS","--"},            /* stats.uniqueClients          */
 };
 static const char *nearest_fields[][2] = {
     {"CALL",   "--"},            /* ac.flight                    */
@@ -342,14 +343,38 @@ static void create_boot_screen(void)
     lv_scr_load(g_boot_scr);
 }
 
+/* ── Weather color scales ────────────────────────────────────────────────────  */
+static lv_color_t wx_temp_color(float t) {
+    if (t <= 0)  return lv_color_make(  0, 150, 255);
+    if (t <= 15) return lv_color_make(  0, 210,  80);
+    if (t <= 25) return lv_color_make(255, 220,   0);
+    return            lv_color_make(255,  60,   0);
+}
+static lv_color_t wx_wind_color(float w) {
+    if (w < 15) return lv_color_make(200, 200, 200);
+    if (w < 30) return lv_color_make(255, 220,   0);
+    if (w < 60) return lv_color_make(255, 140,   0);
+    return           lv_color_make(255,  60,   0);
+}
+static lv_color_t wx_hum_color(int h) {
+    if (h < 40) return lv_color_make(200, 200, 200);
+    if (h < 70) return lv_color_make(  0, 200, 255);
+    return           lv_color_make( 80, 100, 255);
+}
+static lv_color_t wx_uv_color(float u) {
+    if (u < 3)  return lv_color_make(  0, 210,  80);
+    if (u < 6)  return lv_color_make(255, 220,   0);
+    if (u < 8)  return lv_color_make(255, 140,   0);
+    return           lv_color_make(255,  60,   0);
+}
+
 /* ── Dashboard ───────────────────────────────────────────────────────────────  */
 static void build_dashboard(lv_obj_t *scr)
 {
     lv_color_t c_bg    = lv_color_black();
     lv_color_t c_panel = lv_color_black();
-    lv_color_t c_cyan  = lv_color_make(  0, 200, 255);
-    lv_color_t c_green = lv_color_make(  0, 210,  80);
     lv_color_t c_white = lv_color_white();
+    lv_color_t c_cyan  = lv_color_make(  0, 200, 255);
     lv_color_t c_div   = lv_color_make( 30,  80, 160);
     lv_color_t c_hdiv  = lv_color_make(  0, 140, 220);
 
@@ -406,7 +431,7 @@ static void build_dashboard(lv_obj_t *scr)
 
             lv_obj_t *key = lv_label_create(panel);
             lv_label_set_text(key, cols[c][r][0]);
-            lv_obj_set_style_text_color(key, c_green, 0);
+            lv_obj_set_style_text_color(key, c_white, 0);
             lv_obj_set_style_text_font(key, &lv_font_montserrat_12, 0);
             lv_obj_set_pos(key, PAD_X, y);
 
@@ -456,11 +481,18 @@ static void build_dashboard(lv_obj_t *scr)
     lv_obj_set_style_radius(wx_sep, 0, 0);
     lv_obj_set_style_pad_all(wx_sep, 0, 0);
 
-    g_wx_lbl = lv_label_create(wx_bar);
-    lv_label_set_text(g_wx_lbl, weather_text);
-    lv_obj_set_style_text_color(g_wx_lbl, c_wx_txt, 0);
-    lv_obj_set_style_text_font(g_wx_lbl, &lv_font_montserrat_12, 0);
-    lv_obj_align(g_wx_lbl, LV_ALIGN_LEFT_MID, 6, 0);
+    g_wx_span = lv_spangroup_create(wx_bar);
+    lv_obj_set_size(g_wx_span, 640, 20);
+    lv_obj_align(g_wx_span, LV_ALIGN_LEFT_MID, 6, 0);
+    lv_spangroup_set_overflow(g_wx_span, LV_SPAN_OVERFLOW_CLIP);
+    lv_spangroup_set_align(g_wx_span, LV_TEXT_ALIGN_LEFT);
+    for (int i = 0; i < 9; i++) {
+        g_wx_spans[i] = lv_spangroup_add_span(g_wx_span);
+        lv_span_set_text(g_wx_spans[i], i == 0 ? "--" : "");
+        lv_style_set_text_color(lv_span_get_style(g_wx_spans[i]), c_wx_txt);
+        lv_style_set_text_font(lv_span_get_style(g_wx_spans[i]), &lv_font_montserrat_12);
+    }
+    lv_spangroup_refresh(g_wx_span);
 }
 
 /* ── Called from .ino after WiFi is ready — switches to dashboard screen ────── */
@@ -507,12 +539,53 @@ void lvgl_update_server(const char *vals[SERV_ROWS])
     example_lvgl_unlock();
 }
 
-/* ── Update the weather bar label (safe to call from any task) ───────────────  */
-void lvgl_update_weather(const char *text)
+/* ── Update the weather bar spans (safe to call from any task) ───────────────  */
+void lvgl_update_weather(const char *loc, float temp, const char *cond,
+                         float wind, const char *wdir, int hum, float uv,
+                         const char *sr, const char *ss)
 {
-    if (!g_wx_lbl) return;
+    if (!g_wx_span) return;
     if (!example_lvgl_lock(500)) return;
-    lv_label_set_text(g_wx_lbl, text);
+
+    char s0[24], s1[12], s2[40], s3[20], s5[8], s7[8], s8[32];
+    snprintf(s0, sizeof(s0), "%s  ",              loc);
+    snprintf(s1, sizeof(s1), "%.0f\xc2\xb0""C",  temp);
+    snprintf(s2, sizeof(s2), "  %s  |  W: ",      cond);
+    snprintf(s3, sizeof(s3), "%.0f km/h %s",      wind, wdir);
+    snprintf(s5, sizeof(s5), "%d%%",               hum);
+    snprintf(s7, sizeof(s7), "%.0f",               uv);
+    snprintf(s8, sizeof(s8), "  |  SR: %s  SS: %s", sr, ss);
+
+    lv_color_t c_wx_txt = lv_color_make(180, 220, 255);
+    lv_span_set_text(g_wx_spans[0], s0);       lv_style_set_text_color(lv_span_get_style(g_wx_spans[0]), c_wx_txt);
+    lv_span_set_text(g_wx_spans[1], s1);       lv_style_set_text_color(lv_span_get_style(g_wx_spans[1]), wx_temp_color(temp));
+    lv_span_set_text(g_wx_spans[2], s2);       lv_style_set_text_color(lv_span_get_style(g_wx_spans[2]), c_wx_txt);
+    lv_span_set_text(g_wx_spans[3], s3);       lv_style_set_text_color(lv_span_get_style(g_wx_spans[3]), wx_wind_color(wind));
+    lv_span_set_text_static(g_wx_spans[4], "  |  H: ");  lv_style_set_text_color(lv_span_get_style(g_wx_spans[4]), c_wx_txt);
+    lv_span_set_text(g_wx_spans[5], s5);       lv_style_set_text_color(lv_span_get_style(g_wx_spans[5]), wx_hum_color(hum));
+    lv_span_set_text_static(g_wx_spans[6], "  |  UV: "); lv_style_set_text_color(lv_span_get_style(g_wx_spans[6]), c_wx_txt);
+    lv_span_set_text(g_wx_spans[7], s7);       lv_style_set_text_color(lv_span_get_style(g_wx_spans[7]), wx_uv_color(uv));
+    lv_span_set_text(g_wx_spans[8], s8);       lv_style_set_text_color(lv_span_get_style(g_wx_spans[8]), c_wx_txt);
+    lv_spangroup_refresh(g_wx_span);
+
+    example_lvgl_unlock();
+}
+
+/* ── Set the text color of a SERVER column value label ───────────────────────  */
+void lvgl_set_server_val_color(int row, lv_color_t c)
+{
+    if (row < 0 || row >= SERV_ROWS || !g_serv_val[row]) return;
+    if (!example_lvgl_lock(500)) return;
+    lv_obj_set_style_text_color(g_serv_val[row], c, 0);
+    example_lvgl_unlock();
+}
+
+/* ── Set the text color of a NEAREST column value label ─────────────────────  */
+void lvgl_set_nearest_val_color(int row, lv_color_t c)
+{
+    if (row < 0 || row >= NEAR_ROWS || !g_near_val[row]) return;
+    if (!example_lvgl_lock(500)) return;
+    lv_obj_set_style_text_color(g_near_val[row], c, 0);
     example_lvgl_unlock();
 }
 
