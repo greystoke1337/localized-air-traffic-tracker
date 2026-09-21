@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const http = require('http');
 
 const {
-  app, cache, inFlight, routeCache, stats, requestLog,
+  app, cache, inFlight, routeCache, stats, requestLog, todayVisitors,
   haversine, airlineName, airlinePrefix, airportName,
   formatRouteString, validateCoord, escapeHtml, formatUptime,
   windCardinal, addLog, cacheSet, routeCacheSet,
@@ -30,6 +30,21 @@ function get(path) {
   });
 }
 
+function post(path, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(`${baseUrl}${path}`, { method: 'POST', headers }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, headers: res.headers, body: JSON.parse(body) }); }
+        catch { resolve({ status: res.statusCode, headers: res.headers, body }); }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 function resetState() {
   cache.clear();
   inFlight.clear();
@@ -39,6 +54,7 @@ function resetState() {
   stats.errors = 0;
   stats.peakHour.fill(0);
   stats.uniqueClients.clear();
+  todayVisitors.clear();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -375,6 +391,39 @@ describe('HTTP endpoints', () => {
       const res = await get('/flights?lat=1&lon=1&radius=15');
       // Either we get the stale data (200) or a 502 if no stale cache
       assert.ok(res.status === 200 || res.status === 502);
+    });
+  });
+
+  describe('POST /visit', () => {
+    it('counts a visit from an allowed origin', async () => {
+      const res = await post('/visit', { Origin: 'https://overheadtracker.com' });
+      assert.equal(res.status, 204);
+      assert.equal(todayVisitors.size, 1);
+    });
+
+    it('does not count a request with no Origin header (e.g. an ESP32/Pi device)', async () => {
+      const res = await post('/visit');
+      assert.equal(res.status, 204);
+      assert.equal(todayVisitors.size, 0);
+    });
+
+    it('does not count a request from a disallowed origin', async () => {
+      const res = await post('/visit', { Origin: 'https://evil.example.com' });
+      assert.equal(res.status, 204);
+      assert.equal(todayVisitors.size, 0);
+    });
+
+    it('dedups repeat visits from the same client within a day', async () => {
+      await post('/visit', { Origin: 'https://overheadtracker.com' });
+      await post('/visit', { Origin: 'https://overheadtracker.com' });
+      assert.equal(todayVisitors.size, 1);
+    });
+
+    it('never stores the raw IP', async () => {
+      await post('/visit', { Origin: 'https://overheadtracker.com', 'X-Forwarded-For': '203.0.113.42' });
+      for (const hash of todayVisitors) {
+        assert.ok(!hash.includes('203.0.113.42'));
+      }
     });
   });
 

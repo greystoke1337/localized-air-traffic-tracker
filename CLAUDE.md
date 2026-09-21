@@ -5,7 +5,7 @@
 **Overhead Tracker** is a real-time aircraft tracking system.
 It answers: *"What planes are flying directly above me right now?"*
 
-Five components:
+Seven components:
 
 | Component | Codename | Tech | Hosted at |
 |-----------|----------|------|-----------|
@@ -30,19 +30,20 @@ build.sh                    # Echo/Delta/Golf build/upload/test/debug helper (no
 tft-preview.html            # TFT display simulator (preview Echo/Foxtrot/Delta firmware UI in browser)
 golf-preview.html           # LED matrix simulator (preview Golf M4 display in browser)
 flash.html                  # Web Serial firmware flasher (Chrome/Edge, esptool.js)
+track.html                  # Pin Echo to a specific flight by callsign (POST/GET/DELETE /track on the proxy)
 firmware/                   # Compiled Foxtrot binaries + manifest.json for flash.html
 server/                     # Railway-hosted proxy (server.js, package.json)
 pi-display/                 # Raspberry Pi TFT display (display.py, watchdog.sh)
 tracker_echo/               # Echo — Freenove 4.0" (ESP32, SPI, 480×320, TFT_eSPI)
 tracker_foxtrot/            # Foxtrot — Waveshare 4.3" (ESP32-S3, RGB, 800×480, LovyanGFX immediate-mode)
-tracker_delta/              # Delta — Waveshare 3.49" (ESP32-S3, RGB, 320×240, LVGL v8)
+tracker_delta/              # Delta — Waveshare 3.49" (ESP32-S3, RGB, 320×240, LVGL v9)
 tracker_golf/               # Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix, Arduino)
 tracker_golf/enclosure/     # 3D enclosure files for the Golf LED matrix panel (STL, DXF, DWG)
 tools/                      # synthetic-data.js, mock-proxy.js, serial_monitor.ps1
 tests/                      # Desktop logic tests (test_flight_logic.c, test_parsing.cpp)
 ```
 
-Echo/Foxtrot/Delta share the same file split: `.ino` (setup/loop), `config.h`, `types.h`, `globals.h`, `lookup_tables.h`, `helpers.ino`, `display.ino`, `network.ino`, `touch.ino`, `wifi_setup.ino`, `sd_config.ino`, `serial_cmd.ino`, `secrets.h` (gitignored). Foxtrot adds `lgfx_config.h` and `esp_panel_board_supported_conf.h`. Delta uses LVGL v8 via `lvgl_port.c` instead of TFT_eSPI/LovyanGFX.
+Echo/Foxtrot/Delta share the same file split: `.ino` (setup/loop), `config.h`, `types.h`, `globals.h`, `lookup_tables.h`, `helpers.ino`, `display.ino`, `network.ino`, `touch.ino`, `wifi_setup.ino`, `sd_config.ino`, `serial_cmd.ino`, `secrets.h` (gitignored). Foxtrot adds `lgfx_config.h` and `esp_panel_board_supported_conf.h`. Delta uses LVGL v9 via `lvgl_port.c` instead of TFT_eSPI/LovyanGFX.
 
 ---
 
@@ -58,7 +59,7 @@ Use feature branches and pull requests for non-trivial changes.
 | Service | Purpose | Auth |
 |---------|---------|------|
 | adsb.lol / adsb.fi / airplanes.live | Live ADS-B flight data (raced, first wins) | None (via proxy) |
-| OpenSky / adsbdb | Route lookups (dep/arr airports) | None (via proxy) |
+| adsbdb | Route lookups (dep/arr airports) | None (via proxy) |
 | Nominatim / OpenStreetMap | Location geocoding | None |
 | Planespotters.net | Aircraft photos by registration | None |
 | CartoDB | Dark map tiles (Leaflet) | None |
@@ -74,6 +75,7 @@ The proxy at `api.overheadtracker.com` (hosted on Railway) races all three ADS-B
 - **Flight phase detection**: LANDING / TAKING OFF / APPROACH / DESCENDING / CLIMBING / CRUISING / OVERHEAD / UNKNOWN — derived from speed, altitude, and vertical rate.
 - **TFT preview**: `tft-preview.html` mirrors the ESP32 display rendering in the browser. Same pixel coordinates, colors, and lookup tables. Use it to verify layout changes before flashing.
 - **Route discovery**: The proxy tracks every unique `"City > City"` route pair in `known-routes.json`. New routes are detected in real time, persisted in daily flight logs, and emailed nightly via Resend. API: `GET /routes/new?date=YYYY-MM-DD`.
+- **Visitor counting**: `index.html` pings `POST /visit` once per page load. The proxy only counts requests with an `Origin` header matching the web app's own domains (devices never send one), hashing the IP (salted, never stored raw) into a daily-reset `Set` for dedup. Only the final count persists to disk. Exposed via `GET /stats` as `uniqueVisitorsToday`.
 - **No build step**: `index.html` is deployed as-is; never introduce a bundler or external dependency that requires a build pipeline.
 - **No framework**: The web app uses vanilla JS and the browser's built-in APIs only. Do not add React, Vue, or similar.
 
@@ -87,7 +89,7 @@ Edit `index.html`, test via `file://`, push to `master` (auto-deploys to GitHub 
 ### Testing with synthetic data
 Web app: `index.html?demo=true&scenario=emergency`. Mock proxy: `node tools/mock-proxy.js normal 3000 --scenario crowded`.
 
-For Echo, Foxtrot, Golf, server, and Pi — see the `CLAUDE.md` in each subdirectory (`tracker_echo/`, `tracker_foxtrot/`, `tracker_golf/`, `server/`, `pi-display/`).
+For Echo, Foxtrot, Delta, Golf, server, and Pi — see the `CLAUDE.md` in each subdirectory (`tracker_echo/`, `tracker_foxtrot/`, `tracker_delta/`, `tracker_golf/`, `server/`, `pi-display/`).
 
 ---
 

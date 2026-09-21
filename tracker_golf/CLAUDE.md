@@ -133,7 +133,7 @@ All values encoded with G/B swap applied.
 ## Side bars
 
 - **Left column (px 0)**: altitude in deep blue. Non-linear: `ALT_MIN_FT` (300 ft) -> 2px, `ALT_MID_FT` (2,000 ft) -> 23px (75% of bar), `ALT_MAX_FT` (30,000 ft) -> 30px.
-- **Right column (px 63)**: speed in light blue. Maps `SPD_MIN_KT` (100 kt) -> 2px, `SPD_MAX_KT` (450 kt) -> 30px.
+- **Right column (px 63)**: speed in light blue. Maps `SPD_MIN_KT` (50 kt) -> 2px, `SPD_MAX_KT` (450 kt) -> 30px.
 - Both 0px when no valid aircraft is tracked.
 
 ## Key tuneable constants (config.h)
@@ -143,7 +143,7 @@ All values encoded with G/B swap applied.
 | `REFRESH_MS` | 30000 | Full fetch cycle duration (ms) |
 | `TYPE_FLIP_PX` | 32 (`MATRIX_W / 2`) | Progress pixel at which type name replaces callsign (non-GA only) |
 | `ALT_MIN_FT` / `ALT_MID_FT` / `ALT_MAX_FT` | 300 / 2000 / 30000 | Altitude bar clamp range |
-| `SPD_MIN_KT` / `SPD_MAX_KT` | 100 / 450 | Speed bar clamp range |
+| `SPD_MIN_KT` / `SPD_MAX_KT` | 50 / 450 | Speed bar clamp range |
 | `UTC_OFFSET_HOURS` | 11 | Local UTC offset for NTP clock (11 = AEDT; 10 = AEST) |
 | `WEATHER_REFRESH_MS` | 600000 | Weather re-fetch interval (ms) |
 | `CLOCK_UPDATE_MS` | 1000 | Weather page clock redraw interval (ms) |
