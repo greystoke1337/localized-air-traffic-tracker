@@ -314,6 +314,21 @@
     .data-item[data-tip]::after { left: 0; transform: none; }
     .data-item[data-tip]::before { left: 12px; transform: none; }
 
+    /* Tooltips on the fixed top-right buttons open downward and anchor right
+       (they sit 12px from the top/right edges, so the default "above, centred"
+       tooltip gets clipped by both the top and right of the viewport). */
+    #mode-toggle[data-tip]::after,
+    #big-toggle[data-tip]::after {
+      left: auto; right: 0; transform: none;
+      bottom: auto; top: calc(100% + 6px);
+    }
+    #mode-toggle[data-tip]::before,
+    #big-toggle[data-tip]::before {
+      bottom: auto; top: calc(100% + 2px);
+      border-top-color: transparent;
+      border-bottom-color: var(--c-main);
+    }
+
     /* ── Colour-coded data values ── */
     .alt-ground  { color: #ff6060; }
     .alt-low     { color: #ffcc40; }
@@ -873,8 +888,8 @@
   </style>
 </head>
 <body class="dotmatrix">
-  <button id="mode-toggle" onclick="toggleMode()" data-tip="Switch dark/light mode (D).">DARK</button>
-  <button id="big-toggle" onclick="toggleBigDisplay()" data-tip="Big display mode for viewing from a distance.">BIG</button>
+  <button id="mode-toggle" onclick="toggleMode(); this.blur()" data-tip="Switch dark/light mode (D).">DARK</button>
+  <button id="big-toggle" onclick="toggleBigDisplay(); this.blur()" data-tip="Big display mode for viewing from a distance.">BIG</button>
 
   <!-- ── Big display panel (kiosk / away mode) ── -->
   <div id="big-panel">
