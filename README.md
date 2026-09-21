@@ -80,6 +80,8 @@ Standalone physical trackers that poll the proxy — no browser needed.
 
 **Over-the-air updates:** after the first USB flash, the device advertises itself as `overhead-tracker.local` via mDNS. Run `./build.sh ota` to compile and upload wirelessly. The TFT displays a green progress bar during the update.
 
+**Pin to a specific flight:** [overheadtracker.com/track](https://overheadtracker.com/track) — enter a callsign to have Echo track that flight by callsign (direct ADS-B lookup, not geofence-based) until you stop it. Session state lives on the proxy (`POST`/`GET`/`DELETE /track`); Echo polls it and overrides its normal overhead display while a session is active.
+
 ### Foxtrot — Waveshare ESP32-S3-Touch-LCD-4.3 (4.3", 800×480)
 
 **Hardware:** Waveshare ESP32-S3-Touch-LCD-4.3 (ESP32-S3 + 4.3" IPS parallel RGB display, GT911 capacitive touch, 16 MB flash, 8 MB PSRAM)
