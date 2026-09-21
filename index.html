@@ -399,6 +399,75 @@
       font-size: 0.75rem; padding: 8px;
     }
 
+    /* ── Track-a-flight overlay ── */
+    #track-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(26,10,0,0.92);
+      z-index: 1100;
+      align-items: center; justify-content: center;
+    }
+    #track-overlay.visible { display: flex; }
+    #track-panel {
+      border: 1px solid var(--c-main);
+      background: var(--c-bg);
+      padding: 20px 24px;
+      max-width: 360px; width: 90%;
+      max-height: 85vh; overflow-y: auto;
+      box-shadow: 0 0 30px rgba(255,166,0,0.2);
+    }
+    #track-panel h3 {
+      margin: 0 0 14px;
+      font-size: 0.9rem;
+      letter-spacing: 0.1em;
+      border-bottom: 1px solid var(--c-dim);
+      padding-bottom: 8px;
+    }
+    #track-input-row { display: flex; gap: 6px; margin-bottom: 8px; }
+    #track-cs-input {
+      background: none; border: 1px solid var(--c-main); color: var(--c-main);
+      font-family: 'Share Tech Mono', monospace; font-size: 1rem;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 10px 8px; flex: 1; outline: none;
+      min-height: 44px; -webkit-appearance: none; appearance: none;
+    }
+    #track-cs-input::placeholder { color: var(--c-dim); }
+    #track-cs-input:disabled { opacity: 0.6; }
+    #track-input-row button { flex: 0 0 auto; width: auto; padding: 10px 14px; }
+    #track-status-line { font-size: 0.68rem; opacity: 0.75; min-height: 1.2em; letter-spacing: 0.03em; }
+    #track-status-line.error { color: #ff5050; opacity: 1; }
+    #track-result { display: none; margin-top: 6px; }
+    #track-result.visible { display: block; }
+    #track-badge {
+      display: inline-block; font-size: 0.62rem; letter-spacing: 0.08em;
+      padding: 3px 8px; margin-bottom: 10px;
+      border: 1px solid var(--c-dim); color: var(--c-dim);
+    }
+    #track-badge.en-route { color: #00ffff; border-color: #00ffff; }
+    #track-badge.ground   { color: #00ff00; border-color: #00ff00; }
+    #track-badge.landed   { color: #ffff00; border-color: #ffff00; }
+    #track-progress-wrap {
+      height: 6px; margin: 10px 0;
+      background: rgba(255,166,0,0.1); border: 1px solid var(--c-dim);
+    }
+    #track-progress-fill {
+      height: 100%; width: 0%; background: var(--c-main);
+      transition: width 1s ease; box-shadow: 0 0 6px var(--c-glow);
+    }
+    #track-hint {
+      font-size: 0.63rem; color: var(--c-dim); letter-spacing: 0.03em;
+      line-height: 1.5; margin-top: 10px;
+    }
+    #track-stop-btn {
+      display: none; margin-top: 12px;
+      color: #ff5050; border-color: #ff5050;
+    }
+    #track-stop-btn:hover, #track-stop-btn:active { background: rgba(255,80,80,0.12) !important; }
+    #track-close {
+      margin-top: 10px; width: 100%;
+      font-size: 0.75rem; padding: 8px;
+    }
+
     /* ── Statistics panel ── */
     #stats-section { margin-top: 10px; }
     #stats-section summary {
@@ -925,6 +994,7 @@
       <button onclick="manualRefresh()" data-tip="Force refresh (auto every 15s).">REFRESH</button>
       <button onclick="toggleSound()" id="sound-btn" data-tip="Ping when nearest changes.">[OFF] SND</button>
       <button onclick="shareUrl()" data-tip="Copy shareable link.">&#x2197; SHARE</button>
+      <button onclick="showTrackPanel()" data-tip="Track a specific flight by number, gate to gate.">&#x2708; TRACK</button>
       <button onclick="showKbdHelp()" data-tip="Keyboard shortcuts.">? HELP</button>
       <button id="unit-toggle" onclick="toggleUnits()" data-tip="Switch metric/imperial for distances and weather.">METRIC</button>
     </div>
@@ -944,6 +1014,40 @@
         <div class="kbd-row"><span class="kbd-key">Esc</span><span class="kbd-desc">Close this panel</span></div>
         <div class="kbd-row" style="margin-top:10px;opacity:0.45;font-size:0.65rem;justify-content:center;">Click outside or press Esc to close</div>
         <button id="kbd-close" onclick="hideKbdHelp()">CLOSE</button>
+      </div>
+    </div>
+
+    <!-- Track-a-flight overlay: follow one flight, gate to gate, independent of the geofence -->
+    <div id="track-overlay" aria-hidden="true" onclick="hideTrackPanelOnBackdrop(event)">
+      <div id="track-panel" role="dialog" aria-modal="true" aria-labelledby="track-panel-title" onclick="event.stopPropagation()">
+        <h3 id="track-panel-title">&#x2708; TRACK A FLIGHT</h3>
+
+        <label for="track-cs-input" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;">Flight number</label>
+        <div id="track-input-row">
+          <input id="track-cs-input" type="text" inputmode="text"
+                 placeholder="QFA739" maxlength="8" autocomplete="off"
+                 autocorrect="off" autocapitalize="characters" spellcheck="false">
+          <button id="track-go-btn" onclick="handleTrackBtn()">TRACK</button>
+        </div>
+        <div id="track-status-line" aria-live="polite"></div>
+
+        <div id="track-result">
+          <span id="track-badge">---</span>
+          <div class="info-row"><span class="info-label">FLIGHT</span><span class="info-value" id="track-callsign">---</span></div>
+          <div class="info-row"><span class="info-label">AIRLINE</span><span class="info-value" id="track-airline">---</span></div>
+          <div class="info-row"><span class="info-label">ROUTE</span><span class="info-value info-route" id="track-route">---</span></div>
+          <div class="info-row"><span class="info-label">TYPE</span><span class="info-value info-type" id="track-type">---</span></div>
+          <div id="track-progress-wrap"><div id="track-progress-fill"></div></div>
+          <div class="info-row"><span class="info-label">DEPARTED</span><span class="info-value" id="track-dep-time">---</span></div>
+          <div class="info-row"><span class="info-label">ETA</span><span class="info-value" id="track-eta">---</span></div>
+          <div class="info-row"><span class="info-label">ARRIVED</span><span class="info-value" id="track-arr-time">---</span></div>
+          <div class="info-row"><span class="info-label">UPDATED</span><span class="info-value" id="track-updated">---</span></div>
+        </div>
+
+        <p id="track-hint">Live position from ADS-B, polled every 20s. ETA is estimated from current ground speed and remaining distance — not the airline's own schedule.</p>
+
+        <button id="track-stop-btn" onclick="stopTrackingFlight()">STOP TRACKING</button>
+        <button id="track-close" onclick="hideTrackPanel()">CLOSE</button>
       </div>
     </div>
 
@@ -2409,6 +2513,204 @@
       if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
       else            { if (document.activeElement === last)  { e.preventDefault(); first.focus(); } }
     });
+
+
+    // ── Track a flight ──────────────────────────────────────────────
+    // Independent of the geofence/nearest-flight view above: follows one
+    // callsign gate-to-gate via GET /flight/:callsign (stateless — each
+    // browser tracks its own flight, unlike /track which pins Echo's
+    // physical display to a single global session). Departure/arrival
+    // times and ETA are all derived client-side from live ADS-B position,
+    // since the free ADS-B feeds carry no airline schedule data.
+    const TRACK_LS_KEY  = 'ot_tracked_flight';
+    const TRACK_POLL_MS = 20000;
+    let trackedCallsign  = null;
+    let trackDepartedAt  = null; // ms epoch — first poll seen airborne
+    let trackArrivedAt   = null; // ms epoch — first on-ground-at-arrival poll after departure
+    let trackWasAirborne = false;
+    let trackPollTimer   = null;
+
+    function showTrackPanel() {
+      const overlay = document.getElementById('track-overlay');
+      overlay.classList.add('visible');
+      overlay.setAttribute('aria-hidden', 'false');
+      document.getElementById(trackedCallsign ? 'track-close' : 'track-cs-input').focus();
+    }
+    function hideTrackPanel() {
+      const overlay = document.getElementById('track-overlay');
+      overlay.classList.remove('visible');
+      overlay.setAttribute('aria-hidden', 'true');
+      const btn = document.querySelector('button[onclick="showTrackPanel()"]');
+      if (btn) btn.focus();
+    }
+    function hideTrackPanelOnBackdrop(e) {
+      if (e.target.id === 'track-overlay') hideTrackPanel();
+    }
+    // Focus trap + Esc-to-close inside the track panel
+    document.getElementById('track-panel').addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { hideTrackPanel(); return; }
+      if (e.key !== 'Tab') return;
+      const focusable = Array.from(this.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])'))
+        .filter(el => el.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
+      else            { if (document.activeElement === last)  { e.preventDefault(); first.focus(); } }
+    });
+
+    function trackStatusMsg(text, isError) {
+      const el = document.getElementById('track-status-line');
+      el.textContent = text || '';
+      el.classList.toggle('error', !!isError);
+    }
+    function fmtClockTime(ms) {
+      return ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
+    }
+    function fmtSince(ms) {
+      if (!ms) return '';
+      const totalMin = Math.max(0, Math.round((Date.now() - ms) / 60000));
+      const h = Math.floor(totalMin / 60), m = totalMin % 60;
+      return h > 0 ? `(${h}h ${m}m ago)` : `(${m}m ago)`;
+    }
+
+    function handleTrackBtn() {
+      const input = document.getElementById('track-cs-input');
+      const cs = input.value.trim().toUpperCase();
+      if (!cs || !/^[A-Z0-9]{2,8}$/.test(cs)) {
+        trackStatusMsg('ENTER A VALID FLIGHT NUMBER', true);
+        input.focus();
+        return;
+      }
+      startTrackingFlight(cs);
+    }
+
+    function saveTrackState() {
+      try {
+        localStorage.setItem(TRACK_LS_KEY, JSON.stringify({
+          callsign: trackedCallsign, departedAt: trackDepartedAt, arrivedAt: trackArrivedAt,
+        }));
+      } catch (e) {}
+    }
+
+    function startTrackingFlight(cs) {
+      trackedCallsign  = cs;
+      trackDepartedAt  = null;
+      trackArrivedAt   = null;
+      trackWasAirborne = false;
+      saveTrackState();
+
+      document.getElementById('track-cs-input').value = cs;
+      document.getElementById('track-cs-input').disabled = true;
+      document.getElementById('track-go-btn').style.display = 'none';
+      document.getElementById('track-stop-btn').style.display = 'block';
+      document.getElementById('track-result').classList.add('visible');
+      trackStatusMsg('');
+
+      if (trackPollTimer) clearInterval(trackPollTimer);
+      pollTrackedFlight();
+      trackPollTimer = setInterval(pollTrackedFlight, TRACK_POLL_MS);
+    }
+
+    function stopTrackingFlight() {
+      trackedCallsign = null;
+      trackDepartedAt = null;
+      trackArrivedAt  = null;
+      trackWasAirborne = false;
+      if (trackPollTimer) { clearInterval(trackPollTimer); trackPollTimer = null; }
+      try { localStorage.removeItem(TRACK_LS_KEY); } catch (e) {}
+
+      document.getElementById('track-cs-input').value = '';
+      document.getElementById('track-cs-input').disabled = false;
+      document.getElementById('track-go-btn').style.display = 'block';
+      document.getElementById('track-stop-btn').style.display = 'none';
+      document.getElementById('track-result').classList.remove('visible');
+      trackStatusMsg('');
+    }
+
+    async function pollTrackedFlight() {
+      if (!trackedCallsign) return;
+      const cs = trackedCallsign;
+      try {
+        const res = await fetch('https://api.overheadtracker.com/flight/' + encodeURIComponent(cs), { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const d = await res.json();
+        if (trackedCallsign !== cs) return; // tracking was stopped/changed mid-request
+        renderTrackedFlight(d);
+        trackStatusMsg('');
+      } catch (e) {
+        if (trackedCallsign !== cs) return;
+        trackStatusMsg('NETWORK ERROR — RETRYING...', true);
+      }
+    }
+
+    function renderTrackedFlight(d) {
+      const airborneNow = d.found && !d.onGround;
+
+      if (airborneNow && !trackDepartedAt) {
+        trackDepartedAt  = Date.now();
+        trackWasAirborne = true;
+      }
+      if (trackWasAirborne && d.status === 'ON_GROUND_ARR' && !trackArrivedAt) {
+        trackArrivedAt = Date.now();
+        if (trackPollTimer) { clearInterval(trackPollTimer); trackPollTimer = null; }
+      }
+      saveTrackState();
+
+      document.getElementById('track-callsign').textContent = d.callsign;
+      document.getElementById('track-airline').textContent  = d.airline || '---';
+      document.getElementById('track-route').textContent    =
+        d.route || (d.depName || d.arrName ? (d.depName || '?') + ' → ' + (d.arrName || '?') : 'UNKNOWN');
+      document.getElementById('track-type').textContent = d.type || '---';
+
+      document.getElementById('track-dep-time').textContent = trackDepartedAt
+        ? fmtClockTime(trackDepartedAt) + ' ' + fmtSince(trackDepartedAt)
+        : (d.status === 'ON_GROUND_DEP' ? 'ON GROUND — NOT YET DEPARTED' : 'WAITING...');
+      document.getElementById('track-arr-time').textContent = trackArrivedAt ? fmtClockTime(trackArrivedAt) : '---';
+      document.getElementById('track-eta').textContent      = d.etaIso ? fmtClockTime(new Date(d.etaIso).getTime()) + ' (est.)' : '---';
+      document.getElementById('track-updated').textContent  = fmtClockTime(Date.now());
+
+      document.getElementById('track-progress-fill').style.width =
+        (d.progress != null ? Math.round(d.progress * 100) : 0) + '%';
+
+      const badge = document.getElementById('track-badge');
+      badge.className = '';
+      if (trackArrivedAt) {
+        badge.textContent = 'LANDED'; badge.classList.add('landed');
+      } else if (!d.found) {
+        badge.textContent = trackDepartedAt ? 'OUT OF RANGE' : 'WAITING FOR DEPARTURE';
+      } else if (d.status === 'ON_GROUND_DEP') {
+        badge.textContent = 'ON GROUND — DEPARTURE'; badge.classList.add('ground');
+      } else if (d.status === 'ON_GROUND_ARR' || d.status === 'ON_GROUND') {
+        badge.textContent = 'ON GROUND — ARRIVAL'; badge.classList.add('ground');
+      } else {
+        badge.textContent = 'EN ROUTE'; badge.classList.add('en-route');
+      }
+    }
+
+    document.getElementById('track-cs-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleTrackBtn();
+    });
+
+    // Restore a tracking session across page reloads
+    (function restoreTrackedFlight() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(TRACK_LS_KEY) || 'null');
+        if (!saved || !saved.callsign) return;
+        trackedCallsign  = saved.callsign;
+        trackDepartedAt  = saved.departedAt || null;
+        trackArrivedAt   = saved.arrivedAt  || null;
+        trackWasAirborne = !!trackDepartedAt;
+
+        document.getElementById('track-cs-input').value = saved.callsign;
+        document.getElementById('track-cs-input').disabled = true;
+        document.getElementById('track-go-btn').style.display = 'none';
+        document.getElementById('track-stop-btn').style.display = 'block';
+        document.getElementById('track-result').classList.add('visible');
+
+        pollTrackedFlight();
+        if (!trackArrivedAt) trackPollTimer = setInterval(pollTrackedFlight, TRACK_POLL_MS);
+      } catch (e) {}
+    })();
 
 
     // ── Render ───────────────────────────────────────────────────────

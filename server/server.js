@@ -128,7 +128,7 @@ const airportCoords = new Map(); // IATA/ICAO → { lat, lon }
   try {
     const lines = fs.readFileSync(path.join(__dirname, 'airports.dat'), 'utf8').split('\n');
     for (const line of lines) {
-      const fields = line.match(/("(?:[^"]|"")*"|[^,]*)/g);
+      const fields = [...line.matchAll(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g)].map(m => m[1]);
       if (!fields || fields.length < 8) continue;
       const strip = s => s.replace(/^"|"$/g, '').trim();
       const iata = strip(fields[4]);
@@ -1559,6 +1559,100 @@ app.get('/track', async (req, res) => {
     route:     formatRouteString(ac.dep, ac.arr),
     progress,
     territory,
+  });
+});
+
+// ── Single-flight lookup (stateless — web app "track a flight" panel) ──
+// Unlike /track above (a single global session for pinning Echo's display),
+// this is a plain per-request lookup so any number of browsers can each
+// track their own flight independently.
+app.get('/flight/:callsign', async (req, res) => {
+  const cs = (req.params.callsign || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,8}$/.test(cs))
+    return res.status(400).json({ error: 'invalid callsign' });
+
+  let ac = null;
+  for (const url of [
+    `https://api.adsb.lol/v2/callsign/${encodeURIComponent(cs)}`,
+    `https://api.airplanes.live/v2/callsign/${encodeURIComponent(cs)}`,
+  ]) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const a = d?.ac?.[0] || d?.aircraft?.[0];
+      if (a) { ac = a; break; }
+    } catch { continue; }
+  }
+
+  const airline = airlineName(cs);
+  let dep = ac?.dep || null;
+  let arr = ac?.arr || null;
+
+  if (!dep && !arr) {
+    const cached = routeCache.get(cs);
+    if (cached) { dep = cached.dep; arr = cached.arr; }
+    else {
+      try {
+        const rt = await lookupRoute(cs);
+        if (rt) { dep = rt.dep; arr = rt.arr; }
+      } catch { /* non-fatal */ }
+    }
+  }
+
+  const depName = airportName(dep);
+  const arrName = airportName(arr);
+  const route   = formatRouteString(dep, arr);
+
+  if (!ac || ac.lat == null) {
+    return res.json({
+      callsign: cs, airline, found: false, status: 'NOT_FOUND',
+      dep, arr, route, depName, arrName,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  const onGround = ac.alt_baro === 'ground';
+  const progress = calcProgress(dep, arr, ac.lat, ac.lon);
+
+  const arrCoord = arr ? airportCoords.get(arr.trim().toUpperCase()) : null;
+  let distanceRemainingKm = arrCoord ? haversine(ac.lat, ac.lon, arrCoord.lat, arrCoord.lon) : null;
+
+  let etaIso = null;
+  if (!onGround && ac.gs > 30 && distanceRemainingKm != null) {
+    const speedKmh  = ac.gs * 1.852;
+    const etaHours  = distanceRemainingKm / speedKmh;
+    etaIso = new Date(Date.now() + etaHours * 3600 * 1000).toISOString();
+  }
+
+  let status = 'EN_ROUTE';
+  if (onGround) {
+    const depCoord = dep ? airportCoords.get(dep.trim().toUpperCase()) : null;
+    if (depCoord && arrCoord) {
+      const dDep = haversine(ac.lat, ac.lon, depCoord.lat, depCoord.lon);
+      const dArr = haversine(ac.lat, ac.lon, arrCoord.lat, arrCoord.lon);
+      status = dArr < dDep ? 'ON_GROUND_ARR' : 'ON_GROUND_DEP';
+    } else {
+      status = 'ON_GROUND';
+    }
+  }
+
+  res.json({
+    callsign: cs, airline, found: true, status,
+    reg:  ac.r || null,
+    type: ac.t || null,
+    dep, arr, route, depName, arrName,
+    lat: ac.lat, lon: ac.lon,
+    alt_baro:  ac.alt_baro  ?? null,
+    gs:        ac.gs != null ? Math.round(ac.gs) : null,
+    baro_rate: ac.baro_rate ?? null,
+    track:     ac.track != null ? Math.round(ac.track) : null,
+    squawk:    ac.squawk   || null,
+    onGround,
+    progress,
+    distanceRemainingKm: distanceRemainingKm != null ? Math.round(distanceRemainingKm) : null,
+    etaIso,
+    updatedAt: new Date().toISOString(),
   });
 });
 
