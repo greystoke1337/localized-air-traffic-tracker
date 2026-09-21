@@ -1680,8 +1680,9 @@
 
     // ── Map ──────────────────────────────────────────────────────────
 
-    const DARK_TILES  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-    const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    const CARTO_KEY = 'cb1_3rt6_1_fbdfa7886fad6ffa91f4803d';
+    const DARK_TILES  = `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`;
+    const LIGHT_TILES = `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`;
     let map, tileLayer, acMarker, acLine, acVector, acArrowHead, geofenceCircle, locationMarker;
 
     function initMap() {
