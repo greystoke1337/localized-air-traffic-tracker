@@ -24,6 +24,7 @@ const MAX_CACHE_ENTRIES    = 500;   // evict oldest when exceeded
 const MAX_ROUTE_ENTRIES    = 15000; // cap route cache size
 const AIRPORT_CACHE_MS     = 30 * 24 * 60 * 60 * 1000; // 30 days (runways rarely change)
 const AIRPORT_CACHE_FILE   = process.env.AIRPORT_CACHE_FILE || __dirname + '/airport-cache.json';
+const SCHEDULE_STATE_FILE  = process.env.SCHEDULE_STATE_FILE || __dirname + '/schedule-state.json';
 const MAX_AIRPORT_ENTRIES  = 500;
 const MAX_KNOWN_ROUTES     = 20000; // cap known routes file
 const MAX_UPSTREAM_CONCURRENT = 20; // max simultaneous upstream API calls
@@ -246,6 +247,25 @@ function todayFilePath(ds) {
   return path.join(REPORTS_DIR, `flights-${ds}.json`);
 }
 
+// Persists which of today's scheduled emails have already gone out, so a
+// crash or redeploy near a send time can't cause a duplicate or a skipped
+// send for the rest of the day.
+function loadScheduleState(ds) {
+  try {
+    const saved = JSON.parse(fs.readFileSync(SCHEDULE_STATE_FILE, 'utf8'));
+    if (saved.date === ds) {
+      statusEmailSentToday = !!saved.statusEmailSentToday;
+      routeEmailSentToday  = !!saved.routeEmailSentToday;
+      emailSentToday       = !!saved.emailSentToday;
+    }
+  } catch { /* no file yet */ }
+}
+
+function saveScheduleState() {
+  const state = { date: todayDate, statusEmailSentToday, routeEmailSentToday, emailSentToday };
+  fs.writeFile(SCHEDULE_STATE_FILE, JSON.stringify(state), () => {});
+}
+
 function logFlights(acArray) {
   const now  = aestNow();
   const ds   = dateStr(now);
@@ -258,8 +278,10 @@ function logFlights(acArray) {
     todayHourly  = new Array(24).fill(0);
     todayNewRoutes = [];
     todayDate    = ds;
-    emailSentToday = false;
-    routeEmailSentToday = false;
+    emailSentToday       = false;
+    statusEmailSentToday = false;
+    routeEmailSentToday  = false;
+    saveScheduleState();
     loadTodayLog(ds);
   }
 
@@ -333,6 +355,7 @@ function loadTodayLog(ds) {
 // Initialize today's state on startup
 todayDate = dateStr(aestNow());
 loadTodayLog(todayDate);
+loadScheduleState(todayDate);
 
 // ICAO and IATA codes → city name (same DB as web app)
 const AIRPORT_DB = {
@@ -1225,7 +1248,7 @@ app.get('/', (req, res) => {
 app.get('/status', async (req, res) => {
   res.json({
     proxyEnabled,
-    uptime:  os.uptime(),
+    uptime:  Math.floor((Date.now() - startTime) / 1000),
     temp:    cpuTemp(),
     loadAvg: os.loadavg(),
     ram:     { total: os.totalmem(), free: os.freemem() },
@@ -1298,9 +1321,9 @@ app.get('/flights', async (req, res) => {
           const api = apis[(startIdx + attempt) % apis.length];
           try {
             const r = await fetch(api.url, { signal: AbortSignal.timeout(2500) });
-            if (r.status === 429) {
+            if (r.status === 429 || r.status === 403) {
               apiCooldowns.set(api.name, Date.now() + COOLDOWN_MS);
-              addLog({ type: 'COOLDOWN', client, key, error: `${api.name} → 60s cooldown (429)` });
+              addLog({ type: 'COOLDOWN', client, key, error: `${api.name} → 60s cooldown (${r.status})` });
               continue;
             }
             if (!r.ok) {
@@ -2335,6 +2358,7 @@ const periodicTimer = setInterval(() => {
     emailSentToday       = false;
     statusEmailSentToday = false;
     routeEmailSentToday  = false;
+    saveScheduleState();
     loadTodayLog(ds);
     console.log(`Day rolled over to ${ds}`);
   }
@@ -2351,21 +2375,26 @@ const periodicTimer = setInterval(() => {
     backfillMissingRoutes(backfillTarget);
   }
 
-  // Server status email at 08:00 AEST
-  if (now.getHours() === 8 && now.getMinutes() < 2 && !statusEmailSentToday) {
+  // Server status email — from 08:00 AEST onward, once per day. The ">="
+  // (rather than a narrow window) means a restart that misses 08:00 still
+  // catches up later the same day instead of skipping it entirely.
+  if (now.getHours() >= 8 && !statusEmailSentToday) {
     statusEmailSentToday = true;
+    saveScheduleState();
     sendStatusEmail(ds);
   }
 
-  // Route discovery email at 21:00 AEST
-  if (now.getHours() === 21 && now.getMinutes() < 2 && !routeEmailSentToday) {
+  // Route discovery email — from 21:00 AEST onward, once per day.
+  if (now.getHours() >= 21 && !routeEmailSentToday) {
     routeEmailSentToday = true;
+    saveScheduleState();
     sendRouteDiscoveryEmail(ds);
   }
 
-  // Send email at 23:55 AEST
+  // Daily report email — from 23:55 AEST onward, once per day.
   if (now.getHours() === 23 && now.getMinutes() >= 55 && !emailSentToday) {
     emailSentToday = true;
+    saveScheduleState();
     sendDailyEmail(ds);
   }
 }, 60000);

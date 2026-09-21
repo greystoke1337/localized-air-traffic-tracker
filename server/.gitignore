@@ -3,3 +3,7 @@ data/
 reports/
 .env
 *.save
+route-cache.json
+known-routes.json
+airport-cache.json
+schedule-state.json

@@ -28,6 +28,8 @@ Geocodes the entered location via Nominatim, then queries the proxy for aircraft
 
 Route lookups (departure/arrival airports) fire asynchronously via adsbdb.com and update the display when they resolve. Results are cached for 30 minutes. Weather data comes from Open-Meteo, refreshed every 15 minutes.
 
+New "City > City" route pairs are detected in real time, persisted to `known-routes.json`, and surfaced via `GET /routes/new?date=YYYY-MM-DD`, daily flight reports, and a nightly discovery email at 21:00 AEST.
+
 ---
 
 ## Proxy server
@@ -35,7 +37,7 @@ Route lookups (departure/arrival airports) fire asynchronously via adsbdb.com an
 The Railway-hosted proxy at `api.overheadtracker.com` sits between the web app and upstream APIs.
 
 - Races 3 ADS-B APIs in parallel (adsb.lol, adsb.fi, airplanes.live), uses the fastest response
-- 45-second flight cache with coordinate bucketing
+- 5-second flight cache with coordinate bucketing
 - 30-minute route cache for adsbdb.com lookups
 - Weather passthrough from Open-Meteo
 - Rate limiting: 100 requests/min per IP
@@ -90,6 +92,17 @@ arduino-cli upload --fqbn "..." --port COM7 --input-dir /tmp/tracker-foxtrot-bui
 arduino-cli monitor --port COM7 --config "baudrate=115200"
 ```
 
+### Delta — Waveshare ESP32-S3-Touch-LCD-3.49 (3.49", 320×240)
+
+**Hardware:** Waveshare ESP32-S3-Touch-LCD-3.49 (ESP32-S3 + 3.49" IPS parallel RGB display, capacitive touch).
+
+Same feature set as Echo/Foxtrot, rendered with LVGL v9 (`lvgl_port.c`) instead of TFT_eSPI/LovyanGFX. Proxy-only — no direct-API fallback or SD cache, and no heartbeat reporting.
+
+```bash
+./build.sh delta         # compile + auto-detect port + upload via USB (COM8)
+./build.sh delta compile # compile only
+```
+
 ### Golf — Adafruit Matrix Portal M4 (64×32 HUB75 LED matrix)
 
 **Hardware:** Adafruit Matrix Portal M4 driving a 64×32 HUB75 RGB LED matrix panel.
@@ -120,11 +133,11 @@ Public-facing display designed to be read from across a room. Callsign in pseudo
 
 ### Resilience
 
-3-tier fallback cascade: Railway proxy → direct airplanes.live API (HTTPS) → SD card cache. Proxy calls use a 3-second TCP connect timeout so the device boots cleanly even when the proxy is unreachable. Direct API failures use exponential backoff (15s → 30s → 60s → 120s).
+Echo and Foxtrot use a 3-tier fallback cascade: Railway proxy → direct airplanes.live API (HTTPS) → SD card cache. Proxy calls use a 3-second TCP connect timeout so the device boots cleanly even when the proxy is unreachable. Direct API failures use exponential backoff (15s → 30s → 60s → 120s). Delta and Golf are proxy-only and have no direct-API fallback or SD cache.
 
 ### Preview tools
 
-- `tft-preview.html` — browser simulator of the Echo/Foxtrot display (same pixel coordinates, colours, lookup tables). Interactive controls for every flight phase, squawk code, route length, and altitude.
+- `tft-preview.html` — browser simulator of the Echo/Foxtrot/Delta display (same pixel coordinates, colours, lookup tables). Interactive controls for every flight phase, squawk code, route length, and altitude.
 - `golf-preview.html` — browser simulator of the Golf M4 LED matrix at 10× scale with LED glow effects.
 
 ---
