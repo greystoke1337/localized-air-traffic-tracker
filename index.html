@@ -2962,6 +2962,12 @@
 
     // ── Demo mode (synthetic data) ──────────────────────────────────
     const DEMO_MODE = new URLSearchParams(window.location.search).has('demo');
+
+    // ── Visitor beacon (once per page load; skipped in demo mode) ────
+    if (!DEMO_MODE) {
+      fetch('https://api.overheadtracker.com/visit', { method: 'POST' }).catch(() => {});
+    }
+
     const DEMO_SCENARIOS = {
       busy:          { desc: 'Busy airspace',    phases: ['takeoff','climbing','climbing','cruising','cruising','cruising','descending','descending','approach','approach','landing','overhead'] },
       quiet:         { desc: 'Quiet sky',        phases: ['cruising','cruising'] },

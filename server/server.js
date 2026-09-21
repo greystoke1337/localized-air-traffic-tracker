@@ -12,6 +12,7 @@ const fetch   = (url, opts = {}) => {
 const os      = require('os');
 const fs      = require('fs');
 const path    = require('path');
+const crypto  = require('crypto');
 const rateLimit  = require('express-rate-limit');
 
 const app      = express();
@@ -235,6 +236,15 @@ let lastBackfillDate      = '';
 let backfillRunning       = false;
 let backfillStats         = { date: '', checked: 0, found: 0 };
 
+// ── Web app visitor count ──────────────────────────────────────────────
+// Counts unique browser visitors to the web app (never devices — see the
+// Origin check in /visit below). Only a salted, one-way hash of each IP is
+// kept, and only for the current day; the salt is random per process start
+// and never persisted, so nothing PII-bearing ever touches disk — only the
+// final daily count does (via saveTodayLog's uniqueVisitors field).
+const VISITOR_SALT = crypto.randomBytes(16).toString('hex');
+const todayVisitors = new Set();
+
 function aestNow() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: TZ }));
 }
@@ -277,6 +287,7 @@ function logFlights(acArray) {
     todayFlights = {};
     todayHourly  = new Array(24).fill(0);
     todayNewRoutes = [];
+    todayVisitors.clear();
     todayDate    = ds;
     emailSentToday       = false;
     statusEmailSentToday = false;
@@ -328,10 +339,11 @@ function buildSummary() {
   const total = Object.keys(todayFlights).length;
   const peakIdx = todayHourly.indexOf(Math.max(...todayHourly));
   return {
-    totalUnique:   total,
-    peakHour:      peakIdx,
-    peakHourCount: todayHourly[peakIdx] || 0,
-    hourly:        [...todayHourly],
+    totalUnique:    total,
+    peakHour:       peakIdx,
+    peakHourCount:  todayHourly[peakIdx] || 0,
+    hourly:         [...todayHourly],
+    uniqueVisitors: todayVisitors.size,
   };
 }
 
@@ -1052,6 +1064,19 @@ app.use(rateLimit({
   keyGenerator: (req) => req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.ip,
 }));
 
+// ── Web app visitor beacon ────────────────────────────────────────────
+// Called once per page load by index.html — not by ESP32/Pi devices, which
+// never send an Origin header and so never pass the check below. Only a
+// salted hash of the IP is kept, and only in memory for the current day.
+app.post('/visit', (req, res) => {
+  const origin = req.get('origin');
+  if (!ALLOWED_ORIGINS.includes(origin)) return res.sendStatus(204);
+  const ip = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
+  const hash = crypto.createHash('sha256').update(VISITOR_SALT + ip).digest('hex');
+  todayVisitors.add(hash);
+  res.sendStatus(204);
+});
+
 // ── Toggle endpoint ───────────────────────────────────────────────────
 app.post('/proxy/toggle', (req, res) => {
   if (requireAdmin(req, res)) return;
@@ -1404,6 +1429,7 @@ app.get('/stats', (req, res) => {
     errors:        stats.errors,
     errorsLastHour: errorBuckets.reduce((a, b) => a + b, 0),
     uniqueClients: stats.uniqueClients.size,
+    uniqueVisitorsToday: todayVisitors.size,
     cacheEntries:  cache.size,
     routeCacheEntries: routeCache.size,
     airportCacheEntries: airportCache.size,
@@ -2354,6 +2380,7 @@ const periodicTimer = setInterval(() => {
     todayFlights = {};
     todayHourly  = new Array(24).fill(0);
     todayNewRoutes = [];
+    todayVisitors.clear();
     todayDate    = ds;
     emailSentToday       = false;
     statusEmailSentToday = false;
@@ -2452,7 +2479,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  app, cache, inFlight, routeCache, knownRoutes, stats, requestLog,
+  app, cache, inFlight, routeCache, knownRoutes, stats, requestLog, todayVisitors,
   haversine, airlineName, airlinePrefix, airportName,
   formatRouteString, enrichRoutes, validateCoord, escapeHtml, formatUptime,
   windCardinal, addLog, cacheSet, routeCacheSet,

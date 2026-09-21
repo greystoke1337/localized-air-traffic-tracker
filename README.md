@@ -43,6 +43,9 @@ The Railway-hosted proxy at `api.overheadtracker.com` sits between the web app a
 - Rate limiting: 100 requests/min per IP
 - Health check at `/status`
 - Daily flight logging with `/stats` and `/report` endpoints
+- Privacy-friendly web visitor counting — see below
+
+**Visitor counting:** the web app pings `POST /visit` once per page load. The proxy only counts requests carrying an `Origin` header from the web app's own domains (ESP32/Pi devices never send one, so they're excluded automatically) and keeps a salted SHA-256 hash of the IP — never the IP itself — in memory for deduplication, reset at midnight AEST. Only the final daily count is ever written to disk, in the same `flights-{date}.json` log used for flight stats, and exposed live via `GET /stats` as `uniqueVisitorsToday`.
 
 Source: [`server/`](server/)
 
