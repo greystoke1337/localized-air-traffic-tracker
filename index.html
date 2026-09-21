@@ -454,6 +454,12 @@
       height: 100%; width: 0%; background: var(--c-main);
       transition: width 1s ease; box-shadow: 0 0 6px var(--c-glow);
     }
+    #track-map {
+      width: 100%;
+      height: clamp(150px, 38vw, 200px);
+      margin: 10px 0;
+      border: 1px solid var(--c-dim);
+    }
     #track-hint {
       font-size: 0.63rem; color: var(--c-dim); letter-spacing: 0.03em;
       line-height: 1.5; margin-top: 10px;
@@ -1038,6 +1044,7 @@
           <div class="info-row"><span class="info-label">ROUTE</span><span class="info-value info-route" id="track-route">---</span></div>
           <div class="info-row"><span class="info-label">TYPE</span><span class="info-value info-type" id="track-type">---</span></div>
           <div id="track-progress-wrap"><div id="track-progress-fill"></div></div>
+          <div id="track-map" role="application" aria-label="Tracked flight map"></div>
           <div class="info-row"><span class="info-label">DEPARTED</span><span class="info-value" id="track-dep-time">---</span></div>
           <div class="info-row"><span class="info-label">ETA</span><span class="info-value" id="track-eta">---</span></div>
           <div class="info-row"><span class="info-label">ARRIVED</span><span class="info-value" id="track-arr-time">---</span></div>
@@ -1284,6 +1291,9 @@
       if (tileLayer) tileLayer.setUrl(isDarkMode ? DARK_TILES : LIGHT_TILES);
       if (locationMarker) locationMarker.setStyle({
         color: isDarkMode ? '#fff' : '#333', fillColor: isDarkMode ? '#fff' : '#333'
+      });
+      if (trackMap) trackMap.eachLayer(layer => {
+        if (layer instanceof L.TileLayer) layer.setUrl(isDarkMode ? DARK_TILES : LIGHT_TILES);
       });
       if (flights.length) render(flights[flightIndex]);
     }
@@ -2529,12 +2539,83 @@
     let trackArrivedAt   = null; // ms epoch — first on-ground-at-arrival poll after departure
     let trackWasAirborne = false;
     let trackPollTimer   = null;
+    let lastTrackData    = null;
+
+    // ── Track panel mini-map ── lazily initialised (Leaflet needs a sized,
+    // visible container), redrawn on every poll while the panel is open.
+    let trackMap, trackMapInited = false;
+    let trackAcMarker, trackDepMarker, trackArrMarker, trackRouteLine;
+
+    function initTrackMap() {
+      if (trackMapInited) return;
+      trackMapInited = true;
+      trackMap = L.map('track-map', { zoomControl: false, attributionControl: false }).setView([20, 0], 2);
+      L.tileLayer(isDarkMode ? DARK_TILES : LIGHT_TILES, { maxZoom: 14 }).addTo(trackMap);
+    }
+
+    function updateTrackMap(d) {
+      initTrackMap();
+      const t = THEMES[currentTheme];
+      const bounds = [];
+
+      if (d.depLat != null && d.depLon != null) {
+        const p = [d.depLat, d.depLon];
+        bounds.push(p);
+        if (trackDepMarker) trackDepMarker.setLatLng(p);
+        else trackDepMarker = L.circleMarker(p, { radius: 5, color: t.dim, fillColor: t.main, fillOpacity: 0.5, weight: 1 })
+          .addTo(trackMap).bindTooltip(d.depName || d.dep || 'DEP', { direction: 'top', className: 'dm-callout' });
+      } else if (trackDepMarker) { trackDepMarker.remove(); trackDepMarker = null; }
+
+      if (d.arrLat != null && d.arrLon != null) {
+        const p = [d.arrLat, d.arrLon];
+        bounds.push(p);
+        if (trackArrMarker) trackArrMarker.setLatLng(p);
+        else trackArrMarker = L.circleMarker(p, { radius: 5, color: t.dim, fillColor: t.main, fillOpacity: 0.5, weight: 1 })
+          .addTo(trackMap).bindTooltip(d.arrName || d.arr || 'ARR', { direction: 'top', className: 'dm-callout' });
+      } else if (trackArrMarker) { trackArrMarker.remove(); trackArrMarker = null; }
+
+      if (d.depLat != null && d.arrLat != null) {
+        const line = [[d.depLat, d.depLon], [d.arrLat, d.arrLon]];
+        if (trackRouteLine) trackRouteLine.setLatLngs(line);
+        else trackRouteLine = L.polyline(line, { color: t.main, weight: 1, opacity: 0.35, dashArray: '4 6' }).addTo(trackMap);
+      } else if (trackRouteLine) { trackRouteLine.remove(); trackRouteLine = null; }
+
+      if (d.lat != null && d.lon != null) {
+        const p = [d.lat, d.lon];
+        bounds.push(p);
+        const acColor = d.onGround ? '#00ff00' : '#00ffff';
+        if (trackAcMarker) {
+          trackAcMarker.setLatLng(p);
+          trackAcMarker.setStyle({ color: acColor, fillColor: acColor });
+          trackAcMarker.getTooltip().setContent(d.callsign);
+        } else {
+          trackAcMarker = L.circleMarker(p, { radius: 7, color: acColor, fillColor: acColor, fillOpacity: 1, weight: 2 })
+            .addTo(trackMap).bindTooltip(d.callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
+        }
+      } else if (trackAcMarker) { trackAcMarker.remove(); trackAcMarker = null; }
+
+      if (bounds.length > 1) trackMap.fitBounds(L.latLngBounds(bounds).pad(0.25));
+      else if (bounds.length === 1) trackMap.setView(bounds[0], 8);
+    }
+
+    function clearTrackMap() {
+      if (trackAcMarker)  { trackAcMarker.remove();  trackAcMarker  = null; }
+      if (trackDepMarker) { trackDepMarker.remove(); trackDepMarker = null; }
+      if (trackArrMarker) { trackArrMarker.remove(); trackArrMarker = null; }
+      if (trackRouteLine) { trackRouteLine.remove(); trackRouteLine = null; }
+      if (trackMap) trackMap.setView([20, 0], 2);
+    }
 
     function showTrackPanel() {
       const overlay = document.getElementById('track-overlay');
       overlay.classList.add('visible');
       overlay.setAttribute('aria-hidden', 'false');
       document.getElementById(trackedCallsign ? 'track-close' : 'track-cs-input').focus();
+      if (trackedCallsign) {
+        initTrackMap();
+        trackMap.invalidateSize();
+        if (lastTrackData) updateTrackMap(lastTrackData);
+      }
     }
     function hideTrackPanel() {
       const overlay = document.getElementById('track-overlay');
@@ -2616,6 +2697,7 @@
       trackDepartedAt = null;
       trackArrivedAt  = null;
       trackWasAirborne = false;
+      lastTrackData = null;
       if (trackPollTimer) { clearInterval(trackPollTimer); trackPollTimer = null; }
       try { localStorage.removeItem(TRACK_LS_KEY); } catch (e) {}
 
@@ -2625,6 +2707,10 @@
       document.getElementById('track-stop-btn').style.display = 'none';
       document.getElementById('track-result').classList.remove('visible');
       trackStatusMsg('');
+      clearTrackMap();
+      // The STOP button (which had focus) just went display:none, which blurs
+      // focus out of the panel entirely — re-anchor it so Esc/Tab still work.
+      document.getElementById('track-cs-input').focus();
     }
 
     async function pollTrackedFlight() {
@@ -2655,6 +2741,7 @@
         if (trackPollTimer) { clearInterval(trackPollTimer); trackPollTimer = null; }
       }
       saveTrackState();
+      lastTrackData = d;
 
       document.getElementById('track-callsign').textContent = d.callsign;
       document.getElementById('track-airline').textContent  = d.airline || '---';
@@ -2685,6 +2772,8 @@
       } else {
         badge.textContent = 'EN ROUTE'; badge.classList.add('en-route');
       }
+
+      if (document.getElementById('track-overlay').classList.contains('visible')) updateTrackMap(d);
     }
 
     document.getElementById('track-cs-input').addEventListener('keydown', e => {
