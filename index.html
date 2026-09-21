@@ -33,6 +33,7 @@
       --c-main: #ffa600;
       --c-glow: #ff8000;
       --c-dim:  #7a5200;
+      --c-dim-text: #b37800; /* AA text contrast (5.15:1 on --c-bg) — --c-dim alone is 2.79:1, borders/decoration only */
       --c-bg:   #1a0a00;
       --c-overlay: rgba(26,10,0,0.65);
       --scanline-opacity: 0.05;
@@ -456,7 +457,7 @@
     #track-badge {
       display: inline-block; font-size: 0.62rem; letter-spacing: 0.08em;
       padding: 3px 8px; margin-bottom: 10px;
-      border: 1px solid var(--c-dim); color: var(--c-dim);
+      border: 1px solid var(--c-dim); color: var(--c-dim-text);
     }
     #track-badge.en-route { color: #00ffff; border-color: #00ffff; }
     #track-badge.ground   { color: #00ff00; border-color: #00ff00; }
@@ -476,7 +477,7 @@
       border: 1px solid var(--c-dim);
     }
     #track-hint {
-      font-size: 0.63rem; color: var(--c-dim); letter-spacing: 0.03em;
+      font-size: 0.63rem; color: var(--c-dim-text); letter-spacing: 0.03em;
       line-height: 1.5; margin-top: 10px;
     }
     #track-stop-btn {
@@ -551,6 +552,7 @@
       --c-main: #6b3a00;
       --c-glow: #8a4e00;
       --c-dim:  #b08050;
+      --c-dim-text: #7a5638; /* AA text contrast (5.71:1 on --c-bg) */
       --c-bg:   #f5efe6;
       --c-overlay: rgba(245,239,230,0.85);
       --scanline-opacity: 0.03;
@@ -2559,13 +2561,37 @@
     // ── Track panel mini-map ── lazily initialised (Leaflet needs a sized,
     // visible container), redrawn on every poll while the panel is open.
     let trackMap, trackMapInited = false;
-    let trackAcMarker, trackDepMarker, trackArrMarker, trackRouteLine;
+    let trackDep = {}, trackArr = {}, trackAc = {}, trackRouteLine;
 
     function initTrackMap() {
       if (trackMapInited) return;
       trackMapInited = true;
       trackMap = L.map('track-map', { zoomControl: false, attributionControl: false }).setView([20, 0], 2);
       L.tileLayer(isDarkMode ? DARK_TILES : LIGHT_TILES, { maxZoom: 14 }).addTo(trackMap);
+    }
+
+    // A circleMarker's tap target is exactly its rendered circle, so the
+    // 5–7px pins below are far under the ~24px minimum touch target (WCAG
+    // 2.5.8). Each pin gets an invisible, larger circleMarker layered under
+    // it purely to catch taps, so the visible dot can stay map-scaled.
+    function placeTrackMarker(ref, pos, dotOpts, tooltipText, tooltipOpts) {
+      if (ref.hit) ref.hit.setLatLng(pos);
+      else ref.hit = L.circleMarker(pos, { radius: 12, weight: 0, opacity: 0, fillOpacity: 0.01 }).addTo(trackMap);
+
+      if (ref.dot) {
+        ref.dot.setLatLng(pos);
+        ref.dot.setStyle(dotOpts);
+        if (tooltipText != null) ref.dot.getTooltip().setContent(tooltipText);
+      } else {
+        ref.dot = L.circleMarker(pos, dotOpts).addTo(trackMap);
+        if (tooltipText != null) ref.dot.bindTooltip(tooltipText, tooltipOpts);
+        ref.hit.on('click', () => ref.dot.openTooltip());
+      }
+    }
+
+    function removeTrackMarker(ref) {
+      if (ref.dot) { ref.dot.remove(); ref.dot = null; }
+      if (ref.hit) { ref.hit.remove(); ref.hit = null; }
     }
 
     function updateTrackMap(d) {
@@ -2576,18 +2602,16 @@
       if (d.depLat != null && d.depLon != null) {
         const p = [d.depLat, d.depLon];
         bounds.push(p);
-        if (trackDepMarker) trackDepMarker.setLatLng(p);
-        else trackDepMarker = L.circleMarker(p, { radius: 5, color: t.dim, fillColor: t.main, fillOpacity: 0.5, weight: 1 })
-          .addTo(trackMap).bindTooltip(d.depName || d.dep || 'DEP', { direction: 'top', className: 'dm-callout' });
-      } else if (trackDepMarker) { trackDepMarker.remove(); trackDepMarker = null; }
+        placeTrackMarker(trackDep, p, { radius: 5, color: t.dim, fillColor: t.main, fillOpacity: 0.5, weight: 1 },
+          d.depName || d.dep || 'DEP', { direction: 'top', className: 'dm-callout' });
+      } else removeTrackMarker(trackDep);
 
       if (d.arrLat != null && d.arrLon != null) {
         const p = [d.arrLat, d.arrLon];
         bounds.push(p);
-        if (trackArrMarker) trackArrMarker.setLatLng(p);
-        else trackArrMarker = L.circleMarker(p, { radius: 5, color: t.dim, fillColor: t.main, fillOpacity: 0.5, weight: 1 })
-          .addTo(trackMap).bindTooltip(d.arrName || d.arr || 'ARR', { direction: 'top', className: 'dm-callout' });
-      } else if (trackArrMarker) { trackArrMarker.remove(); trackArrMarker = null; }
+        placeTrackMarker(trackArr, p, { radius: 5, color: t.dim, fillColor: t.main, fillOpacity: 0.5, weight: 1 },
+          d.arrName || d.arr || 'ARR', { direction: 'top', className: 'dm-callout' });
+      } else removeTrackMarker(trackArr);
 
       if (d.depLat != null && d.arrLat != null) {
         const line = [[d.depLat, d.depLon], [d.arrLat, d.arrLon]];
@@ -2599,24 +2623,18 @@
         const p = [d.lat, d.lon];
         bounds.push(p);
         const acColor = d.onGround ? '#00ff00' : '#00ffff';
-        if (trackAcMarker) {
-          trackAcMarker.setLatLng(p);
-          trackAcMarker.setStyle({ color: acColor, fillColor: acColor });
-          trackAcMarker.getTooltip().setContent(d.callsign);
-        } else {
-          trackAcMarker = L.circleMarker(p, { radius: 7, color: acColor, fillColor: acColor, fillOpacity: 1, weight: 2 })
-            .addTo(trackMap).bindTooltip(d.callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
-        }
-      } else if (trackAcMarker) { trackAcMarker.remove(); trackAcMarker = null; }
+        placeTrackMarker(trackAc, p, { radius: 7, color: acColor, fillColor: acColor, fillOpacity: 1, weight: 2 },
+          d.callsign, { permanent: true, direction: 'top', className: 'dm-callout' });
+      } else removeTrackMarker(trackAc);
 
       if (bounds.length > 1) trackMap.fitBounds(L.latLngBounds(bounds).pad(0.25));
       else if (bounds.length === 1) trackMap.setView(bounds[0], 8);
     }
 
     function clearTrackMap() {
-      if (trackAcMarker)  { trackAcMarker.remove();  trackAcMarker  = null; }
-      if (trackDepMarker) { trackDepMarker.remove(); trackDepMarker = null; }
-      if (trackArrMarker) { trackArrMarker.remove(); trackArrMarker = null; }
+      removeTrackMarker(trackDep);
+      removeTrackMarker(trackArr);
+      removeTrackMarker(trackAc);
       if (trackRouteLine) { trackRouteLine.remove(); trackRouteLine = null; }
       if (trackMap) trackMap.setView([20, 0], 2);
     }
