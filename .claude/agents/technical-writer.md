@@ -11,19 +11,27 @@ You are a senior technical writer working on the **Overhead // Live Aircraft Tra
 |---|---|
 | `README.md` | Primary project overview, features, setup, how-it-works, roadmap |
 | `PI_PROXY_SETUP.md` | Step-by-step record of the Raspberry Pi proxy server configuration |
-| `CLAUDE.md` | Claude Code agent instructions (meta — update only if asked) |
+| `CLAUDE.md` | Root Claude Code agent instructions (meta — update only if asked) |
+| `tracker_echo/CLAUDE.md` | Echo (Freenove) firmware — device-specific build/debug notes |
+| `tracker_foxtrot/CLAUDE.md` | Foxtrot (Waveshare 4.3") firmware — rendering stack, failed approaches, memory files |
+| `tracker_delta/CLAUDE.md` | Delta (Waveshare 3.49") firmware — LVGL v9, serial debug quirks |
+| `tracker_golf/CLAUDE.md` | Golf (LED matrix) firmware — build/OTA commands, hardware quirks |
+| `server/CLAUDE.md` | Railway proxy server notes |
+| `pi-display/CLAUDE.md` | Raspberry Pi TFT display notes |
 | `index.html` (inline comments) | Inline JS/CSS comments explaining non-obvious logic |
-| `tracker_echo/tracker_echo.ino` (inline comments) | Echo (Freenove) firmware comments |
-| `tracker_foxtrot/tracker_foxtrot.ino` (inline comments) | Foxtrot (Waveshare) firmware comments |
+| `tracker_echo/tracker_echo.ino`, `tracker_foxtrot/tracker_foxtrot.ino`, `tracker_delta/tracker_delta.ino`, `tracker_golf/tracker_golf.ino` (inline comments) | Per-device firmware comments |
 | `build.sh` (inline comments) | Build script comments |
+
+These per-component `CLAUDE.md` files are the source of truth for device-specific facts (rendering stack, pinouts, build commands) — check them before writing or correcting anything about a specific device, since they're updated more often than this agent's own knowledge of the hardware.
 
 ## Project overview (for context)
 
 The tracker is a **zero-dependency single-file web app** (`index.html`) that shows live ADS-B aircraft overhead any worldwide location. Supporting components:
 
 - **Railway proxy server** — Node.js caching proxy at `api.overheadtracker.com`, hosted on Railway, races three ADS-B APIs to prevent rate-limiting
-- **ESP32 hardware displays** — two devices codenamed **Echo** (Freenove FNK0103S, 4" 480×320, `tracker_echo/`) and **Foxtrot** (Waveshare ESP32-S3-Touch-LCD-4.3B, 4.3" 800×480, `tracker_foxtrot/`). Both poll the proxy and display overhead flights
-- **GitHub Pages deployment** — `index.html` on `main` deploys automatically to [overheadtracker.com](https://www.overheadtracker.com)
+- **Four hardware firmware devices** — **Echo** (Freenove FNK0103S, 4" 480×320, `tracker_echo/`), **Foxtrot** (Waveshare ESP32-S3-Touch-LCD-4.3", 800×480, `tracker_foxtrot/`), **Delta** (Waveshare ESP32-S3-Touch-LCD-3.49", 320×240, `tracker_delta/`), and **Golf** (Adafruit Matrix Portal M4, 64×32 LED matrix, `tracker_golf/`). All poll the proxy and display overhead flights.
+- **Raspberry Pi TFT display** — Python/Pygame display (`pi-display/`) on a 3.5" TFT, run as a systemd service
+- **GitHub Pages deployment** — `index.html` on `master` deploys automatically to [overheadtracker.com](https://www.overheadtracker.com)
 
 ## Writing style guide
 
