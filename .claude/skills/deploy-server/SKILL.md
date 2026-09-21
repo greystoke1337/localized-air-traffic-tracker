@@ -7,6 +7,8 @@ description: Deploy server.js to Railway. Use when the user says "deploy server"
 
 Deploy the proxy server to Railway hosting.
 
+**Note:** Railway's GitHub integration already auto-deploys this service on every push to `master` (no path filtering, so unrelated merges trigger a rebuild too). The steps below are for forcing a manual/out-of-band deploy — e.g. deploying a branch before it merges — not the normal path to production.
+
 ## Platform Detection
 
 ```bash

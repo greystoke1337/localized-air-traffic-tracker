@@ -48,13 +48,13 @@ Railway provides managed hosting, auto-deploys, persistent volumes, and better u
 | `HOME_LAT` | Home location latitude |
 | `HOME_LON` | Home location longitude |
 | `ROUTE_CACHE_FILE` | `/data/route-cache.json` |
+| `KNOWN_ROUTES_FILE` | `/data/known-routes.json` |
+| `AIRPORT_CACHE_FILE` | `/data/airport-cache.json` |
 | `REPORTS_DIR` | `/data/reports` |
-| `SMTP_HOST` | For daily email reports |
-| `SMTP_PORT` | SMTP port (default 587) |
-| `SMTP_USER` | SMTP username |
-| `SMTP_PASS` | SMTP password |
-| `REPORT_FROM` | Email sender address |
-| `REPORT_TO` | Email recipient address |
+| `RESEND_API_KEY` | Resend API key for daily email reports |
+| `RESEND_FROM` | Email sender address |
+| `REPORT_TO` | Daily flight report recipient |
+| `ROUTE_EMAIL_TO` | Route discovery email recipient (falls back to `REPORT_TO`) |
 
 ### Deploying
 
@@ -211,12 +211,10 @@ Create `server/.env` locally (or set in Railway dashboard) with:
 ADMIN_TOKEN=your-secret-token    # Required for /proxy/toggle and /report/send
 HOME_LAT=-33.8530                # Home location for flight distance calculations
 HOME_LON=151.1410
-SMTP_HOST=smtp.example.com       # Optional — for daily email reports
-SMTP_PORT=587
-SMTP_USER=user@example.com
-SMTP_PASS=password
-REPORT_FROM=Overhead Tracker <user@example.com>
+RESEND_API_KEY=re_xxxxxxxx       # Optional — for daily email reports, sent via Resend
+RESEND_FROM=Overhead Tracker <status@overheadtracker.com>
 REPORT_TO=you@example.com
+ROUTE_EMAIL_TO=you@example.com   # Optional — falls back to REPORT_TO
 ```
 
 Admin endpoints return 403 when `ADMIN_TOKEN` is not configured. To use the toggle:
