@@ -105,7 +105,7 @@ Each firmware directory has its own `CLAUDE.md` with device-specific detail — 
 1. **Read before editing** — always read the relevant file before modifying it, plus that firmware's own `CLAUDE.md`.
 2. **Build tooling differs per device** — Echo/Delta/Golf use `build.sh`; Foxtrot uses `arduino-cli` directly (`build.sh` is Echo-only).
 3. **No credentials in code** — WiFi creds live in NVS via captive portal (ESP32 devices) or `secrets.h` (gitignored, Golf).
-4. **Preserve cache semantics** — the 10-second proxy cache and the 15,000-entry route cache LRU are both load-bearing.
+4. **Preserve cache semantics** — the 10-second proxy cache and the 30,000-entry route cache LRU are both load-bearing.
 5. **Embedded constraints** — Echo: ~320 KB heap (no PSRAM). Foxtrot: ~320 KB SRAM + 8 MB PSRAM. Delta: ESP32-S3, HWCDC USB quirks apply. Golf: SAMD51, no PSRAM, NVMCTRL flash writes for OTA.
 6. **LVGL thread safety applies only to Delta** — always lock through `lvgl_port.c`'s `lvgl_update_*()` API, never call LVGL directly from `.ino` files. Foxtrot and Echo use immediate-mode LovyanGFX and have no LVGL/locking concerns — do not add any.
 
