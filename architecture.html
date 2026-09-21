@@ -214,7 +214,7 @@
 // Layout: left-to-right data flow
 //
 //   COLUMN 1 (x≈140)    ADS-B data sources (top) + device fallback targets
-//   COLUMN 2 (x≈460)    Clients: Web App, Echo, Foxtrot, Pi (vertical stack)
+//   COLUMN 2 (x≈460)    Clients: Web App, Echo, Foxtrot, Delta, Golf, Pi (vertical stack)
 //   COLUMN 3 (x≈830)    PROXY HUB  (single gateway node)
 //   COLUMN 4 (x≈1160)   Proxy internals (2×4 grid)
 //   COLUMN 5 (x≈1500)   External services (route, weather, email)
@@ -228,7 +228,9 @@ const nodes = [
   { data: { id: 'web-app', label: 'Web App\nindex.html', tech: 'Vanilla JS, Leaflet, ~120KB', desc: 'Single-file browser app. Interactive map with geofence, flight table, aircraft photos, route info. No framework, no build step.' }, classes: 'user-facing', position: { x: 150, y: 350 } },
   { data: { id: 'echo', label: 'Echo\nESP32 4.0"', tech: 'ESP32, TFT_eSPI, 480x320, COM4', desc: 'Personal device at Russell Lea, Sydney. SPI TFT display, capacitive touch. WiFi config via captive portal.' }, classes: 'user-facing', position: { x: 150, y: 550 } },
   { data: { id: 'foxtrot', label: 'Foxtrot\nESP32-S3 4.3"', tech: 'LovyanGFX, 800x480, COM7', desc: 'Customer device in Chicago. RGB IPS display, 16MB flash, 8MB PSRAM. LovyanGFX immediate-mode rendering.' }, classes: 'user-facing', position: { x: 150, y: 720 } },
-  { data: { id: 'pi-display', label: 'Pi Display\nRPi 3B+ TFT', tech: 'Python/Pygame, 480x320', desc: 'Status dashboard at Russell Lea. 3-page rotation (flights, proxy stats, server health). Renders to /dev/fb1.' }, classes: 'user-facing', position: { x: 150, y: 910 } },
+  { data: { id: 'delta', label: 'Delta\nESP32-S3 3.49"', tech: 'LVGL v9, 320x240, COM8', desc: 'RGB IPS display, capacitive touch, LVGL v9 UI. Proxy-only — no direct-API fallback or heartbeat.' }, classes: 'user-facing', position: { x: 150, y: 890 } },
+  { data: { id: 'golf', label: 'Golf\nMatrix Portal M4', tech: 'Adafruit Protomatter, 64x32 HUB75, COM9', desc: 'Public-facing LED matrix. Callsign/route scroll, altitude and speed side bars. Proxy-only — no direct-API fallback or heartbeat.' }, classes: 'user-facing', position: { x: 150, y: 1060 } },
+  { data: { id: 'pi-display', label: 'Pi Display\nRPi 3B+ TFT', tech: 'Python/Pygame, 480x320', desc: 'Status dashboard at Russell Lea. 3-page rotation (flights, proxy stats, server health). Renders to /dev/fb1.' }, classes: 'user-facing', position: { x: 150, y: 1230 } },
 
   // ─── Web-app services (above, fanning out right) ───
   { data: { id: 'github-pages', label: 'GitHub Pages\noverheadtracker.com', tech: 'Auto-deploy on push to master', desc: 'Hosts the web app (index.html). Custom domain via CNAME. Deploys within ~60 seconds of push.' }, classes: 'cloud', position: { x: 150, y: 140 } },
@@ -239,19 +241,18 @@ const nodes = [
 
   // ─── Build / Deploy (below their devices) ───
   { data: { id: 'arduino-cli', label: 'arduino-cli\nbuild.sh', tech: 'USB flash + OTA', desc: 'Compiles and flashes ESP32 firmware. Echo via build.sh (COM4), Foxtrot via arduino-cli direct (COM7). OTA supported.' }, classes: 'build', position: { x: 150, y: 635 } },
-  { data: { id: 'pm2', label: 'PM2\nwatchdog.sh', tech: 'Process manager on Pi', desc: 'Manages display (id 0) and tunnel (id 1) processes on the Pi. Watchdog.sh monitors health via cron every 60s.' }, classes: 'build', position: { x: 370, y: 910 } },
+  { data: { id: 'pm2', label: 'PM2\nwatchdog.sh', tech: 'Process manager on Pi', desc: 'Manages display (id 0) and tunnel (id 1) processes on the Pi. Watchdog.sh monitors health via cron every 60s.' }, classes: 'build', position: { x: 370, y: 1230 } },
 
   // ─── COLUMN 2 (x=560): PROXY HUB ───
-  { data: { id: 'proxy', label: 'Railway Proxy\napi.overheadtracker.com', tech: 'Node.js / Express, port 3000', desc: 'Central proxy server on Railway. Races 4 ADS-B APIs, caches flights (45s), routes (30min), weather (10min). Rate limited 100 req/min/IP.' }, classes: 'cloud proxy-hub', position: { x: 560, y: 600 } },
+  { data: { id: 'proxy', label: 'Railway Proxy\napi.overheadtracker.com', tech: 'Node.js / Express, port 3000', desc: 'Central proxy server on Railway. Races 3 ADS-B APIs, caches flights (5s), routes (30min), weather (10min). Rate limited 100 req/min/IP.' }, classes: 'cloud proxy-hub', position: { x: 560, y: 600 } },
 
   // ─── COLUMN 3 (x=850): ADS-B Data Sources ───
   { data: { id: 'adsb-lol', label: 'adsb.lol', tech: 'HTTPS, no auth', desc: 'Primary ADS-B data source. /v2/point/{lat}/{lon}/{radius}. Rate limited (429 → 60s cooldown).' }, classes: 'adsb-api', position: { x: 850, y: 380 } },
   { data: { id: 'adsb-fi', label: 'adsb.fi', tech: 'HTTPS, no auth', desc: 'Secondary ADS-B source. /api/v3/lat/{lat}/lon/{lon}/dist/{radius}. Round-robin raced with others.' }, classes: 'adsb-api', position: { x: 850, y: 520 } },
   { data: { id: 'airplanes-live', label: 'airplanes.live', tech: 'HTTPS, no auth', desc: 'Tertiary ADS-B source. /v2/point/{lat}/{lon}/{radius}. Also used as direct fallback by ESP32 devices.' }, classes: 'adsb-api', position: { x: 850, y: 660 } },
-  { data: { id: 'adsb-one', label: 'adsb-one', tech: 'HTTPS, no auth', desc: 'Quaternary ADS-B source. /v2/point/{lat}/{lon}/{radius}. Newest addition to the race pool.' }, classes: 'adsb-api', position: { x: 850, y: 800 } },
 
   // ─── COLUMN 4 (x=560): Proxy Internals (below proxy, 2-column grid) ───
-  { data: { id: 'flight-cache', label: 'Flight Cache\n45s TTL', tech: 'In-memory LRU, max 500', desc: 'Geo-bucketed cache keyed by lat/lon (rounded to 2 decimals) + radius. Nearby clients share cache hits. Dedup via inFlight map.' }, classes: 'proxy-internal', position: { x: 1120, y: 380 } },
+  { data: { id: 'flight-cache', label: 'Flight Cache\n5s TTL', tech: 'In-memory LRU, max 500', desc: 'Geo-bucketed cache keyed by lat/lon (rounded to 2 decimals) + radius. Nearby clients share cache hits. Dedup via inFlight map.' }, classes: 'proxy-internal', position: { x: 1120, y: 380 } },
   { data: { id: 'flight-logger', label: 'Flight Logger\ndaily JSON', tech: 'Auto-save every 60s', desc: 'Logs unique flights per day to flights-{date}.json. Tracks min/max altitude, distance, speed, first/last seen.' }, classes: 'proxy-internal', position: { x: 1320, y: 380 } },
   { data: { id: 'route-cache', label: 'Route Cache\n30min TTL', tech: 'Max 5000, persisted to disk', desc: 'Maps callsigns to dep/arr airports. Persisted to route-cache.json. Background fire-and-forget lookups via adsbdb.' }, classes: 'proxy-internal', position: { x: 1120, y: 530 } },
   { data: { id: 'route-discovery', label: 'Route Discovery\n20K routes', tech: 'known-routes.json', desc: 'Detects new "City > City" route pairs. Persistent storage. Backfill runs at 02:00 AEST for yesterday\'s flights.' }, classes: 'proxy-internal', position: { x: 1320, y: 530 } },
@@ -266,11 +267,10 @@ const nodes = [
 ];
 
 const edges = [
-  // ── Proxy ↔ ADS-B APIs (raced, all 4) ──
+  // ── Proxy ↔ ADS-B APIs (raced, all 3) ──
   { data: { source: 'proxy', target: 'adsb-lol', label: 'raced', id: 'e-proxy-lol' }, classes: 'raced' },
   { data: { source: 'proxy', target: 'adsb-fi', label: 'raced', id: 'e-proxy-fi' }, classes: 'raced' },
   { data: { source: 'proxy', target: 'airplanes-live', label: 'raced', id: 'e-proxy-al' }, classes: 'raced' },
-  { data: { source: 'proxy', target: 'adsb-one', label: 'raced', id: 'e-proxy-one' }, classes: 'raced' },
 
   // ── Proxy → internals ──
   { data: { source: 'proxy', target: 'flight-cache', label: '', id: 'e-p-fc' }, classes: 'internal' },
@@ -291,6 +291,8 @@ const edges = [
   { data: { source: 'web-app', target: 'proxy', label: '/flights\n/weather', id: 'e-web-proxy' }, classes: 'primary' },
   { data: { source: 'echo', target: 'proxy', label: '/flights 15s\nheartbeat 60s', id: 'e-echo-proxy' }, classes: 'primary' },
   { data: { source: 'foxtrot', target: 'proxy', label: '/flights 15s\nheartbeat 60s', id: 'e-fox-proxy' }, classes: 'primary' },
+  { data: { source: 'delta', target: 'proxy', label: '/flights', id: 'e-delta-proxy' }, classes: 'primary' },
+  { data: { source: 'golf', target: 'proxy', label: '/flights', id: 'e-golf-proxy' }, classes: 'primary' },
   { data: { source: 'pi-display', target: 'proxy', label: '/flights /stats\n/peak /weather\n/device/*/status', id: 'e-pi-proxy' }, classes: 'primary' },
 
   // ── Device fallbacks (direct to ADS-B, bypassing proxy) ──
@@ -311,6 +313,8 @@ const edges = [
   // ── Build / Deploy ──
   { data: { source: 'arduino-cli', target: 'echo', label: 'USB COM4 + OTA', id: 'e-build-echo' }, classes: 'build-edge' },
   { data: { source: 'arduino-cli', target: 'foxtrot', label: 'USB COM7 + OTA', id: 'e-build-fox' }, classes: 'build-edge' },
+  { data: { source: 'arduino-cli', target: 'delta', label: 'USB COM8 (build.sh)', id: 'e-build-delta' }, classes: 'build-edge' },
+  { data: { source: 'arduino-cli', target: 'golf', label: 'USB COM9 (build.sh)', id: 'e-build-golf' }, classes: 'build-edge' },
   { data: { source: 'pm2', target: 'pi-display', label: 'manages', id: 'e-pm2-pi' }, classes: 'build-edge' },
 ];
 
