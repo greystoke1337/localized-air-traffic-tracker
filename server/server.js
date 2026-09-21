@@ -1600,14 +1600,18 @@ app.get('/flight/:callsign', async (req, res) => {
     }
   }
 
-  const depName = airportName(dep);
-  const arrName = airportName(arr);
-  const route   = formatRouteString(dep, arr);
+  const depName  = airportName(dep);
+  const arrName  = airportName(arr);
+  const route    = formatRouteString(dep, arr);
+  const depCoord = dep ? airportCoords.get(dep.trim().toUpperCase()) : null;
+  const arrCoord = arr ? airportCoords.get(arr.trim().toUpperCase()) : null;
 
   if (!ac || ac.lat == null) {
     return res.json({
       callsign: cs, airline, found: false, status: 'NOT_FOUND',
       dep, arr, route, depName, arrName,
+      depLat: depCoord?.lat ?? null, depLon: depCoord?.lon ?? null,
+      arrLat: arrCoord?.lat ?? null, arrLon: arrCoord?.lon ?? null,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -1615,7 +1619,6 @@ app.get('/flight/:callsign', async (req, res) => {
   const onGround = ac.alt_baro === 'ground';
   const progress = calcProgress(dep, arr, ac.lat, ac.lon);
 
-  const arrCoord = arr ? airportCoords.get(arr.trim().toUpperCase()) : null;
   let distanceRemainingKm = arrCoord ? haversine(ac.lat, ac.lon, arrCoord.lat, arrCoord.lon) : null;
 
   let etaIso = null;
@@ -1627,7 +1630,6 @@ app.get('/flight/:callsign', async (req, res) => {
 
   let status = 'EN_ROUTE';
   if (onGround) {
-    const depCoord = dep ? airportCoords.get(dep.trim().toUpperCase()) : null;
     if (depCoord && arrCoord) {
       const dDep = haversine(ac.lat, ac.lon, depCoord.lat, depCoord.lon);
       const dArr = haversine(ac.lat, ac.lon, arrCoord.lat, arrCoord.lon);
@@ -1642,6 +1644,8 @@ app.get('/flight/:callsign', async (req, res) => {
     reg:  ac.r || null,
     type: ac.t || null,
     dep, arr, route, depName, arrName,
+    depLat: depCoord?.lat ?? null, depLon: depCoord?.lon ?? null,
+    arrLat: arrCoord?.lat ?? null, arrLon: arrCoord?.lon ?? null,
     lat: ac.lat, lon: ac.lon,
     alt_baro:  ac.alt_baro  ?? null,
     gs:        ac.gs != null ? Math.round(ac.gs) : null,
