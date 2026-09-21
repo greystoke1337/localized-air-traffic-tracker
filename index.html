@@ -863,6 +863,7 @@
       <label for="location-input" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;">Location</label>
       <input id="location-input" value="" placeholder="City, suburb, address..." autocomplete="off">
       <button onclick="setLocation()">SET LOC</button>
+      <button onclick="useMyLocation()" id="geolocate-btn" aria-label="Use my current location" data-tip="Use my current location">&#128205;</button>
     </div>
 
     <!-- GEOFENCE: search radius. Label updates live; API refreshes on next 15s cycle. -->
@@ -2686,6 +2687,51 @@
       } catch(e) {
         document.getElementById('error').textContent = 'LOCATION ERR: ' + e.message;
       }
+    }
+
+    // Reverse-geocodes lat/lon to a human-readable place name via Nominatim.
+    async function reverseGeocodeLocation(lat, lon) {
+      const url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lon + '&format=json&zoom=14';
+      const res = await fetch(url, { signal: timeoutSignal(8000), headers: { 'Accept-Language': 'en' } });
+      if (!res.ok) throw new Error('Reverse geocoding failed');
+      const data = await res.json();
+      const a = data.address || {};
+      const name = a.suburb || a.neighbourhood || a.town || a.city || a.village || a.county || data.display_name;
+      if (!name) throw new Error('Could not resolve location name');
+      return name;
+    }
+
+    function useMyLocation() {
+      if (!navigator.geolocation) {
+        document.getElementById('error').textContent = 'LOCATION ERR: Geolocation not supported';
+        return;
+      }
+      document.getElementById('error').textContent = 'LOCATING YOU...';
+      navigator.geolocation.getCurrentPosition(async pos => {
+        const lat = pos.coords.latitude, lon = pos.coords.longitude;
+        try {
+          const name = await reverseGeocodeLocation(lat, lon);
+          locationName = name.toUpperCase();
+          locationLat  = lat;
+          locationLon  = lon;
+          document.getElementById('location-input').value = name;
+          document.getElementById('location-display').textContent = locationName;
+          document.getElementById('big-location').textContent = locationName;
+          document.getElementById('error').textContent = '';
+          lastPhotoReg = null;
+          prevTopHex   = null;
+          clearAircraftMarker();
+          updateGeofenceCircle();
+          try { localStorage.setItem('location', JSON.stringify({ name, lat, lon })); } catch(e) {}
+          fetchWeather();
+          await fetchFlights();
+        } catch(e) {
+          document.getElementById('error').textContent = 'LOCATION ERR: ' + e.message;
+        }
+      }, err => {
+        const msg = err.code === err.PERMISSION_DENIED ? 'Permission denied' : err.message;
+        document.getElementById('error').textContent = 'LOCATION ERR: ' + msg;
+      }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
     }
 
 
