@@ -7,6 +7,7 @@ secrets.env
 tracker_echo/secrets.h
 tracker_foxtrot/secrets.h
 tracker_delta/secrets.h
+tracker_echo/libraries/
 *.zip
 *.jpg
 *.png
@@ -14,11 +15,3 @@ tracker_delta/secrets.h
 
 # IDE
 .idea/
-
-# Capacitor / mobile app
-node_modules/
-www/
-android/.gradle/
-android/app/build/
-android/build/
-*.iml

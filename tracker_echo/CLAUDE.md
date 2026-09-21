@@ -35,7 +35,7 @@ Pre-push: `./build.sh safe`. Preview layout changes with `tft-preview.html` befo
 ./build.sh proxy-host api.overheadtracker.com COM4   # restore Railway proxy
 ```
 
-Desktop tests: 95 total (37 flight logic + 58 parsing). MSYS2 gcc required (`/c/msys64/ucrt64/bin`).
+Desktop tests: 95 total (37 flight logic + 58 parsing). MSYS2 gcc required (`/c/msys64/ucrt64/bin`). Parsing tests need ArduinoJson's `src/` vendored locally at `tracker_echo/libraries/ArduinoJson/src` (gitignored, not committed); `./build.sh test` skips them automatically if absent.
 
 ## Key Memory Files
 
