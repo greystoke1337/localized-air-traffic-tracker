@@ -1156,6 +1156,17 @@ app.get('/', (req, res) => {
   <script>
     let proxyOn = true;
 
+    function adminToken() {
+      try { return localStorage.getItem('adminToken') || ''; } catch { return ''; }
+    }
+    function authHeaders() {
+      return { Authorization: 'Bearer ' + adminToken() };
+    }
+    function askToken() {
+      const t = prompt('Admin token');
+      if (t) { try { localStorage.setItem('adminToken', t); } catch {} }
+    }
+
     function fmt(secs) {
       const d = Math.floor(secs/86400), h = Math.floor((secs%86400)/3600),
             m = Math.floor((secs%3600)/60), s = Math.floor(secs%60);
@@ -1183,7 +1194,8 @@ app.get('/', (req, res) => {
 
     async function toggleProxy() {
       try {
-        const res  = await fetch('/proxy/toggle', { method: 'POST' });
+        const res  = await fetch('/proxy/toggle', { method: 'POST', headers: authHeaders() });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         updateToggleBtn(data.enabled);
       } catch(e) {
@@ -1193,7 +1205,12 @@ app.get('/', (req, res) => {
 
     async function load() {
       try {
-        const res = await fetch('/status');
+        const res = await fetch('/status/full', { headers: authHeaders() });
+        if (res.status === 401 || res.status === 403) {
+          try { localStorage.removeItem('adminToken'); } catch {}
+          document.getElementById('sub').textContent = 'UNAUTHORIZED — reload the page to enter the admin token';
+          return;
+        }
         const d   = await res.json();
         const now = new Date();
 
@@ -1254,6 +1271,7 @@ app.get('/', (req, res) => {
       }
     }
 
+    if (!adminToken()) askToken();
     load();
     setInterval(load, 10000);
   </script>
@@ -1262,7 +1280,22 @@ app.get('/', (req, res) => {
 });
 
 // ── Status API ────────────────────────────────────────────────────────
-app.get('/status', async (req, res) => {
+app.get('/status', (req, res) => {
+  let hits = 0, misses = 0;
+  for (const e of requestLog) {
+    if (e.type === 'HIT') hits++;
+    else if (e.type === 'MISS') misses++;
+  }
+  res.json({
+    proxyEnabled,
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    recent: { requests: requestLog.length, hits, misses },
+  });
+});
+
+// Full diagnostics (client IPs, coordinates, internal network) — admin only
+app.get('/status/full', async (req, res) => {
+  if (requireAdmin(req, res)) return;
   res.json({
     proxyEnabled,
     uptime:  Math.floor((Date.now() - startTime) / 1000),

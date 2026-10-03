@@ -599,15 +599,10 @@
       while (el.firstChild) el.removeChild(el.firstChild);
     }
 
-    function cacheHitRate(log) {
-      if (!log || !log.length) return 'N/A';
-      let hits = 0, total = 0;
-      for (const e of log) {
-        if (e.type === 'HIT') { hits++; total++; }
-        else if (e.type === 'MISS') { total++; }
-      }
+    function cacheHitRate(recent) {
+      const total = recent ? recent.hits + recent.misses : 0;
       if (total === 0) return 'N/A';
-      return Math.round((hits / total) * 100) + '%';
+      return Math.round((recent.hits / total) * 100) + '%';
     }
 
     async function fetchProxy() {
@@ -623,8 +618,8 @@
         clearChildren(body);
         body.appendChild(makeRow('STATUS', 'Online'));
         body.appendChild(makeRow('UPTIME', fmtUptime(Math.round(d.uptime || 0))));
-        body.appendChild(makeRow('RECENT REQS', d.log ? d.log.length : 0));
-        body.appendChild(makeRow('CACHE HIT', cacheHitRate(d.log)));
+        body.appendChild(makeRow('RECENT REQS', d.recent ? d.recent.requests : 0));
+        body.appendChild(makeRow('CACHE HIT', cacheHitRate(d.recent)));
       } catch (e) {
         dot.className = 'status-dot red';
         clearChildren(body);
