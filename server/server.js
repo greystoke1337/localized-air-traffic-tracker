@@ -17,7 +17,7 @@ const rateLimit  = require('express-rate-limit');
 
 const app      = express();
 const PORT     = parseInt(process.env.PORT, 10) || 3000;
-const CACHE_MS         = 5000;
+const CACHE_MS         = 10000;
 const ROUTE_CACHE_MS   = 30 * 60 * 1000;
 const ROUTE_CACHE_FILE = process.env.ROUTE_CACHE_FILE || __dirname + '/route-cache.json';
 const KNOWN_ROUTES_FILE = process.env.KNOWN_ROUTES_FILE || __dirname + '/known-routes.json';
@@ -287,6 +287,7 @@ function logFlights(acArray) {
   for (const ac of acArray) {
     const cs = (ac.flight || '').trim();
     if (!cs) continue;
+    todayLogDirty = true;
 
     const dist = (ac.lat != null && ac.lon != null)
       ? haversine(HOME_LAT, HOME_LON, ac.lat, ac.lon)
@@ -335,11 +336,13 @@ function buildSummary() {
   };
 }
 
+let todayLogDirty = false;
 function saveTodayLog(ds) {
   ds = ds || todayDate;
-  if (!ds) return;
+  if (!ds || !todayLogDirty) return;
+  todayLogDirty = false;
   const data = { date: ds, summary: buildSummary(), flights: todayFlights, newRoutes: todayNewRoutes };
-  fs.writeFile(todayFilePath(ds), JSON.stringify(data, null, 2), () => {});
+  fs.writeFile(todayFilePath(ds), JSON.stringify(data), () => {});
 }
 
 function loadTodayLog(ds) {
@@ -774,7 +777,7 @@ function saveKnownRoutes() {
   knownRoutesDirty = false;
   const obj = {};
   for (const [route, firstSeen] of knownRoutes) obj[route] = firstSeen;
-  fs.writeFile(KNOWN_ROUTES_FILE, JSON.stringify(obj, null, 2), () => {});
+  fs.writeFile(KNOWN_ROUTES_FILE, JSON.stringify(obj), () => {});
 }
 
 function checkNewRoute(routeStr, callsign, ds) {
@@ -851,7 +854,7 @@ function saveRouteCache() {
   routeCacheDirty = false;
   const obj = {};
   for (const [cs, entry] of routeCache) obj[cs] = entry;
-  fs.writeFile(ROUTE_CACHE_FILE, JSON.stringify(obj, null, 2), () => {});
+  fs.writeFile(ROUTE_CACHE_FILE, JSON.stringify(obj), () => {});
 }
 
 let airportCacheDirty = false;
@@ -860,7 +863,7 @@ function saveAirportCache() {
   airportCacheDirty = false;
   const obj = {};
   for (const [icao, entry] of airportCache) obj[icao] = entry;
-  fs.writeFile(AIRPORT_CACHE_FILE, JSON.stringify(obj, null, 2), () => {});
+  fs.writeFile(AIRPORT_CACHE_FILE, JSON.stringify(obj), () => {});
 }
 
 async function lookupRoute(callsign) {
@@ -1062,6 +1065,7 @@ app.post('/visit', (req, res) => {
   const ip = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
   const hash = crypto.createHash('sha256').update(VISITOR_SALT + ip).digest('hex');
   todayVisitors.add(hash);
+  todayLogDirty = true;
   res.sendStatus(204);
 });
 
@@ -1152,6 +1156,17 @@ app.get('/', (req, res) => {
   <script>
     let proxyOn = true;
 
+    function adminToken() {
+      try { return localStorage.getItem('adminToken') || ''; } catch { return ''; }
+    }
+    function authHeaders() {
+      return { Authorization: 'Bearer ' + adminToken() };
+    }
+    function askToken() {
+      const t = prompt('Admin token');
+      if (t) { try { localStorage.setItem('adminToken', t); } catch {} }
+    }
+
     function fmt(secs) {
       const d = Math.floor(secs/86400), h = Math.floor((secs%86400)/3600),
             m = Math.floor((secs%3600)/60), s = Math.floor(secs%60);
@@ -1179,7 +1194,8 @@ app.get('/', (req, res) => {
 
     async function toggleProxy() {
       try {
-        const res  = await fetch('/proxy/toggle', { method: 'POST' });
+        const res  = await fetch('/proxy/toggle', { method: 'POST', headers: authHeaders() });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         updateToggleBtn(data.enabled);
       } catch(e) {
@@ -1189,7 +1205,12 @@ app.get('/', (req, res) => {
 
     async function load() {
       try {
-        const res = await fetch('/status');
+        const res = await fetch('/status/full', { headers: authHeaders() });
+        if (res.status === 401 || res.status === 403) {
+          try { localStorage.removeItem('adminToken'); } catch {}
+          document.getElementById('sub').textContent = 'UNAUTHORIZED — reload the page to enter the admin token';
+          return;
+        }
         const d   = await res.json();
         const now = new Date();
 
@@ -1250,6 +1271,7 @@ app.get('/', (req, res) => {
       }
     }
 
+    if (!adminToken()) askToken();
     load();
     setInterval(load, 10000);
   </script>
@@ -1258,7 +1280,22 @@ app.get('/', (req, res) => {
 });
 
 // ── Status API ────────────────────────────────────────────────────────
-app.get('/status', async (req, res) => {
+app.get('/status', (req, res) => {
+  let hits = 0, misses = 0;
+  for (const e of requestLog) {
+    if (e.type === 'HIT') hits++;
+    else if (e.type === 'MISS') misses++;
+  }
+  res.json({
+    proxyEnabled,
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    recent: { requests: requestLog.length, hits, misses },
+  });
+});
+
+// Full diagnostics (client IPs, coordinates, internal network) — admin only
+app.get('/status/full', async (req, res) => {
+  if (requireAdmin(req, res)) return;
   res.json({
     proxyEnabled,
     uptime:  Math.floor((Date.now() - startTime) / 1000),
@@ -1363,7 +1400,6 @@ app.get('/flights', async (req, res) => {
               Promise.allSettled(unrouted.map(cs => lookupRoute(cs))),
               new Promise(resolve => setTimeout(resolve, 3000))
             ]);
-            saveRouteCache();
             enrichRoutes(data);  // re-enrich now that cache is populated
           } catch { /* timeout — routes will be cached for next request */ }
         }
@@ -2485,7 +2521,7 @@ async function backfillMissingRoutes(targetDs) {
     }
 
     if (dirty) {
-      fs.writeFile(todayFilePath(targetDs), JSON.stringify(data, null, 2), () => {});
+      fs.writeFile(todayFilePath(targetDs), JSON.stringify(data), () => {});
       saveRouteCache();
       saveKnownRoutes();
     }
@@ -2598,6 +2634,7 @@ const periodicTimer = setInterval(() => {
   saveTodayLog();
   saveKnownRoutes();
   saveAirportCache();
+  saveRouteCache();
 
   // Route backfill at 02:00 AEST for yesterday's log
   const backfillTarget = prevDateStr(ds, 1);

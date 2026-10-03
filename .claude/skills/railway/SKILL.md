@@ -7,7 +7,7 @@ description: Manage the Railway-hosted proxy server. Use when the user says "rai
 
 Manage the overhead-tracker-proxy service on Railway (project: `overhead-tracker`).
 
-**Auto-deploy is active:** Railway's GitHub integration redeploys this service on every push to `master`, with no path filtering — even a merge that never touches `server/` triggers a rebuild. `railway up` and `railway service redeploy` below are for forcing an out-of-band deploy (e.g. testing a branch, or redeploying without a new commit); they are not the primary deploy path.
+**Auto-deploy is active:** Railway's GitHub integration redeploys this service on pushes to `master` that touch `server/**` (Watch Paths is set in the Railway service settings). `railway up` and `railway service redeploy` below are for forcing an out-of-band deploy (e.g. testing a branch, or redeploying without a new commit); they are not the primary deploy path.
 
 ## Platform Detection
 

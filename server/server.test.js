@@ -461,13 +461,19 @@ describe('HTTP endpoints', () => {
   });
 
   describe('GET /status', () => {
-    it('returns full status', async () => {
+    it('returns public status without client data', async () => {
       const res = await get('/status');
       assert.equal(res.status, 200);
       assert.ok('proxyEnabled' in res.body);
       assert.ok('uptime' in res.body);
-      assert.ok('ram' in res.body);
-      assert.ok('log' in res.body);
+      assert.ok('recent' in res.body);
+      assert.ok(!('log' in res.body));
+      assert.ok(!('network' in res.body));
+    });
+
+    it('requires admin for /status/full', async () => {
+      const res = await get('/status/full');
+      assert.ok(res.status === 401 || res.status === 403);
     });
   });
 
