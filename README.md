@@ -28,7 +28,7 @@ Geocodes the entered location via Nominatim, then queries the proxy for aircraft
 
 Route lookups (departure/arrival airports) fire asynchronously via adsbdb.com and update the display when they resolve. Results are cached for 30 minutes. Weather data comes from Open-Meteo, refreshed every 15 minutes.
 
-New "City > City" route pairs are detected in real time, persisted to `known-routes.json`, and surfaced via `GET /routes/new?date=YYYY-MM-DD`, daily flight reports, and a nightly discovery email at 21:00 AEST.
+New "City > City" route pairs are detected in real time, persisted to `known-routes.json`, and surfaced via `GET /routes/new?date=YYYY-MM-DD`, daily flight reports, and a weekly digest email (traffic, new routes, server status) every Sunday at 21:00 AEST.
 
 ---
 

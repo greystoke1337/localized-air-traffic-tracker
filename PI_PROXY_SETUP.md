@@ -54,7 +54,7 @@ Railway provides managed hosting, auto-deploys, persistent volumes, and better u
 | `RESEND_API_KEY` | Resend API key for daily email reports |
 | `RESEND_FROM` | Email sender address |
 | `REPORT_TO` | Daily flight report recipient |
-| `ROUTE_EMAIL_TO` | Route discovery email recipient (falls back to `REPORT_TO`) |
+| `ROUTE_EMAIL_TO` | Recipient for the manual `/routes/send` email (falls back to `REPORT_TO`); the weekly digest goes to `REPORT_TO` |
 
 ### Deploying
 
