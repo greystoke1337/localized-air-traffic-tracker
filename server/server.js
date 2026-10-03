@@ -228,9 +228,7 @@ function airlinePrefix(callsign) {
 let todayFlights = {};
 let todayHourly  = new Array(24).fill(0);
 let todayDate    = '';
-let emailSentToday        = false;
-let statusEmailSentToday  = false;
-let routeEmailSentToday   = false;
+let lastWeeklyEmailDate   = '';
 let lastSaveTime          = 0;
 let lastBackfillDate      = '';
 let backfillRunning       = false;
@@ -257,23 +255,17 @@ function todayFilePath(ds) {
   return path.join(REPORTS_DIR, `flights-${ds}.json`);
 }
 
-// Persists which of today's scheduled emails have already gone out, so a
-// crash or redeploy near a send time can't cause a duplicate or a skipped
-// send for the rest of the day.
-function loadScheduleState(ds) {
+// Persists the date the weekly digest last went out, so a crash or redeploy
+// near the send time can't cause a duplicate or a skipped send.
+function loadScheduleState() {
   try {
     const saved = JSON.parse(fs.readFileSync(SCHEDULE_STATE_FILE, 'utf8'));
-    if (saved.date === ds) {
-      statusEmailSentToday = !!saved.statusEmailSentToday;
-      routeEmailSentToday  = !!saved.routeEmailSentToday;
-      emailSentToday       = !!saved.emailSentToday;
-    }
+    lastWeeklyEmailDate = saved.lastWeeklyEmailDate || '';
   } catch { /* no file yet */ }
 }
 
 function saveScheduleState() {
-  const state = { date: todayDate, statusEmailSentToday, routeEmailSentToday, emailSentToday };
-  fs.writeFile(SCHEDULE_STATE_FILE, JSON.stringify(state), () => {});
+  fs.writeFile(SCHEDULE_STATE_FILE, JSON.stringify({ lastWeeklyEmailDate }), () => {});
 }
 
 function logFlights(acArray) {
@@ -289,10 +281,6 @@ function logFlights(acArray) {
     todayNewRoutes = [];
     todayVisitors.clear();
     todayDate    = ds;
-    emailSentToday       = false;
-    statusEmailSentToday = false;
-    routeEmailSentToday  = false;
-    saveScheduleState();
     loadTodayLog(ds);
   }
 
@@ -367,7 +355,7 @@ function loadTodayLog(ds) {
 // Initialize today's state on startup
 todayDate = dateStr(aestNow());
 loadTodayLog(todayDate);
-loadScheduleState(todayDate);
+loadScheduleState();
 
 // ICAO and IATA codes → city name (same DB as web app)
 const AIRPORT_DB = {
@@ -2059,10 +2047,27 @@ async function sendViaResend(to, subject, html) {
   return await r.json();
 }
 
+function emailHead() {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body { background:#1a0a00; color:#ffa600; font-family:'Courier New',monospace; margin:0; padding:24px; }
+  h1 { color:#ffa600; font-size:18px; border-bottom:1px solid #7a4800; padding-bottom:8px; margin-bottom:16px; }
+  h2 { color:#ffa600; font-size:13px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:2px; }
+  table { border-collapse:collapse; }
+  td, th { font-size:13px; vertical-align:top; }
+</style></head><body>`;
+}
+
 function renderStatusHTML(ds) {
-  const S = `font-family:'Courier New',monospace`;
+  return `${emailHead()}
+<h1>⬡ Overhead Tracker — Server Status Report</h1>
+<p style="color:#7a4800;font-size:12px;margin-top:-8px">${ds} · generated ${new Date().toISOString()}</p>
+${renderStatusSections()}
+</body></html>`;
+}
+
+function renderStatusSections() {
   const amber = '#ffa600';
-  const bg = '#1a0a00';
   const dim = '#7a4800';
   const green = '#44ff88';
   const red = '#ff4444';
@@ -2108,17 +2113,7 @@ function renderStatusHTML(ds) {
   const row = (label, value, color) =>
     `<tr><td style="padding:4px 16px 4px 0;color:${dim}">${label}</td><td style="color:${color || amber}">${value}</td></tr>`;
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>
-  body { background:${bg}; color:${amber}; ${S}; margin:0; padding:24px; }
-  h1 { color:${amber}; font-size:18px; border-bottom:1px solid ${dim}; padding-bottom:8px; margin-bottom:16px; }
-  h2 { color:${amber}; font-size:13px; margin:24px 0 8px; text-transform:uppercase; letter-spacing:2px; }
-  table { border-collapse:collapse; }
-  td { font-size:13px; vertical-align:top; }
-</style></head><body>
-<h1>⬡ Overhead Tracker — Server Status Report</h1>
-<p style="color:${dim};font-size:12px;margin-top:-8px">${ds} · generated ${new Date().toISOString()}</p>
-
+  return `
 <h2>Server</h2>
 <table>
   ${row('Uptime', uptimeStr)}
@@ -2162,8 +2157,7 @@ function renderStatusHTML(ds) {
 
 <h2>Devices</h2>
 <table>${deviceRows}</table>
-
-</body></html>`;
+`;
 }
 
 async function sendStatusEmail(ds) {
@@ -2348,6 +2342,113 @@ async function sendRouteDiscoveryEmail(ds) {
   }
 }
 
+// ── Weekly digest ─────────────────────────────────────────────────────
+// One email per week combining traffic, new routes and server status.
+// `ds` is the last day of the 7-day window (the Sunday it is sent on).
+function buildWeeklyDigest(ds) {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = prevDateStr(ds, i);
+    const data = d === todayDate
+      ? { flights: todayFlights, newRoutes: todayNewRoutes }
+      : loadDayData(d);
+    days.push({ date: d, flights: data ? Object.values(data.flights || {}) : [], newRoutes: data?.newRoutes || [] });
+  }
+
+  const tally = (extractor, limit = 8) => {
+    const counts = {};
+    for (const day of days) for (const f of day.flights) {
+      const k = extractor(f);
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit);
+  };
+
+  const total = days.reduce((n, d) => n + d.flights.length, 0);
+  let prevTotal = 0, prevDays = 0;
+  for (let i = 7; i <= 13; i++) {
+    const d = loadDayData(prevDateStr(ds, i));
+    if (d) { prevTotal += d.summary.totalUnique; prevDays++; }
+  }
+
+  return {
+    start: days[0].date,
+    end: ds,
+    days: days.map(d => ({ date: d.date, total: d.flights.length })),
+    total,
+    prevTotal: prevDays > 0 ? prevTotal : null,
+    topAirlines: tally(f => { const p = airlinePrefix(f.callsign); return AIRLINE_NAMES[p] || p; }),
+    topRoutes: tally(f => f.route),
+    newRoutes: days.flatMap(d => d.newRoutes),
+  };
+}
+
+function renderWeeklyDigestHTML(w) {
+  const dim = '#7a4800';
+  const green = '#44ff88';
+  const row = (label, value, color) =>
+    `<tr><td style="padding:4px 16px 4px 0;color:${dim}">${label}</td><td style="color:${color || '#ffa600'}">${value}</td></tr>`;
+  const list = items => items.map(([k, n]) => row(escapeHtml(k), n)).join('') ||
+    `<tr><td style="color:${dim}">No data</td></tr>`;
+
+  const maxDay = Math.max(...w.days.map(d => d.total), 1);
+  const dayRows = w.days.map(d => {
+    const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+    const bar = '█'.repeat(Math.round((d.total / maxDay) * 30));
+    return `<tr><td style="padding:2px 16px 2px 0;color:${dim}">${label}</td><td style="padding:2px 12px 2px 0;text-align:right">${d.total.toLocaleString()}</td><td style="color:${dim}">${bar}</td></tr>`;
+  }).join('');
+
+  let trend = '';
+  if (w.prevTotal) {
+    const pct = Math.round(((w.total - w.prevTotal) / w.prevTotal) * 100);
+    trend = row('vs previous week', `${pct >= 0 ? '▲ +' : '▼ '}${pct}% (${w.prevTotal.toLocaleString()})`, pct >= 0 ? green : '#ff4444');
+  }
+
+  const routeRows = w.newRoutes.map(nr => {
+    const airline = AIRLINE_NAMES[airlinePrefix(nr.callsign)] || '';
+    return `<tr><td style="padding:2px 12px 2px 0;color:${green}">${escapeHtml(nr.route)}</td><td style="padding:2px 12px 2px 0;color:${dim}">${escapeHtml(nr.callsign)}</td><td style="color:${dim}">${escapeHtml(airline)}</td></tr>`;
+  }).join('') || `<tr><td style="color:${dim}">No new routes this week</td></tr>`;
+
+  return `${emailHead()}
+<h1>⬡ Overhead Tracker — Weekly Digest</h1>
+<p style="color:${dim};font-size:12px;margin-top:-8px">${w.start} → ${w.end} · generated ${new Date().toISOString()}</p>
+
+<h2>Traffic</h2>
+<table>
+  ${row('Flights this week', w.total.toLocaleString())}
+  ${trend}
+</table>
+<table style="margin-top:8px">${dayRows}</table>
+
+<h2>Top Airlines</h2>
+<table>${list(w.topAirlines)}</table>
+
+<h2>Top Routes</h2>
+<table>${list(w.topRoutes)}</table>
+
+<h2>New Routes Discovered (${w.newRoutes.length})</h2>
+<table>
+  ${row('Known routes (all-time)', knownRoutes.size.toLocaleString())}
+</table>
+<table style="margin-top:8px">${routeRows}</table>
+
+<h1 style="margin-top:32px">Server Status</h1>
+${renderStatusSections()}
+</body></html>`;
+}
+
+async function sendWeeklyDigestEmail(ds) {
+  const to = process.env.REPORT_TO;
+  if (!to || !process.env.RESEND_API_KEY) return;
+  try {
+    const w = buildWeeklyDigest(ds);
+    await sendViaResend(to, `Weekly Digest — ${w.start} to ${w.end} — ${w.total.toLocaleString()} flights`, renderWeeklyDigestHTML(w));
+    addLog({ type: 'SYS', client: 'system', key: `weekly digest sent: ${w.start}..${w.end}` });
+  } catch (e) {
+    addLog({ type: 'ERR', client: 'system', error: `weekly digest failed: ${e.message}` });
+  }
+}
+
 async function backfillMissingRoutes(targetDs) {
   if (backfillRunning) return;
   backfillRunning = true;
@@ -2457,6 +2558,15 @@ app.post('/routes/send', async (req, res) => {
   res.json({ ok: true, date: ds });
 });
 
+// ── /digest/send — manual trigger for weekly digest email ─────────────
+app.post('/digest/send', async (req, res) => {
+  if (requireAdmin(req, res)) return;
+  const ds = req.query.date || todayDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return res.status(400).json({ error: 'Invalid date format' });
+  await sendWeeklyDigestEmail(ds);
+  res.json({ ok: true, date: ds });
+});
+
 // ── /backfill — manual trigger for route backfill ─────────────────────
 app.post('/backfill', async (req, res) => {
   if (requireAdmin(req, res)) return;
@@ -2480,10 +2590,6 @@ const periodicTimer = setInterval(() => {
     todayNewRoutes = [];
     todayVisitors.clear();
     todayDate    = ds;
-    emailSentToday       = false;
-    statusEmailSentToday = false;
-    routeEmailSentToday  = false;
-    saveScheduleState();
     loadTodayLog(ds);
     console.log(`Day rolled over to ${ds}`);
   }
@@ -2500,27 +2606,12 @@ const periodicTimer = setInterval(() => {
     backfillMissingRoutes(backfillTarget);
   }
 
-  // Server status email — from 08:00 AEST onward, once per day. The ">="
-  // (rather than a narrow window) means a restart that misses 08:00 still
-  // catches up later the same day instead of skipping it entirely.
-  if (now.getHours() >= 8 && !statusEmailSentToday) {
-    statusEmailSentToday = true;
+  // Weekly digest — Sunday from 21:00 AEST onward, once per week. The ">="
+  // means a restart that misses 21:00 still catches up later that evening.
+  if (now.getDay() === 0 && now.getHours() >= 21 && lastWeeklyEmailDate !== ds) {
+    lastWeeklyEmailDate = ds;
     saveScheduleState();
-    sendStatusEmail(ds);
-  }
-
-  // Route discovery email — from 21:00 AEST onward, once per day.
-  if (now.getHours() >= 21 && !routeEmailSentToday) {
-    routeEmailSentToday = true;
-    saveScheduleState();
-    sendRouteDiscoveryEmail(ds);
-  }
-
-  // Daily report email — from 23:55 AEST onward, once per day.
-  if (now.getHours() === 23 && now.getMinutes() >= 55 && !emailSentToday) {
-    emailSentToday = true;
-    saveScheduleState();
-    sendDailyEmail(ds);
+    sendWeeklyDigestEmail(ds);
   }
 }, 60000);
 
